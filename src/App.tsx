@@ -787,26 +787,16 @@ const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSelectPrev
 function App() {
   const [pps] = useState(24);
   const [resources, setResources] = useState<Resource[]>([
-    { id: 'lib_aud_1', name: '✨ 治愈晨曦 (Acoustic)', path: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=acoustic-guitars-114232.mp3', type: 'audio' },
-    { id: 'lib_aud_2', name: '🎹 极简钢琴 (Cinematic)', path: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=empty-mind-118973.mp3', type: 'audio' },
-    { id: 'lib_aud_3', name: '🌸 温柔邂逅 (Lofi)', path: 'https://cdn.pixabay.com/download/audio/2022/05/16/audio_964cedc5a4.mp3?filename=lofi-study-112191.mp3', type: 'audio' },
-    { id: 'lib_aud_4', name: '☁️ 云端漫步 (Ambient)', path: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_51d54bdc8b.mp3?filename=ambient-piano-amp-strings-10711.mp3', type: 'audio' },
-    { id: 'lib_aud_5', name: '💫 情感共鸣 (Piano)', path: 'https://cdn.pixabay.com/download/audio/2021/11/24/audio_9242ea8dbd.mp3?filename=beautiful-piano-122699.mp3', type: 'audio' },
-    { id: 'lib_aud_6', name: '🍂 深秋私语 (Guitar)', path: 'https://cdn.pixabay.com/download/audio/2021/08/26/audio_f53ced02d2.mp3?filename=soft-acoustic-guitar-14631.mp3', type: 'audio' },
-    { id: 'lib_aud_7', name: '☕ 午后咖啡 (Jazz)', path: 'https://cdn.pixabay.com/download/audio/2021/10/01/audio_13b5220a23.mp3?filename=jazz-lounge-112198.mp3', type: 'audio' },
-    { id: 'lib_aud_8', name: '🌈 史诗征途 (Epic)', path: 'https://cdn.pixabay.com/download/audio/2022/10/25/audio_eef0cff36d.mp3?filename=epic-hollywood-trailer-122851.mp3', type: 'audio' },
-    { id: 'lib_aud_9', name: '🎻 晨露微光 (Strings)', path: 'https://cdn.pixabay.com/download/audio/2022/03/10/audio_c8c8a73467.mp3?filename=emotional-piano-and-strings-10702.mp3', type: 'audio' },
-    { id: 'lib_aud_10', name: '🌿 自然呼吸 (Focus)', path: 'https://cdn.pixabay.com/download/audio/2021/11/25/audio_91b3ceec94.mp3?filename=ambient-122855.mp3', type: 'audio' },
-    { id: 'lib_aud_11', name: '🌌 赛博迷幻 (Synthwave)', path: 'https://cdn.pixabay.com/download/audio/2022/11/02/audio_4ba8a5ad92.mp3?filename=synthwave-80s-122839.mp3', type: 'audio' },
-    { id: 'lib_aud_12', name: '🎐 和风夏日 (Chillout)', path: 'https://cdn.pixabay.com/download/audio/2022/06/07/audio_09903ef8ae.mp3?filename=chillout-115327.mp3', type: 'audio' },
-    { id: 'lib_aud_13', name: '🏃 节奏动感 (Upbeat)', path: 'https://cdn.pixabay.com/download/audio/2022/01/21/audio_31743c5fb5.mp3?filename=upbeat-corporate-115286.mp3', type: 'audio' },
-    { id: 'lib_aud_14', name: '🌃 午夜漫游 (Vlog)', path: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_27ed5d4de7.mp3?filename=vlog-music-114227.mp3', type: 'audio' },
-    { id: 'lib_aud_15', name: '🕊️ 静谧灵魂 (Meditation)', path: 'https://cdn.pixabay.com/download/audio/2022/01/20/audio_51c8808602.mp3?filename=meditation-115309.mp3', type: 'audio' },
-    { id: 'lib_aud_16', name: '🔮 未来律动 (Trap)', path: 'https://cdn.pixabay.com/download/audio/2021/08/20/audio_65cf10bc01.mp3?filename=trap-beat-112224.mp3', type: 'audio' },
-    { id: 'lib_aud_17', name: '🎭 欢乐喜剧 (Funny)', path: 'https://cdn.pixabay.com/download/audio/2021/08/04/audio_0f124c6ad1.mp3?filename=funny-kids-112239.mp3', type: 'audio' },
-    { id: 'lib_aud_18', name: '🚀 科幻苍穹 (Sci-Fi)', path: 'https://cdn.pixabay.com/download/audio/2022/02/10/audio_fc8cb9b752.mp3?filename=sci-fi-115324.mp3', type: 'audio' },
-    { id: 'lib_aud_19', name: '🏕️ 乡村民谣 (Folk)', path: 'https://cdn.pixabay.com/download/audio/2021/11/18/audio_8ddfe06037.mp3?filename=folk-acoustic-122852.mp3', type: 'audio' },
-    { id: 'lib_aud_20', name: '🥁 悬疑推理 (Dark)', path: 'https://cdn.pixabay.com/download/audio/2021/08/25/audio_3e44445851.mp3?filename=dark-ambient-112241.mp3', type: 'audio' },
+    { id: 'lib_aud_1', name: '🎵 轻盈旋律 (Melody)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', type: 'audio' },
+    { id: 'lib_aud_2', name: '🎹 优雅钢琴 (Piano)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3', type: 'audio' },
+    { id: 'lib_aud_3', name: '🌿 宁静午后 (Peaceful)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3', type: 'audio' },
+    { id: 'lib_aud_4', name: '✨ 星光点点 (Dreamy)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3', type: 'audio' },
+    { id: 'lib_aud_5', name: '🌊 海风轻拂 (Ocean)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3', type: 'audio' },
+    { id: 'lib_aud_6', name: '☀️ 晨光序曲 (Morning)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3', type: 'audio' },
+    { id: 'lib_aud_7', name: '🌙 月光小夜曲 (Nocturne)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3', type: 'audio' },
+    { id: 'lib_aud_8', name: '🎻 华尔兹 (Waltz)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3', type: 'audio' },
+    { id: 'lib_aud_9', name: '🍃 微风物语 (Breeze)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3', type: 'audio' },
+    { id: 'lib_aud_10', name: '🌈 彩虹桥 (Rainbow)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3', type: 'audio' },
   ]);
 
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
