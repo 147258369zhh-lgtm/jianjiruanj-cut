@@ -242,13 +242,58 @@ const AudioWaveform = memo(({ isPlaying, palette }: { isPlaying: boolean; palett
 });
 
 
+// ─── 性能优化：缩略图生成引擎 ──────────────────────────────────────
+const THUMB_WIDTH = 200; // 缩略图最大宽度
+const thumbCache = new Map<string, string>(); // path -> blobUrl
+
+const generateThumbnail = (srcUrl: string): Promise<string> => {
+  if (thumbCache.has(srcUrl)) return Promise.resolve(thumbCache.get(srcUrl)!);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const scale = THUMB_WIDTH / img.naturalWidth;
+      const w = THUMB_WIDTH;
+      const h = Math.round(img.naturalHeight * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          thumbCache.set(srcUrl, url);
+          resolve(url);
+        } else {
+          resolve(srcUrl); // fallback to original
+        }
+      }, 'image/webp', 0.7);
+    };
+    img.onerror = () => resolve(srcUrl);
+    img.src = srcUrl;
+  });
+};
+
 // ─── 子组件: 极简图片卡片 ──────────────────────────────────────────
 const SortableImageCard = memo(function SortableImageCard({
-  item, resource, isSelected, onSelect, pps, previewUrl
+  item, resource, isSelected, onSelect, onRemove, pps, previewUrl
 }: {
-  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; pps: number; previewUrl?: string;
+  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; onRemove: (id: string) => void; pps: number; previewUrl?: string;
 }) {
   const { attributes, listeners, setNodeRef, transform } = useSortable({ id: item.id });
+  const [isHovered, setIsHovered] = useState(false);
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+
+  // 性能优化：异步生成缩略图，时间轴只显示小图
+  useEffect(() => {
+    const src = previewUrl
+      ? (previewUrl.startsWith('http') || previewUrl.startsWith('blob:') ? previewUrl : convertFileSrc(previewUrl))
+      : resource ? convertFileSrc(resource.path) : '';
+    if (!src) return;
+    generateThumbnail(src).then(setThumbUrl);
+  }, [resource?.path, previewUrl]);
+
   const thumbStyle: React.CSSProperties = {
     width: '100%', height: '100%', objectFit: 'cover',
     transform: `rotate(${item.rotation}deg) scale(${item.zoom || 1})`,
@@ -278,6 +323,11 @@ const SortableImageCard = memo(function SortableImageCard({
     zIndex: 5,
   };
 
+  // 缩略图 src：优先使用生成的缩略图，fallback 到原图
+  const imgSrc = thumbUrl || (previewUrl
+    ? (previewUrl.startsWith('http') || previewUrl.startsWith('blob:') ? previewUrl : convertFileSrc(previewUrl))
+    : resource ? convertFileSrc(resource.path) : '');
+
   return (
     <div
       ref={setNodeRef}
@@ -299,8 +349,28 @@ const SortableImageCard = memo(function SortableImageCard({
       }}
       {...attributes} {...listeners}
       onClick={(e) => { e.stopPropagation(); onSelect(item.id, e.ctrlKey || e.metaKey); }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      {resource ? <img src={previewUrl ? (previewUrl.startsWith('http') || previewUrl.startsWith('blob:') ? previewUrl : convertFileSrc(previewUrl)) : convertFileSrc(resource.path)} style={thumbStyle} alt="" /> : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#ef4444' }}>缺失</div>}
+      {resource ? <img src={imgSrc} style={thumbStyle} alt="" /> : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#ef4444' }}>缺失</div>}
+
+      {/* 右上角删除按钮 (hover 时显示) */}
+      {isHovered && (
+        <div
+          onClick={(e) => { e.stopPropagation(); onRemove(item.id); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute', top: 4, right: 4, zIndex: 20,
+            width: 18, height: 18, borderRadius: 5,
+            background: 'rgba(255, 59, 48, 0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontSize: 10, color: '#fff',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
+            transition: 'transform 0.15s',
+          }}
+          title="从轨道移除"
+        >🗑</div>
+      )}
 
       {/* 浮空文字预览层 */}
       {item.overlayText && (
@@ -1997,7 +2067,9 @@ function App() {
                               return next;
                             });
                             setSelectedAudioIds(new Set());
-                          }} pps={pps} previewUrl={previewCache[resourceMap.get(item.resourceId)?.path || '']}
+                          }}
+                          onRemove={(id) => { setTimeline(p => p.filter(t => t.id !== id)); setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; }); }}
+                          pps={pps} previewUrl={previewCache[resourceMap.get(item.resourceId)?.path || '']}
                         />
                       ))}
                     </SortableContext>
