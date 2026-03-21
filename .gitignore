@@ -1,0 +1,49 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Binary / 可执行文件
+*.exe
+*.pdb
+
+# 杂项缩略图 / 临时文件
+*.jpg
+*.thumb
+
+# Rust 编译产物 (Tauri)
+src-tauri/target/
+
+# Tauri 临时构建日志和调试文件
+src-tauri/build_log.txt
+src-tauri/errors.json
+src-tauri/2
+src-tauri/bin_probe.exe
+src-tauri/bin_probe.pdb
+src-tauri/src/bin_probe.rs
+
+# FFmpeg 二进制 (太大)
+src-tauri/bin/

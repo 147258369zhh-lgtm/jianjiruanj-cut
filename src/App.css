@@ -1,0 +1,427 @@
+/* ─────────────────────────────────────────────────────────────────
+   App.css — iOS 26 Future Aesthetic (Mesh-Glass & Squircle)
+   ───────────────────────────────────────────────────────────────── */
+
+:root {
+  --ios-bg: #030305;
+  --ios-glass: rgba(18, 18, 26, 0.72);
+  --ios-glass-heavy: rgba(12, 12, 20, 0.92);
+  --ios-glass-bright: rgba(255, 255, 255, 0.03);
+  --ios-indigo: #6366F1;
+  --ios-indigo-glow: rgba(99, 102, 241, 0.4);
+  --ios-crimson: #EF4444;
+  --ios-text: #F8FAFC;
+  --ios-text-dim: #94A3B8;
+  --ios-hairline: rgba(255, 255, 255, 0.08);
+  --ios-blur: blur(50px) saturate(200%);
+  --squircle: 28px;
+  --squircle-s: 16px;
+  --shadow-premium: 0 40px 80px -20px rgba(0, 0, 0, 0.8), 0 0 1px 1px rgba(255, 255, 255, 0.05);
+  --ease-ios: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes mesh-float {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate(5%, 5%) scale(1.1);
+  }
+
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--ios-bg);
+  color: var(--ios-text);
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+}
+
+/* 弥散粒子底层 */
+body::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(236, 72, 153, 0.1) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 50%);
+  filter: blur(80px);
+  z-index: -1;
+  animation: mesh-float 20s infinite alternate ease-in-out;
+}
+
+.ios-layout {
+  height: 100vh;
+  padding: 24px 24px 4px 24px;
+  /* 严格执行 4px 底部安全间距规范 */
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-sizing: border-box;
+  z-index: 1;
+}
+
+.glass-panel {
+  background: var(--ios-glass);
+  backdrop-filter: var(--ios-blur);
+  -webkit-backdrop-filter: var(--ios-blur);
+  border: 1px solid var(--ios-hairline);
+  border-radius: var(--squircle);
+  box-shadow: var(--shadow-premium);
+  display: flex;
+  flex-direction: column;
+  transition: all 0.5s var(--ease-ios);
+}
+
+.glass-panel:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.panel-header-ios {
+  padding: 18px 24px;
+  background: rgba(255, 255, 255, 0.02);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--ios-hairline);
+}
+
+.header-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--ios-text);
+  opacity: 0.9;
+}
+
+/* ─── 资源库项优化 ─── */
+.ios-resource-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 14px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  border-bottom: 1px solid var(--ios-hairline);
+}
+
+.ios-resource-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateX(4px);
+}
+
+.ios-resource-item.active {
+  background: rgba(94, 92, 230, 0.12);
+  border-left: 3px solid var(--ios-indigo);
+}
+
+/* 轨道块选中态 - 显著灰色 */
+.timeline-block.selected {
+  background: rgba(80, 80, 80, 0.8) !important;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+.ios-thumb-box {
+  width: 48px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ─── 监视器风格 ─── */
+.monitor-container {
+  background: var(--ios-glass-heavy);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ios-floating-toolbar {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 15, 20, 0.85);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), var(--shadow-indigo);
+  z-index: 100;
+  transition: bottom 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ios-timeline {
+  min-height: 370px;
+  padding-bottom: 10px;
+  background: var(--ios-glass);
+  margin-bottom: 4px;
+  overflow: visible !important;
+  user-select: none;
+  will-change: transform; /* GPU 加速提示 */
+}
+
+.ios-play-container {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1001;
+  width: 80px;
+  /* 终极宽度：80px，彻底解决“抓不到”的问题，同时全屏遮罩下方 hover */
+  margin-left: -40px;
+  /* (0 - 80) / 2 = -40 */
+  cursor: col-resize;
+  pointer-events: auto;
+  background: transparent;
+}
+
+.ios-play-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 38px;
+  /* 居中于 80px 容器内: (80-4)/2 = 38 */
+  width: 4px;
+  background: var(--ios-indigo);
+  box-shadow: 0 0 20px var(--ios-indigo-glow);
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* ─── 时间刻度尺 (Time Ruler) ─── */
+.ios-time-ruler {
+  height: 28px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--ios-hairline);
+  position: relative;
+  cursor: crosshair;
+  user-select: none;
+  overflow: hidden;
+}
+
+.ruler-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.ruler-tick.major {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.ruler-label {
+  position: absolute;
+  top: 2px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  transform: translateX(-50%);
+  font-family: 'Inter', sans-serif;
+  pointer-events: none;
+}
+
+
+/* 选中区域 - 显著深灰（删除态） */
+.timeline-block.selected-region {
+  background: rgba(10, 11, 15, 0.98) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.3) !important;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+}
+
+/* ─── 滚动条：极简 Apple 风格 (仅运行或悬浮时显现) ─── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  transition: all 0.3s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* 时间轴横向滚动条 - 更专业的沉浸式设计 */
+.ios-timeline ::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ios-timeline ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+  margin: 0 100px;
+  /* 两端留白，避开操作区 */
+}
+
+.ios-timeline ::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.2);
+  border-radius: 3px;
+  border: none;
+}
+
+.ios-timeline ::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+}
+
+/* ─── 动画与触感 ─── */
+.ios-btn-hover {
+  transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ios-btn-hover:hover {
+  transform: scale(1.05);
+  background: var(--ios-indigo) !important;
+}
+
+.ios-btn-hover:active {
+  transform: scale(0.96);
+}
+
+.pulsate-ios {
+  animation: pulsate-indigo 2.5s infinite ease-in-out;
+}
+
+@keyframes pulsate-indigo {
+  0% {
+    box-shadow: 0 0 0 0 rgba(94, 92, 230, 0.5);
+  }
+
+  70% {
+    box-shadow: 0 0 0 15px rgba(94, 92, 230, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(94, 92, 230, 0);
+  }
+}
+
+.floating-play-btn {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  /* 更高透玻璃质感 */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  color: #fff;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25), inset 0 0 15px rgba(255, 255, 255, 0.08);
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+  /* 文字阴影增强对比度 */
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.floating-play-btn:hover {
+  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.35), inset 0 0 25px rgba(255, 255, 255, 0.15);
+}
+
+.ios-dark-select {
+  background: rgba(20, 20, 25, 0.8) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ios-dark-select:hover {
+  background-color: rgba(30, 30, 35, 0.9) !important;
+  border-color: var(--ios-indigo) !important;
+}
+
+.ios-dark-select option {
+  background: #1a1a20;
+  color: #fff;
+}
+
+/* ─── 属性面板分组与工业对齐 ─── */
+.ios-prop-group {
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 18px;
+  margin-bottom: 8px;
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ios-prop-group:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.fui-Field__label {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  opacity: 0.4 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 1.2px !important;
+  color: #fff !important;
+  margin-bottom: 4px !important;
+}
+
+/* 交互增强 */
+.ios-hover-scale {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ios-hover-scale:hover {
+  transform: scale(1.05);
+  filter: brightness(1.2);
+}
+
+.ios-hover-scale:active {
+  transform: scale(0.95);
+}
+
+.ios-selected {
+  position: relative;
+}
+
+.ios-selected::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px rgba(94, 92, 230, 0.6);
+  pointer-events: none;
+}
