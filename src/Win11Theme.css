@@ -1,0 +1,496 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Win11Theme.css — Windows 11 Fluent Design System Skin
+   ═══════════════════════════════════════════════════════════════════
+   通过 .theme-win11 class 覆盖现有 iOS 风格变量和样式
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── 色彩令牌 & 核心变量覆盖 ─── */
+.theme-win11 {
+  --ios-bg: #202020;
+  --ios-glass: rgba(32, 32, 32, 0.85);
+  --ios-glass-heavy: rgba(28, 28, 28, 0.95);
+  --ios-glass-bright: rgba(255, 255, 255, 0.04);
+  --ios-indigo: #0078D4;
+  --ios-indigo-glow: rgba(0, 120, 212, 0.35);
+  --ios-crimson: #C42B1C;
+  --ios-text: #F3F3F3;
+  --ios-text-dim: #9E9E9E;
+  --ios-hairline: rgba(255, 255, 255, 0.065);
+  --ios-blur: blur(30px) saturate(150%);
+  --squircle: 8px;
+  --squircle-s: 6px;
+  --shadow-premium: 0 2px 8px rgba(0, 0, 0, 0.26), 0 0 1px rgba(0, 0, 0, 0.2);
+  --ease-ios: cubic-bezier(0.33, 1, 0.68, 1);
+
+  /* Win11 专属令牌 */
+  --win11-mica: rgba(44, 44, 44, 0.72);
+  --win11-acrylic: rgba(44, 44, 44, 0.65);
+  --win11-subtle: rgba(255, 255, 255, 0.05);
+  --win11-subtle-hover: rgba(255, 255, 255, 0.08);
+  --win11-subtle-active: rgba(255, 255, 255, 0.03);
+  --win11-accent: #0078D4;
+  --win11-accent-hover: #1A8CD8;
+  --win11-accent-active: #0067B8;
+  --win11-text-primary: #FFFFFF;
+  --win11-text-secondary: rgba(255, 255, 255, 0.6);
+  --win11-text-tertiary: rgba(255, 255, 255, 0.35);
+  --win11-stroke: rgba(255, 255, 255, 0.07);
+  --win11-divider: rgba(255, 255, 255, 0.08);
+  --win11-card: rgba(255, 255, 255, 0.05);
+  --win11-elevation-1: 0 2px 4px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12);
+  --win11-elevation-2: 0 4px 8px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12);
+  --win11-elevation-3: 0 8px 16px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12);
+}
+
+/* ─── Body & 背景 ─── */
+.theme-win11 {
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif !important;
+}
+
+.theme-win11 body,
+body:has(.theme-win11) {
+  background: #1C1C1C !important;
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif !important;
+}
+
+/* Mica 效果 — 替换 iOS 弥散粒子背景 */
+body:has(.theme-win11)::before {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(0, 120, 212, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 50%, rgba(0, 120, 212, 0.03) 0%, transparent 50%) !important;
+  filter: blur(60px) !important;
+  animation: none !important;
+}
+
+/* ─── 全局布局 ─── */
+.theme-win11 .ios-layout {
+  padding: 12px 12px 4px 12px;
+  gap: 8px;
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ─── Glass Panel → Fluent Card ─── */
+.theme-win11 .glass-panel {
+  background: var(--win11-mica);
+  backdrop-filter: blur(30px) saturate(150%);
+  -webkit-backdrop-filter: blur(30px) saturate(150%);
+  border: 1px solid var(--win11-stroke);
+  border-radius: 8px;
+  box-shadow: var(--win11-elevation-1);
+  transition: all 0.2s ease-out;
+}
+
+.theme-win11 .glass-panel:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Panel Header ─── */
+.theme-win11 .panel-header-ios {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--win11-divider);
+}
+
+.theme-win11 .header-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: none;
+}
+
+/* ─── 资源库项 ─── */
+.theme-win11 .ios-resource-item {
+  padding: 8px 12px;
+  gap: 12px;
+  border-radius: 6px;
+  border-bottom: none;
+  transition: background 0.15s ease-out;
+}
+
+.theme-win11 .ios-resource-item:hover {
+  background: var(--win11-subtle-hover);
+  transform: none;
+}
+
+.theme-win11 .ios-resource-item.active {
+  background: rgba(0, 120, 212, 0.12);
+  border-left: 3px solid var(--win11-accent);
+}
+
+/* ─── 时间轴 ─── */
+.theme-win11 .ios-timeline {
+  background: var(--win11-mica);
+  min-height: 370px;
+  border-radius: 8px;
+}
+
+/* ─── 时间刻度尺 ─── */
+.theme-win11 .ios-time-ruler {
+  height: 28px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--win11-divider);
+}
+
+.theme-win11 .ruler-tick {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.theme-win11 .ruler-tick.major {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.theme-win11 .ruler-label {
+  color: var(--win11-text-tertiary);
+  font-family: 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  font-size: 9px;
+}
+
+/* ─── 监视器 ─── */
+.theme-win11 .monitor-container {
+  background: rgba(20, 20, 20, 0.95);
+  border-radius: 8px;
+}
+
+/* ─── 播放按钮 floating ─── */
+.theme-win11 .floating-play-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: var(--win11-elevation-2);
+  transition: all 0.2s ease-out;
+}
+
+.theme-win11 .floating-play-btn:hover {
+  transform: scale(1.04);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: var(--win11-elevation-3);
+}
+
+/* ─── 按钮交互 ─── */
+.theme-win11 .ios-btn-hover {
+  transition: all 0.15s ease-out;
+}
+
+.theme-win11 .ios-btn-hover:hover {
+  transform: none;
+  background: var(--win11-accent) !important;
+}
+
+.theme-win11 .ios-btn-hover:active {
+  transform: scale(0.98);
+}
+
+/* ─── 属性面板分组 ─── */
+.theme-win11 .ios-prop-group {
+  padding: 14px;
+  background: var(--win11-card);
+  border: 1px solid var(--win11-stroke);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  transition: all 0.15s ease-out;
+}
+
+.theme-win11 .ios-prop-group:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Field Label ─── */
+.theme-win11 .fui-Field__label {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  opacity: 0.5 !important;
+  text-transform: none !important;
+  letter-spacing: 0.2px !important;
+}
+
+/* ─── 缩放控制 ─── */
+.theme-win11 .zoom-control {
+  color: var(--win11-text-secondary);
+  font-size: 11px;
+}
+
+.theme-win11 .zoom-control input[type="range"] {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  height: 4px;
+}
+
+.theme-win11 .zoom-control input[type="range"]::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--win11-accent);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Select 控件 ─── */
+.theme-win11 .ios-dark-select {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--win11-stroke) !important;
+  border-radius: 6px !important;
+  color: #fff !important;
+  font-size: 12px;
+  font-family: 'Segoe UI Variable', 'Segoe UI', sans-serif;
+}
+
+.theme-win11 .ios-dark-select:hover {
+  background-color: rgba(255, 255, 255, 0.09) !important;
+  border-color: var(--win11-accent) !important;
+}
+
+.theme-win11 .ios-dark-select option {
+  background: #2D2D2D;
+  color: #fff;
+}
+
+/* ─── 滚动条: Fluent 胶囊式 ─── */
+.theme-win11 ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.theme-win11 ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.theme-win11 ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+.theme-win11 ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.theme-win11 .ios-timeline ::-webkit-scrollbar-thumb {
+  background: rgba(0, 120, 212, 0.25);
+}
+
+.theme-win11 .ios-timeline ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 120, 212, 0.5);
+}
+
+/* ─── 右键菜单: WinUI 3 ─── */
+.theme-win11 .context-menu {
+  background: rgba(44, 44, 44, 0.94);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--win11-stroke);
+  border-radius: 8px;
+  padding: 4px 0;
+  box-shadow: var(--win11-elevation-3);
+  animation: win11-menu-in 0.12s ease-out;
+}
+
+@keyframes win11-menu-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.theme-win11 .context-menu-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 4px;
+  margin: 0 4px;
+  transition: background 0.1s ease-out;
+}
+
+.theme-win11 .context-menu-item:hover {
+  background: var(--win11-subtle-hover);
+}
+
+.theme-win11 .context-menu-item.danger {
+  color: #F44336;
+}
+
+.theme-win11 .context-menu-item.danger:hover {
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.theme-win11 .context-menu-separator {
+  background: var(--win11-divider);
+  margin: 4px 8px;
+}
+
+/* ─── Toast 通知: Fluent ─── */
+.theme-win11 .global-toast {
+  background: rgba(44, 44, 44, 0.9);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--win11-stroke);
+  border-radius: 8px;
+  box-shadow: var(--win11-elevation-3);
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.1px;
+  animation: win11-toast-in 0.25s ease-out;
+}
+
+@keyframes win11-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ─── 快捷键面板 ─── */
+.theme-win11 .shortcuts-panel {
+  background: rgba(44, 44, 44, 0.95);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid var(--win11-stroke);
+  border-radius: 12px;
+  box-shadow: var(--win11-elevation-3);
+  padding: 20px 24px;
+  animation: win11-panel-in 0.2s ease-out;
+}
+
+@keyframes win11-panel-in {
+  from { opacity: 0; transform: translate(-50%, -50%) translateY(-8px); }
+  to { opacity: 1; transform: translate(-50%, -50%) translateY(0); }
+}
+
+/* ─── 拖拽导入遮罩 ─── */
+.theme-win11 .drop-overlay {
+  background: rgba(0, 120, 212, 0.08);
+  border: 2px dashed rgba(0, 120, 212, 0.4);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+}
+
+.theme-win11 .drop-overlay-icon {
+  font-size: 56px;
+}
+
+.theme-win11 .drop-overlay-text {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* ─── Trim Handle ─── */
+.theme-win11 .trim-handle:hover,
+.theme-win11 .trim-handle.active {
+  background: rgba(0, 120, 212, 0.2);
+}
+
+.theme-win11 .trim-handle:hover::after,
+.theme-win11 .trim-handle.active::after {
+  background: var(--win11-accent);
+  box-shadow: 0 0 6px rgba(0, 120, 212, 0.4);
+}
+
+/* ─── 滤镜预设卡片 ─── */
+.theme-win11 .filter-preset-card {
+  border-radius: 6px;
+  background: var(--win11-subtle);
+  border: 1px solid var(--win11-stroke);
+  transition: all 0.15s ease-out;
+  font-size: 12px;
+}
+
+.theme-win11 .filter-preset-card:hover {
+  background: rgba(0, 120, 212, 0.12);
+  border-color: rgba(0, 120, 212, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.theme-win11 .filter-preset-card:active {
+  transform: scale(0.97);
+}
+
+/* ─── 选中态 ─── */
+.theme-win11 .ios-selected::after {
+  box-shadow: inset 0 0 0 2px rgba(0, 120, 212, 0.6);
+}
+
+/* ─── iOS 交互增强覆盖 ─── */
+.theme-win11 .ios-hover-scale:hover {
+  transform: scale(1.02);
+  filter: brightness(1.1);
+}
+
+.theme-win11 .ios-hover-scale:active {
+  transform: scale(0.98);
+}
+
+/* ─── 脉冲动画 ─── */
+.theme-win11 .pulsate-ios {
+  animation: pulsate-win11 2s infinite ease-in-out;
+}
+
+@keyframes pulsate-win11 {
+  0% { box-shadow: 0 0 0 0 rgba(0, 120, 212, 0.5); }
+  70% { box-shadow: 0 0 0 10px rgba(0, 120, 212, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 120, 212, 0); }
+}
+
+/* ─── 选择框区域 ─── */
+.theme-win11 .ios-selection-box {
+  background: rgba(0, 120, 212, 0.06);
+  border: 1px solid rgba(0, 120, 212, 0.25);
+  border-radius: 4px;
+}
+
+/* ─── 主题切换按钮 ─── */
+.theme-switch-btn {
+  position: fixed;
+  top: 8px;
+  right: 12px;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease-out;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-family: inherit;
+}
+
+.theme-switch-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.theme-switch-btn .icon {
+  font-size: 14px;
+}
+
+/* ─── Fluent 专属: Reveal Highlight 模拟 ─── */
+.theme-win11 .glass-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  background: radial-gradient(600px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255, 255, 255, 0.04), transparent 40%);
+  transition: opacity 0.3s;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.theme-win11 .glass-panel:hover::before {
+  opacity: 1;
+}
+
+/* ─── 缩略图宽高比 ─── */
+.theme-win11 .ios-thumb-box {
+  border-radius: 4px;
+  border: 1px solid var(--win11-stroke);
+}

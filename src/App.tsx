@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo, useMemo } from "react";
+import { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
 import {
   FluentProvider,
   webDarkTheme,
@@ -17,6 +17,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import "./App.css";
+import "./Win11Theme.css";
 
 // ─── 类型定义 ────────────────────────────────────────────────────────
 interface Resource { id: string; name: string; path: string; type: 'image' | 'audio' | 'video' }
@@ -277,9 +278,9 @@ const generateThumbnail = (srcUrl: string): Promise<string> => {
 
 // ─── 子组件: 极简图片卡片 ──────────────────────────────────────────
 const SortableImageCard = memo(function SortableImageCard({
-  item, resource, isSelected, onSelect, onRemove, pps, previewUrl
+  item, resource, isSelected, onSelect, onRemove, pps, previewUrl, onContextMenu, onTrimDuration, onDoubleClickCard
 }: {
-  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; onRemove: (id: string) => void; pps: number; previewUrl?: string;
+  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; onRemove: (id: string) => void; pps: number; previewUrl?: string; onContextMenu?: (e: React.MouseEvent) => void; onTrimDuration?: (id: string, delta: number) => void; onDoubleClickCard?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform } = useSortable({ id: item.id });
   const [isHovered, setIsHovered] = useState(false);
@@ -349,9 +350,48 @@ const SortableImageCard = memo(function SortableImageCard({
       }}
       {...attributes} {...listeners}
       onClick={(e) => { e.stopPropagation(); onSelect(item.id, e.ctrlKey || e.metaKey); }}
+      onDoubleClick={(e) => { e.stopPropagation(); onDoubleClickCard?.(); }}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu?.(e); }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Trim 手柄 (左右边缘) */}
+      <div
+        className="trim-handle trim-handle-left"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const startX = e.clientX;
+          const startDur = item.duration;
+          const onMove = (me: MouseEvent) => {
+            const deltaPx = me.clientX - startX;
+            const deltaDur = deltaPx / pps;
+            const newDur = Math.max(0.3, startDur - deltaDur);
+            onTrimDuration?.(item.id, newDur - startDur);
+          };
+          const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        }}
+      />
+      <div
+        className="trim-handle trim-handle-right"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const startX = e.clientX;
+          const startDur = item.duration;
+          const onMove = (me: MouseEvent) => {
+            const deltaPx = me.clientX - startX;
+            const deltaDur = deltaPx / pps;
+            const newDur = Math.max(0.3, startDur + deltaDur);
+            onTrimDuration?.(item.id, newDur - startDur);
+          };
+          const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        }}
+      />
       {resource ? <img src={imgSrc} style={thumbStyle} alt="" /> : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#ef4444' }}>缺失</div>}
 
       {/* 右上角删除按钮 (hover 时显示) */}
@@ -379,7 +419,7 @@ const SortableImageCard = memo(function SortableImageCard({
         </div>
       )}
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)', padding: '4px 8px', fontSize: 9, color: '#fff', display: 'flex', justifyContent: 'space-between', pointerEvents: 'none' }}>
-        <span>{item.duration}秒</span>
+        <span>{item.duration.toFixed(1)}s</span>
         <span style={{ opacity: 0.6 }}>{item.transition !== 'none' ? '✨' : ''}</span>
       </div>
     </div>
@@ -785,18 +825,13 @@ const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSelectPrev
 
 // ─── 主应用 ──────────────────────────────────────────────────────
 function App() {
-  const [pps] = useState(24);
+  const [pps, setPps] = useState(24);
   const [resources, setResources] = useState<Resource[]>([
-    { id: 'lib_aud_1', name: '🎵 轻盈旋律 (Melody)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', type: 'audio' },
-    { id: 'lib_aud_2', name: '🎹 优雅钢琴 (Piano)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3', type: 'audio' },
-    { id: 'lib_aud_3', name: '🌿 宁静午后 (Peaceful)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3', type: 'audio' },
-    { id: 'lib_aud_4', name: '✨ 星光点点 (Dreamy)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3', type: 'audio' },
-    { id: 'lib_aud_5', name: '🌊 海风轻拂 (Ocean)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3', type: 'audio' },
-    { id: 'lib_aud_6', name: '☀️ 晨光序曲 (Morning)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3', type: 'audio' },
-    { id: 'lib_aud_7', name: '🌙 月光小夜曲 (Nocturne)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3', type: 'audio' },
-    { id: 'lib_aud_8', name: '🎻 华尔兹 (Waltz)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3', type: 'audio' },
-    { id: 'lib_aud_9', name: '🍃 微风物语 (Breeze)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3', type: 'audio' },
-    { id: 'lib_aud_10', name: '🌈 彩虹桥 (Rainbow)', path: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3', type: 'audio' },
+    { id: 'lib_aud_1', name: '🎵 宁静心境 (Please Calm My Mind)', path: '/audio/please-calm-my-mind.mp3', type: 'audio' },
+    { id: 'lib_aud_2', name: '🎹 遗忘的华尔兹 (Forgotten Waltz)', path: '/audio/forgotten-waltz.mp3', type: 'audio' },
+    { id: 'lib_aud_3', name: '🌿 钢琴小品 (Piano Music)', path: '/audio/piano-music.mp3', type: 'audio' },
+    { id: 'lib_aud_4', name: '✨ 温柔恬静 (Calm Soft)', path: '/audio/calm-soft.mp3', type: 'audio' },
+    { id: 'lib_aud_5', name: '🌊 柔和背景 (Background Soft Calm)', path: '/audio/background-soft-calm.mp3', type: 'audio' },
   ]);
 
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -834,6 +869,87 @@ function App() {
   const [localDuration, setLocalDuration] = useState<number | null>(null);
   const [audioBlobs, setAudioBlobs] = useState<{ [id: string]: string }>({}); // 核心：URL 映射缓存
   const [previewCache, setPreviewCache] = useState<{ [path: string]: string }>({}); // RAW 预览图映射缓存
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'image' | 'audio'; targetId: string } | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [_isFullscreen, setIsFullscreen] = useState(false);
+  const [theme, setTheme] = useState<'ios' | 'win11'>(() => {
+    return (localStorage.getItem('__editor_theme__') as 'ios' | 'win11') || 'ios';
+  });
+
+  // 监听退出全屏
+  useEffect(() => {
+    const onFsChange = () => { if (!document.fullscreenElement) setIsFullscreen(false); };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  // ─── 性能优化：状态 Ref (消除播放时级联重渲染) ─────────────────
+  const timelineRef = useRef(timeline);
+  timelineRef.current = timeline;
+  const audioItemsRef = useRef(audioItems);
+  audioItemsRef.current = audioItems;
+  const selectedIdsRef = useRef(selectedIds);
+  selectedIdsRef.current = selectedIds;
+  const selectedAudioIdsRef = useRef(selectedAudioIds);
+  selectedAudioIdsRef.current = selectedAudioIds;
+  const resourcesRef = useRef(resources);
+  resourcesRef.current = resources;
+  const ppsRef = useRef(pps);
+  ppsRef.current = pps;
+
+  // ─── 撤销/重做系统 (ref-based, 零依赖) ───────────────────────
+  interface EditorSnapshot { timeline: TimelineItem[]; audioItems: AudioTimelineItem[]; }
+  const undoStackRef = useRef<EditorSnapshot[]>([]);
+  const redoStackRef = useRef<EditorSnapshot[]>([]);
+
+  const pushSnapshot = useCallback(() => {
+    undoStackRef.current.push({
+      timeline: JSON.parse(JSON.stringify(timelineRef.current)),
+      audioItems: JSON.parse(JSON.stringify(audioItemsRef.current))
+    });
+    if (undoStackRef.current.length > 50) undoStackRef.current.shift();
+    redoStackRef.current = [];
+  }, []);
+
+  const undo = useCallback(() => {
+    const snap = undoStackRef.current.pop();
+    if (!snap) { setStatusMsg('⚠️ 已经是最早状态'); setTimeout(() => setStatusMsg(''), 1500); return; }
+    redoStackRef.current.push({
+      timeline: JSON.parse(JSON.stringify(timelineRef.current)),
+      audioItems: JSON.parse(JSON.stringify(audioItemsRef.current))
+    });
+    setTimeline(snap.timeline);
+    setAudioItems(snap.audioItems);
+    setStatusMsg('↩️ 已撤销'); setTimeout(() => setStatusMsg(''), 1200);
+  }, []);
+
+  const redo = useCallback(() => {
+    const snap = redoStackRef.current.pop();
+    if (!snap) { setStatusMsg('⚠️ 已经是最新状态'); setTimeout(() => setStatusMsg(''), 1500); return; }
+    undoStackRef.current.push({
+      timeline: JSON.parse(JSON.stringify(timelineRef.current)),
+      audioItems: JSON.parse(JSON.stringify(audioItemsRef.current))
+    });
+    setTimeline(snap.timeline);
+    setAudioItems(snap.audioItems);
+    setStatusMsg('↪️ 已重做'); setTimeout(() => setStatusMsg(''), 1200);
+  }, []);
+
+  // ─── 滤镜预设 ──────────────────────────────────────────────────
+  const FILTER_PRESETS = useMemo(() => [
+    { name: '🎞 胶片', exposure: 0.95, contrast: 1.15, saturation: 0.85, temp: 15, tint: 5, brilliance: 1.0 },
+    { name: '🌸 日系', exposure: 1.1, contrast: 0.9, saturation: 0.7, temp: -10, tint: -5, brilliance: 1.05 },
+    { name: '🎬 电影', exposure: 0.9, contrast: 1.3, saturation: 0.8, temp: 10, tint: -10, brilliance: 1.1 },
+    { name: '⬛ 黑白', exposure: 1.0, contrast: 1.2, saturation: 0.0, temp: 0, tint: 0, brilliance: 1.0 },
+    { name: '🌅 暖阳', exposure: 1.05, contrast: 1.1, saturation: 1.1, temp: 30, tint: 10, brilliance: 1.05 },
+    { name: '❄️ 冷调', exposure: 1.0, contrast: 1.15, saturation: 0.9, temp: -25, tint: -15, brilliance: 1.0 },
+    { name: '🔄 重置', exposure: 1.0, contrast: 1.0, saturation: 1.0, temp: 0, tint: 0, brilliance: 1.0 },
+  ], []);
+
+
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null); // 指针 DOM 引用
   const timeTextRef = useRef<HTMLSpanElement>(null); // 时间文字 DOM 引用
@@ -841,6 +957,225 @@ function App() {
 
   const audioElsRef = useRef<{ [id: string]: HTMLAudioElement }>({});
   const lastSyncTimeRef = useRef<number>(0);
+  // 性能优化：将 playTime 同步到 ref，供音频同步 RAF 循环读取
+  const playTimeRef = useRef(playTime);
+  playTimeRef.current = playTime;
+
+  // ─── 播放头位置分割片段 (ref-based, 零依赖) ──────────────────
+  const splitAtPlayhead = useCallback(() => {
+    const tl = timelineRef.current;
+    const pt = playTimeRef.current;
+    let accDur = 0;
+    for (let i = 0; i < tl.length; i++) {
+      const item = tl[i];
+      if (pt >= accDur && pt < accDur + item.duration) {
+        const splitPoint = pt - accDur;
+        if (splitPoint < 0.2 || item.duration - splitPoint < 0.2) {
+          setStatusMsg('⚠️ 分割点距边缘过近'); setTimeout(() => setStatusMsg(''), 1500);
+          return;
+        }
+        pushSnapshot();
+        const left = { ...item, duration: splitPoint, id: `tm_${Date.now()}_L` };
+        const right = { ...item, duration: item.duration - splitPoint, id: `tm_${Date.now()}_R` };
+        setTimeline(prev => [...prev.slice(0, i), left, right, ...prev.slice(i + 1)]);
+        setStatusMsg('✂️ 已在播放头位置分割'); setTimeout(() => setStatusMsg(''), 1500);
+        return;
+      }
+      accDur += item.duration;
+    }
+    setStatusMsg('⚠️ 播放头不在任何片段上'); setTimeout(() => setStatusMsg(''), 1500);
+  }, [pushSnapshot]);
+
+  // ─── 工程保存/加载 (ref-based) ─────────────────────────────────
+  const saveProject = useCallback(async () => {
+    const projectData = JSON.stringify({
+      resources: resourcesRef.current,
+      timeline: timelineRef.current,
+      audioItems: audioItemsRef.current,
+      pps: ppsRef.current
+    }, null, 2);
+    const outputPath = await save({ filters: [{ name: '工程文件', extensions: ['proj.json'] }] });
+    if (!outputPath) return;
+    try {
+      await invoke('write_file', { path: outputPath, content: projectData });
+      setStatusMsg('💾 工程已保存'); setTimeout(() => setStatusMsg(''), 2000);
+    } catch {
+      localStorage.setItem('__editor_project__', projectData);
+      setStatusMsg('💾 工程已保存到本地缓存'); setTimeout(() => setStatusMsg(''), 2000);
+    }
+  }, []);
+
+  const loadProject = useCallback(async () => {
+    const selected = await open({ filters: [{ name: '工程文件', extensions: ['proj.json', 'json'] }] });
+    if (!selected) return;
+    try {
+      const path = typeof selected === 'string' ? selected : (selected as any).path;
+      const content = await invoke<string>('read_file', { path });
+      const data = JSON.parse(content);
+      if (data.resources) setResources(data.resources);
+      if (data.timeline) setTimeline(data.timeline);
+      if (data.audioItems) setAudioItems(data.audioItems);
+      if (data.pps) setPps(data.pps);
+      setStatusMsg('📂 工程已加载'); setTimeout(() => setStatusMsg(''), 2000);
+    } catch {
+      const cached = localStorage.getItem('__editor_project__');
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (data.resources) setResources(data.resources);
+        if (data.timeline) setTimeline(data.timeline);
+        if (data.audioItems) setAudioItems(data.audioItems);
+        if (data.pps) setPps(data.pps);
+        setStatusMsg('📂 已从本地缓存恢复'); setTimeout(() => setStatusMsg(''), 2000);
+      } else {
+        setStatusMsg('❌ 加载失败'); setTimeout(() => setStatusMsg(''), 2000);
+      }
+    }
+  }, []);
+
+  // ─── 自动保存 (每60秒) ───────────────────────────────────────────
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (timelineRef.current.length > 0 || audioItemsRef.current.length > 0) {
+        localStorage.setItem('__editor_autosave__', JSON.stringify({
+          resources: resourcesRef.current,
+          timeline: timelineRef.current,
+          audioItems: audioItemsRef.current,
+          pps: ppsRef.current
+        }));
+      }
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 启动时检查自动保存
+  useEffect(() => {
+    const saved = localStorage.getItem('__editor_autosave__');
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data.timeline?.length > 0 || data.audioItems?.length > 0) {
+          setStatusMsg('💡 发现自动保存数据 (上次会话)');
+        }
+      } catch { /* ignore */ }
+    }
+  }, []);
+
+  // ─── 全局快捷键系统 (ref-based, 零依赖 — 消除播放卡顿) ────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsPlaying(prev => !prev);
+        return;
+      }
+
+      if (e.code === 'Delete' || e.code === 'Backspace') {
+        e.preventDefault();
+        if (selectedIdsRef.current.size > 0) {
+          pushSnapshot();
+          setTimeline(p => p.filter(t => !selectedIdsRef.current.has(t.id)));
+          setSelectedIds(new Set());
+        }
+        if (selectedAudioIdsRef.current.size > 0) {
+          pushSnapshot();
+          setAudioItems(p => p.filter(a => !selectedAudioIdsRef.current.has(a.id)));
+          setSelectedAudioIds(new Set());
+        }
+        return;
+      }
+
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+        e.preventDefault();
+        const step = e.shiftKey ? 1.0 : 0.1;
+        const delta = e.code === 'ArrowLeft' ? -step : step;
+        setPlayTime(prev => Math.max(0, prev + delta));
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+        if (e.code === 'KeyY') { e.preventDefault(); redo(); return; }
+        if (e.code === 'KeyA') { e.preventDefault(); setSelectedIds(new Set(timelineRef.current.map(t => t.id))); return; }
+        if (e.code === 'KeyS') { e.preventDefault(); saveProject(); return; }
+        if (e.code === 'KeyO') { e.preventDefault(); loadProject(); return; }
+        if (e.code === 'KeyB') { e.preventDefault(); splitAtPlayhead(); return; }
+      }
+
+      // ? = 快捷键提示面板
+      if (e.key === '?' || e.code === 'Slash') {
+        setShowShortcuts(prev => !prev);
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [pushSnapshot, undo, redo, splitAtPlayhead, saveProject, loadProject]);
+
+  // ─── 拖拽导入文件 ──────────────────────────────────────────────
+  useEffect(() => {
+    let dragCounter = 0;
+    const handleDragEnter = (e: DragEvent) => { e.preventDefault(); dragCounter++; setIsDragOver(true); };
+    const handleDragLeave = (e: DragEvent) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; setIsDragOver(false); } };
+    const handleDragOver = (e: DragEvent) => { e.preventDefault(); };
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter = 0;
+      setIsDragOver(false);
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      const imageExts = ['png', 'jpg', 'jpeg', 'webp', 'dng'];
+      const audioExts = ['mp3', 'wav', 'm4a'];
+      const newResources: Resource[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        let type: 'image' | 'audio' | null = null;
+        if (imageExts.includes(ext)) type = 'image';
+        else if (audioExts.includes(ext)) type = 'audio';
+        if (type) {
+          newResources.push({
+            id: `res_drop_${Date.now()}_${i}`,
+            name: file.name,
+            path: (file as any).path || file.name, // Tauri 提供 path
+            type,
+          });
+        }
+      }
+
+      if (newResources.length > 0) {
+        setResources(prev => [...prev, ...newResources]);
+        setStatusMsg(`📥 已导入 ${newResources.length} 个素材文件`);
+        setTimeout(() => setStatusMsg(''), 2000);
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', handleDrop);
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, []);
+
+  // ─── 时间轴 Ctrl+滚轮 缩放 ──────────────────────────────────────
+  const handleTimelineWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -4 : 4;
+      setPps(prev => Math.max(8, Math.min(120, prev + delta)));
+    }
+  }, []);
+
+
 
   // 性能优化：资源 Map 索引 (O(1) 查找替代 O(n) 遍历)
   const resourceMap = useMemo(() => new Map(resources.map(r => [r.id, r])), [resources]);
@@ -952,7 +1287,7 @@ function App() {
     const baseTime = playTime;
 
     const tick = () => {
-      const elapsed = (performance.now() - startTs) / 1000;
+      const elapsed = (performance.now() - startTs) / 1000 * playbackSpeed;
       const currentT = baseTime + elapsed;
 
       if (currentT >= maxPlayTime && maxPlayTime > 0) {
@@ -982,6 +1317,19 @@ function App() {
           accX += (overflowDur * pps) - (timeline.length > 0 ? 4 : 0);
         }
         playheadRef.current.style.transform = `translateX(${60 + accX}px)`;
+
+        // 播放时自动滚动时间轴跟踪播放头
+        const scrollEl = timelineScrollRef.current;
+        if (scrollEl) {
+          const headX = 60 + accX;
+          const viewLeft = scrollEl.scrollLeft;
+          const viewRight = viewLeft + scrollEl.clientWidth;
+          if (headX > viewRight - 100) {
+            scrollEl.scrollLeft = headX - scrollEl.clientWidth / 2;
+          } else if (headX < viewLeft + 60) {
+            scrollEl.scrollLeft = Math.max(0, headX - 100);
+          }
+        }
       }
 
       if (timeTextRef.current) {
@@ -1004,11 +1352,9 @@ function App() {
       const finalElapsed = (performance.now() - startTs) / 1000;
       setPlayTime(baseTime + finalElapsed);
     };
-  }, [isPlaying, maxPlayTime, timeline, pps]);
+  }, [isPlaying, maxPlayTime, timeline, pps, playbackSpeed]);
 
-  // 性能优化：将 playTime 同步到 ref，供音频同步 RAF 循环读取，而非依赖 React state
-  const playTimeRef = useRef(playTime);
-  playTimeRef.current = playTime;
+  // playTimeRef 已在上方声明并持续同步
 
   // 性能优化：音频同步使用独立 RAF 循环，避免依赖高频 playTime state 更新
   useEffect(() => {
@@ -1085,6 +1431,14 @@ function App() {
     if (selectedIds.size === 0) return;
     setTimeline(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, [key]: val } : t));
   };
+
+  // Slider 撤销保护：拖动前压栈，拖动结束后自动保存
+  const sliderUndoFlag = useRef(false);
+  const updatePropertyWithUndo = (key: keyof TimelineItem, val: any) => {
+    if (!sliderUndoFlag.current) { pushSnapshot(); sliderUndoFlag.current = true; }
+    updateSelectedProperty(key, val);
+  };
+  const finalizeSliderUndo = () => { sliderUndoFlag.current = false; };
 
   const updateAudioItem = (id: string, patch: Partial<AudioTimelineItem>, isDragging: boolean = false) => {
     setAudioItems(prev => {
@@ -1234,39 +1588,35 @@ function App() {
     setTimeout(() => setStatusMsg(""), 4000);
   };
 
-  // 播放指针 — 单局拖拽定位工具函数
-  const seekToX = (clientX: number) => {
+  // 播放指针 — 单局拖拽定位工具函数 (ref-based 避免重建)
+  const seekToX = useCallback((clientX: number) => {
     const el = timelineScrollRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const rawX = clientX - rect.left + el.scrollLeft - 60; // 60px 是左侧标题区宽度
+    const rawX = clientX - rect.left + el.scrollLeft - 60;
+    const tl = timelineRef.current;
+    const currentPps = ppsRef.current;
 
-    // ⭐ 反推时间：因为现在图片卡片有 4px 的 gap，时间与像素不再是纯粹的线性关系
-    // rawX = playTime * pps + gapCount * 4
     let accX = 0;
     let targetTime = 0;
-    for (let i = 0; i < timeline.length; i++) {
-      const itemW = timeline[i].duration * pps;
-      const nextX = accX + itemW + (i < timeline.length - 1 ? 4 : 0);
+    for (let i = 0; i < tl.length; i++) {
+      const itemW = tl[i].duration * currentPps;
+      const nextX = accX + itemW + (i < tl.length - 1 ? 4 : 0);
       if (rawX <= nextX) {
-        // 落在此卡片（含gap）之内
         const localX = Math.max(0, rawX - accX);
-        targetTime += (localX / pps);
+        targetTime += Math.min(localX / currentPps, tl[i].duration);
         break;
       } else {
         accX = nextX;
-        targetTime += timeline[i].duration;
+        targetTime += tl[i].duration;
       }
     }
-    // 处理拖到了所有卡片后面的情况，或者空轨道纯根据 x 计算
-    if (timeline.length === 0 || rawX > accX) {
-      // 若在素材以外空旷地带，按纯 pps 算
+    if (tl.length === 0 || rawX > accX) {
       const overflowX = Math.max(0, rawX - accX);
-      targetTime += (overflowX / pps);
+      targetTime += (overflowX / currentPps);
     }
-
     setPlayTime(Math.max(0, targetTime));
-  };
+  }, []);
 
   const handleTimelineMouseMove = (e: React.MouseEvent) => {
     if (isDraggingHead) {
@@ -1440,7 +1790,12 @@ function App() {
     finally { setIsGenerating(false); }
   };
 
-  const filteredResources = useMemo(() => resources.filter(r => r.type === libTab), [resources, libTab]);
+  const filteredResources = useMemo(() => {
+    const byType = resources.filter(r => r.type === libTab);
+    if (!searchQuery.trim()) return byType;
+    const q = searchQuery.toLowerCase();
+    return byType.filter(r => r.name.toLowerCase().includes(q));
+  }, [resources, libTab, searchQuery]);
 
   // 性能优化：memo 化计算，避免每次渲染重算
   const maxVideoEnd = useMemo(() => timeline.reduce((acc, t) => acc + t.duration, 0), [timeline]);
@@ -1450,7 +1805,76 @@ function App() {
 
   return (
     <FluentProvider theme={webDarkTheme} style={{ height: '100vh', width: '100vw', background: 'transparent' }}>
-      <div className="ios-layout">
+      <div className={`ios-layout ${theme === 'win11' ? 'theme-win11' : ''}`} onClick={() => { setContextMenu(null); setShowShortcuts(false); }}>
+
+        {/* 主题切换按钮 */}
+        <button
+          className="theme-switch-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            const next = theme === 'ios' ? 'win11' : 'ios';
+            setTheme(next);
+            localStorage.setItem('__editor_theme__', next);
+          }}
+        >
+          <span className="icon">{theme === 'ios' ? '🍃' : '🪩'}</span>
+          {theme === 'ios' ? 'iOS 26' : 'Win11'}
+        </button>
+
+        {/* 全局浮窗 Toast 通知 */}
+        {statusMsg && (
+          <div className="global-toast">
+            {statusMsg}
+          </div>
+        )}
+
+        {/* 快捷键提示面板 */}
+        {showShortcuts && (
+          <div className="shortcuts-panel" onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>⌨️ 快捷键速查</div>
+            {[
+              ['Space', '播放/暂停'], ['Delete', '删除选中'], ['← →', '微调 ±0.1s'],
+              ['Shift+←→', '微调 ±1s'], ['Ctrl+Z', '撤销'], ['Ctrl+Y', '重做'],
+              ['Ctrl+A', '全选'], ['Ctrl+S', '保存工程'], ['Ctrl+O', '加载工程'],
+              ['Ctrl+B', '分割片段'], ['Ctrl+滚轮', '时间轴缩放'], ['?', '显示/隐藏此面板'],
+            ].map(([key, desc]) => (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontFamily: 'monospace', fontWeight: 600 }}>{key}</span>
+                <span style={{ opacity: 0.7 }}>{desc}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 拖拽导入遮罩 */}
+        {isDragOver && (
+          <div className="drop-overlay">
+            <div className="drop-overlay-icon">📥</div>
+            <div className="drop-overlay-text">释放以导入素材</div>
+            <div className="drop-overlay-subtext">支持 PNG / JPG / WEBP / DNG / MP3 / WAV / M4A</div>
+          </div>
+        )}
+
+        {/* 右键上下文菜单 */}
+        {contextMenu && (
+          <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
+            {contextMenu.type === 'image' ? (
+              <>
+                <div className="context-menu-item" onClick={() => { pushSnapshot(); setTimeline(p => [...p, ...p.filter(t => t.id === contextMenu.targetId).map(t => ({ ...t, id: `tm_${Date.now()}_cp` }))]); setContextMenu(null); }}>📋 复制片段</div>
+                <div className="context-menu-item" onClick={() => { setContextMenu(null); splitAtPlayhead(); }}>✂️ 在播放头分割 (Ctrl+B)</div>
+                <div className="context-menu-separator" />
+                <div className="context-menu-item danger" onClick={() => { pushSnapshot(); setTimeline(p => p.filter(t => t.id !== contextMenu.targetId)); setSelectedIds(new Set()); setContextMenu(null); }}>🗑 删除</div>
+              </>
+            ) : (
+              <>
+                <div className="context-menu-item" onClick={() => { setContextMenu(null); splitAtPlayhead(); }}>✂️ 在播放头分割</div>
+                <div className="context-menu-separator" />
+                <div className="context-menu-item danger" onClick={() => { pushSnapshot(); setAudioItems(p => p.filter(a => a.id !== contextMenu.targetId)); setSelectedAudioIds(new Set()); setContextMenu(null); }}>🗑 删除</div>
+              </>
+            )}
+          </div>
+        )}
+
 
         {/* TOP ZONE: Sidebars + Monitor */}
         <div style={{ flex: 1, display: 'flex', gap: 24, minHeight: 0 }}>
@@ -1461,7 +1885,7 @@ function App() {
             {/* 高级质感控制台头部 */}
             <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--ios-hairline)', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-              {/* 第一排：库切换 & 导入按钮 (水平绝对对齐) */}
+              {/* 第一排：库切换 & 导入按钮 */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', background: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: 3, width: 150, boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.3)' }}>
                   <div
@@ -1485,6 +1909,14 @@ function App() {
                   <span style={{ marginRight: 4 }}>+</span> 导入素材
                 </Button>
               </div>
+
+              {/* 搜索框 */}
+              <Input
+                value={searchQuery}
+                onChange={(_e, data) => setSearchQuery(data.value)}
+                placeholder="🔍 搜索素材..."
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}
+              />
 
               {/* 第二排：操作栏按逻辑顺序排列 */}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -1597,7 +2029,16 @@ function App() {
           </div>
 
           {/* 2. 监视器 */}
-          <div className="glass-panel monitor-container" style={{ flex: 2, position: 'relative' }}>
+          <div
+            className="glass-panel monitor-container"
+            style={{ flex: 2, position: 'relative' }}
+            onDoubleClick={(e) => {
+              if ((e.target as HTMLElement).tagName === 'SELECT' || (e.target as HTMLElement).tagName === 'INPUT') return;
+              const el = e.currentTarget;
+              if (!document.fullscreenElement) { el.requestFullscreen().catch(() => {}); setIsFullscreen(true); }
+              else { document.exitFullscreen(); setIsFullscreen(false); }
+            }}
+          >
             <div className="panel-header-ios" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, background: 'rgba(0,0,0,0.2)' }}>
               <span className="header-title" style={{ opacity: 0.8 }}>照片合成视频王 - 预览</span>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -1641,6 +2082,32 @@ function App() {
                 {isPlaying ? '⏸' : '▶'}
               </span>
             </div>
+
+            {/* Mini 进度条 + 播放速度 */}
+            <div style={{ position: 'absolute', bottom: 12, left: 20, right: 20, display: 'flex', alignItems: 'center', gap: 10, zIndex: 50 }}>
+              <div
+                style={{ flex: 1, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative' }}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const pct = (e.clientX - rect.left) / rect.width;
+                  setPlayTime(maxPlayTime * pct);
+                }}
+              >
+                <div style={{ width: `${maxPlayTime > 0 ? (playTime / maxPlayTime * 100) : 0}%`, height: '100%', borderRadius: 2, background: 'var(--ios-indigo)', transition: isPlaying ? 'none' : 'width 0.2s' }} />
+              </div>
+              <select
+                value={playbackSpeed}
+                onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                className="ios-dark-select"
+                style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 10, padding: '2px 6px', cursor: 'pointer', minWidth: 48 }}
+              >
+                <option value="0.5" style={{ background: '#1e1e2e', color: '#fff' }}>0.5x</option>
+                <option value="0.75" style={{ background: '#1e1e2e', color: '#fff' }}>0.75x</option>
+                <option value="1" style={{ background: '#1e1e2e', color: '#fff' }}>1x</option>
+                <option value="1.5" style={{ background: '#1e1e2e', color: '#fff' }}>1.5x</option>
+                <option value="2" style={{ background: '#1e1e2e', color: '#fff' }}>2x</option>
+              </select>
+            </div>
           </div>
 
           {/* 3. 属性面板 */}
@@ -1676,24 +2143,64 @@ function App() {
                   selectedIds.size > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
 
+                      {/* 滤镜预设 */}
+                      <div className="ios-prop-group">
+                        <Text weight="bold" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 一键滤镜预设</Text>
+                        <div className="filter-preset-scroll">
+                          {FILTER_PRESETS.map((preset) => (
+                            <div
+                              key={preset.name}
+                              className="filter-preset-card"
+                              onClick={() => {
+                                pushSnapshot();
+                                setTimeline(prev => prev.map(t => selectedIds.has(t.id) ? {
+                                  ...t, exposure: preset.exposure, contrast: preset.contrast, saturation: preset.saturation, temp: preset.temp, tint: preset.tint, brilliance: preset.brilliance
+                                } : t));
+                                setStatusMsg(`✨ 已应用${preset.name}预设`); setTimeout(() => setStatusMsg(''), 1500);
+                              }}
+                            >
+                              {preset.name}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* 置顶的一键分发 */}
                       <Button appearance="primary" style={{ borderRadius: 12, background: 'var(--ios-indigo)', height: 42, fontWeight: 600, fontSize: 13 }} onClick={applyAllToTimeline} >
                         ✨ 一键分发至全部图片
                       </Button>
 
+                      {/* 自动适配音乐时长 */}
+                      {audioItems.length > 0 && timeline.length > 0 && (
+                        <Button
+                          appearance="subtle"
+                          style={{ borderRadius: 12, height: 36, fontWeight: 500, fontSize: 12, border: '1px solid rgba(255,255,255,0.1)' }}
+                          onClick={() => {
+                            const totalAudioDur = Math.max(...audioItems.map(a => a.timelineStart + a.duration));
+                            if (totalAudioDur <= 0 || timeline.length === 0) return;
+                            pushSnapshot();
+                            const perItemDur = totalAudioDur / timeline.length;
+                            setTimeline(prev => prev.map(t => ({ ...t, duration: Math.round(perItemDur * 10) / 10 })));
+                            setStatusMsg(`🎵 已将 ${timeline.length} 张图片均匀分配到 ${totalAudioDur.toFixed(1)}s 音乐时长`); setTimeout(() => setStatusMsg(''), 2000);
+                          }}
+                        >
+                          🎵 自动适配音乐时长
+                        </Button>
+                      )}
+
                       {/* GROUP 1: 影像调优 */}
                       <div className="ios-prop-group">
-                        <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 8, display: 'block' }}>🌓 影像调优矩阵</Text>
+                        <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 8, display: 'block' }}>🌓 影像调优矩阵 {selectedIds.size > 1 && <span style={{ fontSize: 11, opacity: 0.5, fontWeight: 400 }}>({selectedIds.size} 项已选)</span>}</Text>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
                           <Field label={`入点时长: ${localDuration !== null ? localDuration : (selectedItem?.duration || 3)}秒`}>
-                            <div style={{ width: '100%', minWidth: 0 }} onMouseUp={() => { if (localDuration !== null) { updateSelectedProperty('duration', localDuration); setLocalDuration(null); } }}>
+                            <div style={{ width: '100%', minWidth: 0 }} onMouseUp={() => { if (localDuration !== null) { pushSnapshot(); updateSelectedProperty('duration', localDuration); setLocalDuration(null); } }}>
                               <Slider min={0.1} max={10} step={0.1} value={localDuration !== null ? localDuration : (selectedItem?.duration || 3)} onChange={(_e, d) => setLocalDuration(Math.round(d.value * 10) / 10)} style={{ width: '100%', maxWidth: '100%' }} />
                             </div>
                           </Field>
-                          <Field label={`曝光: ${selectedItem?.exposure?.toFixed(2) || '1.00'}`}><div style={{ width: '100%', minWidth: 0 }}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.5} max={2.0} step={0.05} value={selectedItem?.exposure || 1.0} onChange={(_e, d) => updateSelectedProperty('exposure', d.value)} /></div></Field>
-                          <Field label={`鲜明度: ${selectedItem?.brilliance?.toFixed(2) || '1.00'}`}><div style={{ width: '100%', minWidth: 0 }}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.5} max={2.0} step={0.05} value={selectedItem?.brilliance || 1.0} onChange={(_e, d) => updateSelectedProperty('brilliance', d.value)} /></div></Field>
-                          <Field label={`对比度: ${selectedItem?.contrast?.toFixed(2) || '1.00'}`}><div style={{ width: '100%', minWidth: 0 }}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.5} max={2.0} step={0.05} value={selectedItem?.contrast || 1.0} onChange={(_e, d) => updateSelectedProperty('contrast', d.value)} /></div></Field>
-                          <Field label={`饱和度: ${selectedItem?.saturation?.toFixed(2) || '1.00'}`}><div style={{ width: '100%', minWidth: 0 }}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.0} max={2.0} step={0.05} value={selectedItem?.saturation || 1.0} onChange={(_e, d) => updateSelectedProperty('saturation', d.value)} /></div></Field>
+                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('exposure', 1.0); }} style={{ cursor: 'pointer' }} title="双击重置">{`曝光: ${selectedItem?.exposure?.toFixed(2) || '1.00'}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.5} max={2.0} step={0.05} value={selectedItem?.exposure || 1.0} onChange={(_e, d) => updatePropertyWithUndo('exposure', d.value)} /></div></Field>
+                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('brilliance', 1.0); }} style={{ cursor: 'pointer' }} title="双击重置">{`鲜明度: ${selectedItem?.brilliance?.toFixed(2) || '1.00'}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.5} max={2.0} step={0.05} value={selectedItem?.brilliance || 1.0} onChange={(_e, d) => updatePropertyWithUndo('brilliance', d.value)} /></div></Field>
+                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('contrast', 1.0); }} style={{ cursor: 'pointer' }} title="双击重置">{`对比度: ${selectedItem?.contrast?.toFixed(2) || '1.00'}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.5} max={2.0} step={0.05} value={selectedItem?.contrast || 1.0} onChange={(_e, d) => updatePropertyWithUndo('contrast', d.value)} /></div></Field>
+                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('saturation', 1.0); }} style={{ cursor: 'pointer' }} title="双击重置">{`饱和度: ${selectedItem?.saturation?.toFixed(2) || '1.00'}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.0} max={2.0} step={0.05} value={selectedItem?.saturation || 1.0} onChange={(_e, d) => updatePropertyWithUndo('saturation', d.value)} /></div></Field>
                         </div>
                       </div>
 
@@ -1701,8 +2208,8 @@ function App() {
                       <div className="ios-prop-group">
                         <Text weight="bold" style={{ color: '#C084FC', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 色彩平衡</Text>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-                          <Field label={`色温: ${selectedItem?.temp || 0}`}><div style={{ width: '100%', minWidth: 0 }}><Slider style={{ width: '100%', maxWidth: '100%' }} min={-100} max={100} step={1} value={selectedItem?.temp || 0} onChange={(_e, d) => updateSelectedProperty('temp', d.value)} /></div></Field>
-                          <Field label={`色调: ${selectedItem?.tint || 0}`}><div style={{ width: '100%', minWidth: 0 }}><Slider style={{ width: '100%', maxWidth: '100%' }} min={-100} max={100} step={1} value={selectedItem?.tint || 0} onChange={(_e, d) => updateSelectedProperty('tint', d.value)} /></div></Field>
+                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('temp', 0); }} style={{ cursor: 'pointer' }} title="双击重置">{`色温: ${selectedItem?.temp || 0}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={-100} max={100} step={1} value={selectedItem?.temp || 0} onChange={(_e, d) => updatePropertyWithUndo('temp', d.value)} /></div></Field>
+                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('tint', 0); }} style={{ cursor: 'pointer' }} title="双击重置">{`色调: ${selectedItem?.tint || 0}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={-100} max={100} step={1} value={selectedItem?.tint || 0} onChange={(_e, d) => updatePropertyWithUndo('tint', d.value)} /></div></Field>
                         </div>
                       </div>
 
@@ -1814,7 +2321,35 @@ function App() {
                 )
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
-                  <div className="ios-prop-group" style={{ marginTop: 24 }}>
+
+                  {/* 一键导出预设 */}
+                  <div className="ios-prop-group">
+                    <Text weight="bold" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⚡ 快捷导出预设</Text>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {[
+                        { name: '📱 抖音/快手', fmt: 'mp4', res: '1080p', fps: '60', codec: 'h264', quality: 'high' as const },
+                        { name: '🅱️ B站高清', fmt: 'mp4', res: '1080p', fps: '60', codec: 'h264', quality: 'high' as const },
+                        { name: '🎬 Apple ProRes', fmt: 'mov', res: 'original', fps: '60', codec: 'h265', quality: 'lossless' as const },
+                        { name: '📺 4K HDR', fmt: 'mp4', res: '4k', fps: '60', codec: 'h265', quality: 'lossless' as const },
+                      ].map(preset => (
+                        <div
+                          key={preset.name}
+                          className="filter-preset-card"
+                          onClick={() => {
+                            setExportFormat(preset.fmt as any);
+                            setExportResolution(preset.res as any);
+                            setExportFps(preset.fps as any);
+                            setExportCodec(preset.codec as any);
+                            setExportQuality(preset.quality);
+                            if (preset.codec === 'h265' && preset.name.includes('HDR')) setExportHdr(true);
+                            setStatusMsg(`✅ 已应用「${preset.name}」预设`); setTimeout(() => setStatusMsg(''), 1500);
+                          }}
+                        >{preset.name}</div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="ios-prop-group" style={{ marginTop: 0 }}>
                     <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 12, display: 'block' }}>🎬 输出格式与帧率</Text>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <Field label="封装格式">
@@ -1888,16 +2423,7 @@ function App() {
                   >
                     {isGenerating ? '正在拼尽全力导出...' : '开始执行极速渲染'}
                   </Button>
-                  {statusMsg && (
-                    <div style={{
-                      textAlign: 'center', padding: '10px', borderRadius: 10,
-                      background: statusMsg.includes('成功') ? 'rgba(52,199,89,0.1)' : 'rgba(255,59,48,0.1)',
-                      border: `1px solid ${statusMsg.includes('成功') ? 'rgba(52,199,89,0.2)' : 'rgba(255,59,48,0.2)'}`,
-                      marginTop: 8
-                    }}>
-                      <Text style={{ color: statusMsg.includes('成功') ? '#34C759' : '#FF3B30', fontSize: 11, fontWeight: 500 }}>{statusMsg}</Text>
-                    </div>
-                  )}
+
                 </div>
               )}
             </div>
@@ -1916,8 +2442,18 @@ function App() {
             <span style={{ fontSize: 9, fontWeight: 300, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.0, textTransform: 'uppercase' }}>
               照片合成视频王 <span style={{ color: 'rgba(255,255,255,0.15)', margin: '0 8px' }}>|</span> {playTime.toFixed(2)}s / {maxPlayTime.toFixed(2)}s
             </span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px' }} onClick={(e) => { e.stopPropagation(); setTimeline([]); setAudioItems([]); }}>清空轨道</Button>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px' }} onClick={(e) => { e.stopPropagation(); saveProject(); }} title="Ctrl+S">💾</Button>
+              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px' }} onClick={(e) => { e.stopPropagation(); loadProject(); }} title="Ctrl+O">📂</Button>
+              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px' }} onClick={(e) => { e.stopPropagation(); splitAtPlayhead(); }} title="Ctrl+B 分割">✂️</Button>
+              <span style={{ color: 'rgba(255,255,255,0.12)', margin: '0 2px' }}>|</span>
+              <div className="zoom-control" onClick={e => e.stopPropagation()}>
+                <span>🔍</span>
+                <input type="range" min={8} max={120} value={pps} onChange={e => setPps(Number(e.target.value))} />
+                <span>{Math.round(pps / 24 * 100)}%</span>
+              </div>
+              <span style={{ color: 'rgba(255,255,255,0.12)', margin: '0 2px' }}>|</span>
+              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px' }} onClick={(e) => { e.stopPropagation(); pushSnapshot(); setTimeline([]); setAudioItems([]); }}>清空轨道</Button>
             </div>
           </div>
 
@@ -1934,6 +2470,7 @@ function App() {
             onMouseMove={handleTimelineMouseMove}
             onMouseUp={handleTimelineMouseUp}
             onMouseLeave={handleTimelineMouseUp}
+            onWheel={handleTimelineWheel}
           >
             {/* 1. 时间刻度尺 (Time Ruler) - 专用导航区 */}
             <div
@@ -1959,44 +2496,121 @@ function App() {
                 setTimeout(() => setIsJumping(false), 300); // 0.3s 后恢复无动画状态
               }}
             >
-              {/* 渲染刻度线 - 每秒一个刻度 */}
-              {Array.from({ length: Math.ceil(maxPlayTime) + 1 }).map((_, i) => (
-                <div key={i} style={{ position: 'relative' }}>
-                  <div
-                    className={`ruler-tick ${i % 5 === 0 ? 'major' : ''}`}
-                    style={{ left: 60 + i * pps + (timeline.length > 0 ? (Math.floor(i / (timeline[0]?.duration || 3)) * 4) : 0) }}
-                  />
-                  {i % 5 === 0 && (
-                    <div className="ruler-label" style={{ left: 60 + i * pps + (timeline.length > 0 ? (Math.floor(i / (timeline[0]?.duration || 3)) * 4) : 0) }}>
-                      {i}s
+              {/* 渲染刻度线 - 自适应密度 */}
+              {(() => {
+                // 根据 pps 动态选择刻度间距
+                let tickStep = 1;
+                if (pps < 15) tickStep = 5;
+                else if (pps < 30) tickStep = 2;
+                else if (pps > 80) tickStep = 0.5;
+                const totalTicks = Math.ceil(maxPlayTime / tickStep) + 1;
+                // 精确计算每个刻度的像素位置（考虑 gap）
+                const getTickX = (time: number) => {
+                  let accDur = 0, accX = 0;
+                  for (let i = 0; i < timeline.length; i++) {
+                    const d = timeline[i].duration;
+                    if (time <= accDur + d) {
+                      return 60 + accX + (time - accDur) * pps;
+                    }
+                    accDur += d;
+                    accX += d * pps + 4;
+                  }
+                  return 60 + accX + (time - accDur) * pps;
+                };
+                return Array.from({ length: totalTicks }).map((_, i) => {
+                  const t = i * tickStep;
+                  if (t > maxPlayTime + tickStep) return null;
+                  const x = getTickX(t);
+                  const isMajor = t % (tickStep >= 1 ? 5 : 1) === 0;
+                  return (
+                    <div key={i} style={{ position: 'relative' }}>
+                      <div
+                        className={`ruler-tick ${isMajor ? 'major' : ''}`}
+                        style={{ left: x }}
+                      />
+                      {isMajor && (
+                        <div className="ruler-label" style={{ left: x }}>
+                          {t >= 60 ? `${Math.floor(t/60)}:${(t%60).toString().padStart(2,'0')}` : `${t}s`}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                  );
+                });
+              })()}
             </div>
 
-            {/* 播放指针 (80px 宽超大捕获热区) */}
+            {/* 播放指针 (三角形拓展抓手 + 加大热区) */}
             <div
               ref={playheadRef}
-              className="ios-play-container"
               style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                width: 1,
+                zIndex: 800,
                 transform: `translateX(${playLineLeft}px)`,
-                transition: isJumping ? 'transform 0.3s ease-out' : ((isPlaying || isDraggingHead) ? 'none' : 'transform 0.1s linear')
-              }}
-              onMouseDown={(e) => {
-                e.stopPropagation(); // 阻止背景框选
-                setIsDraggingHead(true);
-                const onMove = (me: MouseEvent) => seekToX(me.clientX);
-                const onUp = () => {
-                  setIsDraggingHead(false);
-                  window.removeEventListener('mousemove', onMove);
-                  window.removeEventListener('mouseup', onUp);
-                };
-                window.addEventListener('mousemove', onMove);
-                window.addEventListener('mouseup', onUp);
+                transition: isJumping ? 'transform 0.3s ease-out' : ((isPlaying || isDraggingHead) ? 'none' : 'transform 0.1s linear'),
+                pointerEvents: 'none',
               }}
             >
-              <div className="ios-play-line" />
+              {/* 三角形头部抓手 */}
+              <div style={{
+                position: 'absolute', top: -2, left: '50%', transform: 'translateX(-50%)',
+                width: 0, height: 0,
+                borderLeft: '7px solid transparent', borderRight: '7px solid transparent',
+                borderTop: '10px solid var(--ios-indigo)',
+                filter: 'drop-shadow(0 2px 4px rgba(99,102,241,0.5))',
+                pointerEvents: 'auto', cursor: 'grab',
+                zIndex: 810,
+              }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setIsDraggingHead(true);
+                  document.body.style.cursor = 'grabbing';
+                  document.body.style.userSelect = 'none';
+                  const onMove = (me: MouseEvent) => { me.preventDefault(); seekToX(me.clientX); };
+                  const onUp = () => {
+                    setIsDraggingHead(false);
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                  };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                }}
+              />
+              {/* 竖线 */}
+              <div style={{
+                position: 'absolute', top: 8, bottom: 0, left: '50%', transform: 'translateX(-50%)',
+                width: 2, background: 'var(--ios-indigo)',
+                boxShadow: '0 0 8px var(--ios-indigo-glow)',
+                borderRadius: 1,
+              }} />
+              {/* 透明宽热区 (20px 宽可点击拖拽) */}
+              <div style={{
+                position: 'absolute', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)',
+                width: 20, cursor: 'grab', pointerEvents: 'auto',
+              }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setIsDraggingHead(true);
+                  document.body.style.cursor = 'grabbing';
+                  document.body.style.userSelect = 'none';
+                  const onMove = (me: MouseEvent) => { me.preventDefault(); seekToX(me.clientX); };
+                  const onUp = () => {
+                    setIsDraggingHead(false);
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                  };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                }}
+              />
             </div>
 
             <div
@@ -2058,8 +2672,30 @@ function App() {
                             });
                             setSelectedAudioIds(new Set());
                           }}
-                          onRemove={(id) => { setTimeline(p => p.filter(t => t.id !== id)); setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; }); }}
+                          onRemove={(id) => { pushSnapshot(); setTimeline(p => p.filter(t => t.id !== id)); setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; }); }}
                           pps={pps} previewUrl={previewCache[resourceMap.get(item.resourceId)?.path || '']}
+                          onContextMenu={(e) => setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', targetId: item.id })}
+                          onTrimDuration={(id, delta) => { pushSnapshot(); setTimeline(p => p.map(t => t.id === id ? { ...t, duration: Math.max(0.3, t.duration + delta) } : t)); }}
+                          onDoubleClickCard={() => {
+                            // 计算此卡片的起始时间并跳转播放头
+                            let startTime = 0;
+                            for (const t of timeline) {
+                              if (t.id === item.id) break;
+                              startTime += t.duration;
+                            }
+                            setPlayTime(startTime);
+                            setIsPlaying(true);
+                            // 滚动时间轴到该位置
+                            const scrollEl = timelineScrollRef.current;
+                            if (scrollEl) {
+                              let accX = 0;
+                              for (let i = 0; i < timeline.length; i++) {
+                                if (timeline[i].id === item.id) break;
+                                accX += timeline[i].duration * pps + 4;
+                              }
+                              scrollEl.scrollLeft = Math.max(0, accX - scrollEl.clientWidth / 3);
+                            }
+                          }}
                         />
                       ))}
                     </SortableContext>
@@ -2073,6 +2709,7 @@ function App() {
                   {audioItems.map(item => {
                     const isItPlaying = isPlaying && playTime >= item.timelineStart && playTime < (item.timelineStart + item.duration);
                     return (
+                      <>
                       <AudioTrackItem
                         key={item.id}
                         item={item}
@@ -2097,6 +2734,13 @@ function App() {
                         editingMode={isEditingAudio && selectedAudioIds.has(item.id)}
                         onUpdateItem={updateAudioItem}
                       />
+                      {/* 音频右键菜单触发层 */}
+                      <div
+                        key={`ctx_${item.id}`}
+                        style={{ position: 'absolute', left: item.timelineStart * pps, top: 0, bottom: 0, width: item.duration * pps, zIndex: 1 }}
+                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, type: 'audio', targetId: item.id }); }}
+                      />
+                      </>
                     );
                   })}
                 </div>
