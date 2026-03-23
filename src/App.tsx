@@ -13,6 +13,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, horizontalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { restrictToParentElement, restrictToHorizontalAxis } from '@dnd-kit/modifiers';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
@@ -29,6 +30,8 @@ interface AudioTimelineItem {
   startOffset: number;
   duration: number;
   volume: number;
+  fadeIn?: number;   // 淡入时长 (秒，默认0)
+  fadeOut?: number;  // 淡出时长 (秒，默认0)
   // 剪辑点系统
   cutPoints?: number[];      // 在夹内的时间位置 (0~duration)，左闭右开
   selectedRegions?: number[]; // 被选中待删除的区域索引
@@ -50,16 +53,51 @@ interface TimelineItem {
   overlayText?: string;
   fontSize?: number;   // 24
   fontWeight?: string; // "bold"
+  fontColor?: string;  // 文字颜色 (#fff)
+  fontFamily?: string; // 字体
+  textAlign?: 'left' | 'center' | 'right'; // 对齐方式
+  textBg?: string;     // 文字背景色 (rgba)
+  textShadowColor?: string;  // 文字阴影颜色
+  textStrokeColor?: string;  // 文字描边颜色
+  textStrokeWidth?: number;  // 文字描边宽度
+  textGlow?: boolean;        // 文字发光
+  textX?: number;            // 文字X位置 (0-100%, 默认50)
+  textY?: number;            // 文字Y位置 (0-100%, 默认50)
   cropPos?: Crop;
+  overrides?: string[]; // 被手动修改过的字段名列表（全局覆盖模型）
 }
+
+// 全局默认值接口
+interface GlobalDefaults {
+  duration: number;
+  transition: string;
+  exposure: number;
+  brilliance: number;
+  contrast: number;
+  saturation: number;
+  temp: number;
+  tint: number;
+  zoom: number;
+  rotation: number;
+}
+
+const GLOBAL_DEFAULTS_INIT: GlobalDefaults = {
+  duration: 3, transition: 'fade',
+  exposure: 1.0, brilliance: 1.0, contrast: 1.0, saturation: 1.0,
+  temp: 0, tint: 0, zoom: 1.0, rotation: 0
+};
 
 // ─── 媒体特征无损高速探测引擎 ───────────────────────────────────────────────────
 const getMediaDuration = (path: string): Promise<number> => {
   return new Promise((resolve) => {
     const isHttp = path.startsWith('http');
-    const url = isHttp ? path : convertFileSrc(path);
+    const isWebRelative = path.startsWith('/');
+    const url = (isHttp || isWebRelative) ? path : convertFileSrc(path);
     const media = new Audio();
-    media.crossOrigin = 'anonymous'; // 破除 CORS 封锁
+    // 仅对外部 URL 设置 crossOrigin
+    if (isHttp && !url.includes('asset.localhost')) {
+      media.crossOrigin = 'anonymous';
+    }
     media.preload = 'metadata';
 
     const timeout = setTimeout(() => {
@@ -69,7 +107,9 @@ const getMediaDuration = (path: string): Promise<number> => {
 
     media.onloadedmetadata = () => {
       clearTimeout(timeout);
-      resolve(media.duration || 10);
+      const dur = media.duration;
+      // 安全上限：Infinity 或超 1 小时视为解析失败
+      resolve(!dur || !isFinite(dur) || dur > 3600 ? 10 : dur);
     };
     media.onerror = () => {
       clearTimeout(timeout);
@@ -278,22 +318,25 @@ const generateThumbnail = (srcUrl: string): Promise<string> => {
 
 // ─── 子组件: 极简图片卡片 ──────────────────────────────────────────
 const SortableImageCard = memo(function SortableImageCard({
-  item, resource, isSelected, onSelect, onRemove, pps, previewUrl, onContextMenu, onTrimDuration, onDoubleClickCard
+  item, resource, isSelected, onSelect, onRemove, pps, previewUrl, onContextMenu, onTrimDuration, onDoubleClickCard, multiSelectIndex, isMultiSelected
 }: {
-  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; onRemove: (id: string) => void; pps: number; previewUrl?: string; onContextMenu?: (e: React.MouseEvent) => void; onTrimDuration?: (id: string, delta: number) => void; onDoubleClickCard?: () => void;
+  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; onRemove: (id: string) => void; pps: number; previewUrl?: string; onContextMenu?: (e: React.MouseEvent) => void; onTrimDuration?: (id: string, delta: number) => void; onDoubleClickCard?: () => void; multiSelectIndex?: number; isMultiSelected?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform } = useSortable({ id: item.id });
   const [isHovered, setIsHovered] = useState(false);
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
 
-  // 性能优化：异步生成缩略图，时间轴只显示小图
+  const isVideo = resource?.type === 'video';
+
+  // 性能优化：异步生成缩略图，时间轴只显示小图 (视频不生成缩略图)
   useEffect(() => {
+    if (isVideo) return; // 视频不走 generateThumbnail
     const src = previewUrl
       ? (previewUrl.startsWith('http') || previewUrl.startsWith('blob:') ? previewUrl : convertFileSrc(previewUrl))
       : resource ? convertFileSrc(resource.path) : '';
     if (!src) return;
     generateThumbnail(src).then(setThumbUrl);
-  }, [resource?.path, previewUrl]);
+  }, [resource?.path, previewUrl, isVideo]);
 
   const thumbStyle: React.CSSProperties = {
     width: '100%', height: '100%', objectFit: 'cover',
@@ -332,7 +375,7 @@ const SortableImageCard = memo(function SortableImageCard({
   return (
     <div
       ref={setNodeRef}
-      className={`ios-btn-hover ${isSelected ? 'ios-selected' : ''}`}
+      className={`ios-btn-hover ${isSelected ? 'ios-selected' : ''} ${isMultiSelected ? 'ios-multi-selected' : ''}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
@@ -343,9 +386,13 @@ const SortableImageCard = memo(function SortableImageCard({
         cursor: 'grab',
         overflow: 'hidden',
         borderRadius: '12px',
-        background: 'rgba(0,0,0,0.5)',
-        border: isSelected ? '2px solid rgba(94, 92, 230, 0.8)' : '1px solid rgba(255,255,255,0.06)',
-        boxShadow: isSelected ? '0 10px 25px rgba(94,92,230,0.4), inset 0 0 10px rgba(255,255,255,0.05)' : 'none',
+        background: isSelected ? 'rgba(94, 92, 230, 0.08)' : 'rgba(0,0,0,0.5)',
+        border: isSelected
+          ? (isMultiSelected ? '2.5px dashed rgba(94, 92, 230, 0.9)' : '3px solid rgba(94, 92, 230, 0.9)')
+          : '1px solid rgba(255,255,255,0.06)',
+        boxShadow: isSelected
+          ? '0 0 20px rgba(94,92,230,0.5), 0 10px 30px rgba(94,92,230,0.3), inset 0 0 15px rgba(94,92,230,0.1)'
+          : 'none',
         boxSizing: 'border-box',
       }}
       {...attributes} {...listeners}
@@ -392,7 +439,25 @@ const SortableImageCard = memo(function SortableImageCard({
           window.addEventListener('mouseup', onUp);
         }}
       />
-      {resource ? <img src={imgSrc} style={thumbStyle} alt="" /> : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#ef4444' }}>缺失</div>}
+      {resource ? (
+        isVideo ? (
+          <div style={{ width: '100%', height: '100%', position: 'relative', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            <video src={imgSrc} muted style={{ ...thumbStyle, position: 'absolute', inset: 0, pointerEvents: 'none' }} preload="metadata" />
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.25)', pointerEvents: 'none' }}>
+              <span style={{ fontSize: 18, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }}>🎬</span>
+            </div>
+            <div style={{ position: 'absolute', bottom: 2, left: 4, fontSize: 8, color: 'rgba(255,255,255,0.7)', background: 'rgba(0,0,0,0.5)', padding: '1px 3px', borderRadius: 3, pointerEvents: 'none' }}>{item.duration.toFixed(1)}s</div>
+          </div>
+        ) : (
+          <img src={imgSrc} style={thumbStyle} alt="" />
+        )
+      ) : (
+        item.overlayText ? (
+          <div style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: item.textBg || 'rgba(30,30,30,0.9)', padding: '4px' }}>
+            <span style={{ fontSize: Math.min(item.fontSize || 14, 14), fontWeight: 700, color: item.fontColor || '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.5)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '95%' }}>{item.overlayText}</span>
+          </div>
+        ) : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#ef4444' }}>缺失</div>
+      )}
 
       {/* 右上角删除按钮 (hover 时显示) */}
       {isHovered && (
@@ -410,6 +475,18 @@ const SortableImageCard = memo(function SortableImageCard({
           }}
           title="从轨道移除"
         >🗑</div>
+      )}
+
+      {/* 多选序号角标 */}
+      {isMultiSelected && multiSelectIndex !== undefined && (
+        <div style={{
+          position: 'absolute', top: 4, left: 4, zIndex: 20,
+          width: 20, height: 20, borderRadius: '50%',
+          background: 'var(--ios-indigo)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, fontWeight: 800, color: '#fff',
+          boxShadow: '0 2px 8px rgba(94,92,230,0.6)',
+          pointerEvents: 'none',
+        }}>{multiSelectIndex + 1}</div>
       )}
 
       {/* 浮空文字预览层 */}
@@ -662,7 +739,7 @@ const AudioTrackItem = memo(({ item, resource, isSelected, onSelect, pps, isPlay
 });
 
 // ─── 子组件: iOS 资源库卡片 ──────────────────────────────────────────
-const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSelectPreview, onAdd, onRemove, onConvert, onReveal, previewUrl }: any) => {
+const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSelectPreview, onAdd, onRemove, onConvert, onReveal: _onReveal, previewUrl }: any) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
 
@@ -674,56 +751,166 @@ const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSelectPrev
     if (previewUrl) {
       return (previewUrl.startsWith('http') || previewUrl.startsWith('blob:') ? previewUrl : convertFileSrc(previewUrl));
     }
-    if (res.type === 'image') {
+    if (res.type === 'image' || res.type === 'video') {
       return convertFileSrc(res.path);
     }
     return '';
   }, [res, previewUrl]);
 
+  // 音频项：完全不同的紧凑设计
+  if (res.type === 'audio') {
+    const audioColors = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#06B6D4'];
+    const colorIdx = res.name.length % audioColors.length;
+    const accentColor = audioColors[colorIdx];
+    return (
+      <div
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
+          background: isChecked ? `${accentColor}15` : (isHovered ? 'rgba(255,255,255,0.03)' : 'transparent'),
+          borderRadius: 10, cursor: 'pointer',
+          borderLeft: isChecked ? `3px solid ${accentColor}` : '3px solid transparent',
+          transition: 'all 0.25s ease',
+        }}
+        onClick={() => onSelectPreview(res)}
+        onDoubleClick={() => onToggle(res.id)}
+      >
+        {/* 小圆形渐变图标 */}
+        <div style={{
+          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+          background: `linear-gradient(135deg, ${accentColor}40, ${accentColor}15)`,
+          border: `1px solid ${accentColor}30`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 15,
+          transition: 'transform 0.2s',
+          transform: isHovered ? 'scale(1.08)' : 'scale(1)',
+        }}>♪</div>
+        {/* 名称 */}
+        <div style={{
+          flex: 1, minWidth: 0,
+          fontSize: 12.5, fontWeight: isChecked ? 600 : 400,
+          color: isChecked ? '#fff' : 'rgba(255,255,255,0.8)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          letterSpacing: 0.3,
+        }}>{res.name}</div>
+        {/* 行内操作按钮 */}
+        {(isHovered || isAdded) && (
+          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+            <div
+              style={{
+                width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: isAdded ? `${accentColor}90` : 'rgba(255,255,255,0.08)',
+                color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+              onClick={e => { e.stopPropagation(); onAdd(res); }}
+              title={isAdded ? "已添加" : "添加轨道"}
+            >{isAdded ? '✓' : '+'}</div>
+            <div
+              style={{
+                width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', fontSize: 14, cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+              onClick={e => { e.stopPropagation(); onRemove(res.id); }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,59,48,0.25)'; e.currentTarget.style.color = '#FF3B30'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
+              title="移除"
+            >×</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 视频项：类似音频的列表布局
+  if (res.type === 'video') {
+    const videoColors = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#06B6D4'];
+    const vColorIdx = res.name.length % videoColors.length;
+    const vAccent = videoColors[vColorIdx];
+    return (
+      <div
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px',
+          background: isChecked ? `${vAccent}15` : (isHovered ? 'rgba(255,255,255,0.03)' : 'transparent'),
+          borderRadius: 10, cursor: 'pointer',
+          borderLeft: isChecked ? `3px solid ${vAccent}` : '3px solid transparent',
+          transition: 'all 0.25s ease',
+        }}
+        onClick={() => onSelectPreview(res)}
+        onDoubleClick={() => onToggle(res.id)}
+      >
+        {/* 视频缩略图 */}
+        <div style={{
+          width: 64, height: 40, borderRadius: 6, overflow: 'hidden', flexShrink: 0,
+          background: '#000', position: 'relative',
+          border: isHovered ? `1px solid ${vAccent}50` : '1px solid rgba(255,255,255,0.06)',
+          transition: 'all 0.25s',
+        }}>
+          <video src={displaySrc} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            onMouseEnter={e => { (e.target as HTMLVideoElement).play().catch(() => {}); }}
+            onMouseLeave={e => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
+          />
+          <div style={{ position: 'absolute', bottom: 2, right: 2, fontSize: 8, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '0 3px', borderRadius: 2 }}>🎬</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: isChecked ? 500 : 400, color: isChecked ? '#fff' : 'rgba(255,255,255,0.8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{res.name}</div>
+        </div>
+        {(isHovered || isAdded) && (
+          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+            <div style={{ width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isAdded ? `${vAccent}90` : 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
+              onClick={e => { e.stopPropagation(); onAdd(res); }} title={isAdded ? '已添加' : '添加轨道'}>{isAdded ? '✓' : '+'}</div>
+            <div style={{ width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', fontSize: 14, cursor: 'pointer', transition: 'all 0.15s' }}
+              onClick={e => { e.stopPropagation(); onRemove(res.id); }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,59,48,0.25)'; e.currentTarget.style.color = '#FF3B30'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
+              title="移除">×</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // 图片项的颜色主题（根据名称 hash 取色）
+  const imgColors = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#06B6D4', '#8B5CF6', '#F97316', '#14B8A6'];
+  const imgColorIdx = res.name.split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % imgColors.length;
+  const imgAccent = imgColors[imgColorIdx];
+
+  // 图片项：保持缩略图布局
   return (
     <div
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
         position: 'relative',
-        display: 'flex', alignItems: 'center', gap: 14, padding: '6px 4px 6px 8px',
-        background: isChecked ? 'rgba(255, 255, 255, 0.05)' : (isHovered ? 'rgba(255, 255, 255, 0.02)' : 'transparent'),
+        display: 'flex', alignItems: 'center', gap: 12, padding: '5px 8px',
+        background: isChecked ? `${imgAccent}12` : (isHovered ? `${imgAccent}08` : 'transparent'),
         borderRadius: 10, cursor: 'pointer',
-        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-        overflow: 'hidden',
+        borderLeft: isChecked ? `3px solid ${imgAccent}` : '3px solid transparent',
+        transition: 'all 0.25s ease',
       }}
       onClick={() => onSelectPreview(res)}
       onDoubleClick={() => onToggle(res.id)}
     >
-      {/* 极简左侧修饰线 (选中时发光) */}
+      {/* 图片缩略图 */}
       <div style={{
-        position: 'absolute', left: 0, top: '25%', bottom: '25%', width: 2, borderRadius: 1,
-        background: isChecked ? '#fff' : 'transparent',
-        boxShadow: isChecked ? '0 0 10px rgba(255,255,255,0.8)' : 'none',
-        transition: 'all 0.3s',
-        opacity: isChecked ? 1 : 0
-      }} />
-
-      {/* 图片容器撑大拉长，采用类似 16:9 画幅 */}
-      <div style={{
-        width: 76, height: 46, borderRadius: 6, overflow: 'hidden', flexShrink: 0,
+        width: 72, height: 52, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
         background: '#151515', display: 'flex', justifyContent: 'center', alignItems: 'center',
-        boxShadow: isHovered ? '0 6px 16px rgba(0,0,0,0.8), inset 0 0 0 1px rgba(255,255,255,0.08)' : 'inset 0 0 0 1px rgba(255,255,255,0.04)',
-        transition: 'transform 0.5s ease-out, box-shadow 0.5s ease-out',
-        transform: isHovered && !isChecked ? 'scale(1.02)' : 'scale(1)',
+        border: isHovered ? `1px solid ${imgAccent}50` : '1px solid rgba(255,255,255,0.06)',
+        boxShadow: isHovered ? `0 4px 12px ${imgAccent}25` : 'none',
+        transition: 'all 0.25s',
+        transform: isHovered ? 'scale(1.04)' : 'scale(1)',
         position: 'relative'
       }}>
-        {res.type === 'image' ? (
-          displaySrc ? (
-            <img src={displaySrc} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isDNG ? 0.6 : 1 }} alt="" />
-          ) : (
-            <div style={{ fontSize: 10, opacity: 0.3, color: '#fff' }}>...</div>
-          )
+        {displaySrc ? (
+          <img src={displaySrc} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isDNG ? 0.6 : 1 }} alt="" />
         ) : (
-          <div style={{ fontSize: 16, opacity: 0.8, color: '#fff' }}>🎵</div>
+          <div style={{ fontSize: 10, opacity: 0.3, color: '#fff' }}>...</div>
         )}
-
-        {/* DNG 专供：浮窗式转换按钮 */}
+        {/* DNG 转换 */}
         {isDNG && (
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
@@ -731,94 +918,48 @@ const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSelectPrev
             transition: 'opacity 0.3s'
           }}>
             {!hasPreview && (
-              <Button
-                size="small"
-                appearance="primary"
-                disabled={isConverting}
-                style={{
-                  fontSize: 10, padding: '0 8px', height: 24, borderRadius: 4,
-                  background: 'var(--ios-indigo)', border: 'none', fontWeight: 600, color: '#fff'
-                }}
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  setIsConverting(true);
-                  await onConvert(res.id);
-                  setIsConverting(false);
-                }}
-              >
-                {isConverting ? '转换中...' : '高清转换'}
-              </Button>
+              <Button size="small" appearance="primary" disabled={isConverting}
+                style={{ fontSize: 9, padding: '0 6px', height: 20, borderRadius: 4, background: 'var(--ios-indigo)', border: 'none', fontWeight: 600, color: '#fff' }}
+                onClick={async (e) => { e.stopPropagation(); setIsConverting(true); await onConvert(res.id); setIsConverting(false); }}
+              >{isConverting ? '...' : '转换'}</Button>
             )}
-
-            <Button
-              size="small"
-              appearance="subtle"
-              style={{
-                fontSize: 10, padding: '0 8px', height: 24, borderRadius: 4,
-                background: 'rgba(255,255,255,0.1)', border: 'none', fontWeight: 600, color: '#fff'
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onReveal(res.id);
-              }}
-            >
-              📂 定位文件
-            </Button>
           </div>
         )}
       </div>
 
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3, marginLeft: 4 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: 13, fontWeight: isChecked ? 500 : 300,
+          fontSize: 12.5, fontWeight: isChecked ? 500 : 400,
           color: isChecked ? '#fff' : 'rgba(255,255,255,0.85)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: 0.5,
-          fontFamily: 'Inter, -apple-system, sans-serif'
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>{res.name}</div>
-        <div style={{
-          fontSize: 9, fontWeight: 400, color: isDNG ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.35)', letterSpacing: 2.0
-        }}>{isDNG ? 'RAW / DNG' : (res.type === 'image' ? 'IMAGE' : 'AUDIO')}</div>
+        {isDNG && <div style={{ fontSize: 9, color: 'var(--ios-indigo)', letterSpacing: 1, marginTop: 2 }}>RAW</div>}
       </div>
 
-      {/* 操作区：带左偏渐变羽化的融合停靠带，右移精校，消除按钮割裂感 */}
-      <div style={{
-        display: 'flex', gap: 6, alignItems: 'center', padding: '6px 4px 6px 20px',
-        position: 'absolute', right: 0, top: 0, bottom: 0,
-        background: 'linear-gradient(to right, transparent 0%, rgba(20,20,20,0.6) 30%, rgba(20,20,20,0.9) 100%)',
-        backdropFilter: isHovered ? 'blur(2px)' : 'none',
-        WebkitBackdropFilter: isHovered ? 'blur(2px)' : 'none',
-        opacity: (isHovered || isChecked || isAdded) ? 1 : 0,
-        transform: (isHovered || isChecked || isAdded) ? 'translateX(0)' : 'translateX(10px)',
-        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
-      }}>
-        <Button
-          icon={<span style={{ fontWeight: 500, fontSize: 13 }}>{isAdded ? '✔' : '+'}</span>}
-          size="small"
-          style={{
-            width: 30, height: 30, padding: 0, minWidth: 0, borderRadius: 8,
-            background: isAdded ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.03)',
-            color: isAdded ? '#fff' : 'rgba(255,255,255,0.6)',
-            border: isAdded ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.08)',
-            boxShadow: isAdded ? '0 0 12px rgba(255,255,255,0.1)' : 'none',
-            transition: 'all 0.3s'
-          }}
-          onClick={e => { e.stopPropagation(); onAdd(res); }}
-          title={isAdded ? "已添加" : "添加轨道"}
-        />
-        <Button
-          icon={<span style={{ fontSize: 13, fontWeight: 300 }}>×</span>}
-          size="small" appearance="subtle"
-          style={{
-            width: 30, height: 30, padding: 0, minWidth: 0, borderRadius: 8,
-            color: 'rgba(255,255,255,0.4)', background: 'transparent',
-            transition: 'color 0.2s',
-          }}
-          onClick={e => { e.stopPropagation(); onRemove(res.id); }}
-          onMouseEnter={e => (e.currentTarget.style.color = '#FF3B30')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}
-          title="移除文件"
-        />
-      </div>
+      {/* 行内操作按钮 */}
+      {(isHovered || isAdded) && (
+        <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+          <div
+            style={{
+              width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: isAdded ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.08)',
+              color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+            }}
+            onClick={e => { e.stopPropagation(); onAdd(res); }}
+            title={isAdded ? "已添加" : "添加轨道"}
+          >{isAdded ? '✓' : '+'}</div>
+          <div
+            style={{
+              width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', fontSize: 14, cursor: 'pointer', transition: 'all 0.15s',
+            }}
+            onClick={e => { e.stopPropagation(); onRemove(res.id); }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,59,48,0.25)'; e.currentTarget.style.color = '#FF3B30'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
+            title="移除"
+          >×</div>
+        </div>
+      )}
     </div>
   );
 });
@@ -845,7 +986,7 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [activeTab, setActiveTab] = useState<'effects' | 'export'>('effects');
-  const [libTab, setLibTab] = useState<'image' | 'audio'>('image');
+  const [libTab, setLibTab] = useState<'image' | 'audio' | 'video'>('image');
 
   // 导出设置
   const [exportFormat, setExportFormat] = useState<'mp4' | 'mov'>('mp4');
@@ -878,6 +1019,26 @@ function App() {
   const [theme, setTheme] = useState<'ios' | 'win11'>(() => {
     return (localStorage.getItem('__editor_theme__') as 'ios' | 'win11') || 'ios';
   });
+
+  // ─── 改版新增状态 ────────────────────────────────────────────────────
+  const [projectName, setProjectName] = useState('未命名项目');
+  const [sortMode, setSortMode] = useState<'manual' | 'time' | 'name'>('manual');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showExportPanel, setShowExportPanel] = useState(false);
+  const [leftTab, setLeftTab] = useState<'photo' | 'music' | 'video'>('photo');
+  const [_showAdvancedExport, _setShowAdvancedExport] = useState(false);
+  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
+  const [showGlobalDefaults, setShowGlobalDefaults] = useState(false);
+
+  // ─── 全局默认值系统 (任务6) ──────────────────────────────────────────
+  const [globalDefaults, setGlobalDefaults] = useState<GlobalDefaults>(GLOBAL_DEFAULTS_INIT);
+
+
+  // 检查字段是否被覆盖
+  const isOverridden = useCallback((item: TimelineItem, key: string) => {
+    return item.overrides?.includes(key) ?? false;
+  }, []);
 
   // 监听退出全屏
   useEffect(() => {
@@ -914,6 +1075,19 @@ function App() {
     redoStackRef.current = [];
   }, []);
 
+  // 恢复单个字段的继承 (全局覆盖模型)
+  const restoreInheritance = useCallback((itemId: string, key: keyof GlobalDefaults) => {
+    pushSnapshot();
+    setTimeline(prev => prev.map(t => {
+      if (t.id === itemId || selectedIdsRef.current.has(t.id)) {
+        const newOverrides = (t.overrides || []).filter(k => k !== key);
+        return { ...t, [key]: globalDefaults[key], overrides: newOverrides };
+      }
+      return t;
+    }));
+    setStatusMsg(`🔗 已恢复「${key}」为全局默认值`); setTimeout(() => setStatusMsg(''), 1500);
+  }, [globalDefaults, pushSnapshot]);
+
   const undo = useCallback(() => {
     const snap = undoStackRef.current.pop();
     if (!snap) { setStatusMsg('⚠️ 已经是最早状态'); setTimeout(() => setStatusMsg(''), 1500); return; }
@@ -946,6 +1120,14 @@ function App() {
     { name: '⬛ 黑白', exposure: 1.0, contrast: 1.2, saturation: 0.0, temp: 0, tint: 0, brilliance: 1.0 },
     { name: '🌅 暖阳', exposure: 1.05, contrast: 1.1, saturation: 1.1, temp: 30, tint: 10, brilliance: 1.05 },
     { name: '❄️ 冷调', exposure: 1.0, contrast: 1.15, saturation: 0.9, temp: -25, tint: -15, brilliance: 1.0 },
+    { name: '📷 复古', exposure: 0.92, contrast: 1.1, saturation: 0.65, temp: 20, tint: 8, brilliance: 0.95 },
+    { name: '🍃 清新', exposure: 1.08, contrast: 0.95, saturation: 1.15, temp: -5, tint: 5, brilliance: 1.1 },
+    { name: '🔮 梦幻', exposure: 1.1, contrast: 0.85, saturation: 0.9, temp: -15, tint: 15, brilliance: 1.15 },
+    { name: '🎨 鲜艳', exposure: 1.0, contrast: 1.2, saturation: 1.5, temp: 5, tint: 0, brilliance: 1.1 },
+    { name: '🏚 褪色', exposure: 1.05, contrast: 0.85, saturation: 0.5, temp: 10, tint: 5, brilliance: 0.9 },
+    { name: '🌇 夕照', exposure: 0.95, contrast: 1.15, saturation: 1.2, temp: 40, tint: 15, brilliance: 1.0 },
+    { name: '🧊 青橙', exposure: 1.0, contrast: 1.2, saturation: 1.1, temp: -20, tint: 20, brilliance: 1.05 },
+    { name: '✨ 柔光', exposure: 1.15, contrast: 0.88, saturation: 0.95, temp: 5, tint: 0, brilliance: 1.2 },
     { name: '🔄 重置', exposure: 1.0, contrast: 1.0, saturation: 1.0, temp: 0, tint: 0, brilliance: 1.0 },
   ], []);
 
@@ -953,6 +1135,7 @@ function App() {
   const timelineScrollRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null); // 指针 DOM 引用
   const timeTextRef = useRef<HTMLSpanElement>(null); // 时间文字 DOM 引用
+  const monitorVideoRef = useRef<HTMLVideoElement>(null); // 预览区视频元素引用
   const clickTimesRef = useRef<number[]>([]); // 用于记录点击时间戳实现三击
 
   const audioElsRef = useRef<{ [id: string]: HTMLAudioElement }>({});
@@ -1104,6 +1287,25 @@ function App() {
         if (e.code === 'KeyB') { e.preventDefault(); splitAtPlayhead(); return; }
       }
 
+      // Home/End 跳转时间轴开头/末尾 (任务12)
+      if (e.code === 'Home') { e.preventDefault(); setPlayTime(0); return; }
+      if (e.code === 'End') {
+        e.preventDefault();
+        const total = timelineRef.current.reduce((s, t) => s + t.duration, 0);
+        setPlayTime(total); return;
+      }
+
+      // [ / ] 调整选中项时长 (任务12)
+      if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
+        if (selectedIdsRef.current.size > 0) {
+          e.preventDefault();
+          const delta = e.code === 'BracketLeft' ? -0.5 : 0.5;
+          pushSnapshot();
+          setTimeline(p => p.map(t => selectedIdsRef.current.has(t.id) ? { ...t, duration: Math.max(0.3, t.duration + delta) } : t));
+          return;
+        }
+      }
+
       // ? = 快捷键提示面板
       if (e.key === '?' || e.code === 'Slash') {
         setShowShortcuts(prev => !prev);
@@ -1182,17 +1384,28 @@ function App() {
   // 性能优化：已添加资源 ID 集合 (替代 timeline.some() + audioItems.some())
   const addedResourceIds = useMemo(() => new Set([...timeline.map(t => t.resourceId), ...audioItems.map(a => a.resourceId)]), [timeline, audioItems]);
 
-  // 1. 自动资源预热引擎 (CORS Blob Bypass)
+  // 1. 自动资源预热引擎 (Blob 转换 — 兼容 Tauri WebView2 音频播放)
   useEffect(() => {
-    resources.filter(r => r.type === 'audio' && r.path.startsWith('http')).forEach(res => {
+    resources.filter(r => r.type === 'audio').forEach(res => {
       if (audioBlobs[res.id]) return;
-      fetch(res.path, { mode: 'cors' })
+      // 判断路径类型：HTTP / web相对路径(/audio/...) / 本地绝对路径(C:\...)
+      let fetchUrl: string;
+      if (res.path.startsWith('http') || res.path.startsWith('blob:')) {
+        fetchUrl = res.path;
+      } else if (res.path.startsWith('/')) {
+        // public 目录下的 web 资源，直接访问 dev server
+        fetchUrl = res.path;
+      } else {
+        // 本地绝对路径走 Tauri asset 协议
+        fetchUrl = convertFileSrc(res.path);
+      }
+      fetch(fetchUrl)
         .then(r => r.blob())
         .then(blob => {
           const url = URL.createObjectURL(blob);
           setAudioBlobs(prev => ({ ...prev, [res.id]: url }));
         })
-        .catch(e => console.error(`Failed to fetch audio blob for ${res.name}`, e));
+        .catch(e => console.warn(`[Audio Blob] 预热失败: ${res.name}`, fetchUrl, e));
     });
   }, [resources, audioBlobs]);
 
@@ -1219,7 +1432,9 @@ function App() {
   const maxPlayTime = useMemo(() => {
     const maxT = timeline.length > 0 ? timeline.reduce((acc, t) => acc + t.duration, 0) : 0;
     const maxA = audioItems.length > 0 ? Math.max(...audioItems.map(a => a.timelineStart + a.duration)) : 0;
-    return Math.max(maxT, maxA);
+    // 合理上限：取两者较大值，但如果没有图片只有音频也需要播放
+    // 加 2s 缓冲防止播放线恰好卡在最后一帧
+    return Math.max(maxT, maxA) + 0.01;
   }, [timeline, audioItems]);
 
   // 精确计算 playLine 的左边距。修复 `gap: 4px` 造成的误差
@@ -1336,7 +1551,10 @@ function App() {
         timeTextRef.current.textContent = formatTime(currentT);
       }
 
-      // 每隔 1s 同步一次状态，保证暂停时位置准确，但不产生高频压力
+      // 关键：每帧更新 ref，让 syncAudio 始终读到最新时间（避免音频反复跳转）
+      playTimeRef.current = currentT;
+
+      // 每隔 1s 同步一次 React state，保证暂停时位置准确，但不产生高频渲染压力
       if (performance.now() - lastSyncTimeRef.current > 1000) {
         setPlayTime(currentT);
         lastSyncTimeRef.current = performance.now();
@@ -1373,15 +1591,23 @@ function App() {
         const res = resourceMap.get(item.resourceId);
         if (!res) return;
 
-        const playPath = audioBlobs[res.id] || (res.path.startsWith('http') ? res.path : convertFileSrc(res.path));
+        // 优先用 blob 缓存，其次判断路径类型
+        const playPath = audioBlobs[res.id]
+          || (res.path.startsWith('http') || res.path.startsWith('/') || res.path.startsWith('blob:')
+            ? res.path
+            : convertFileSrc(res.path));
 
         let audio = audioElsRef.current[item.id];
         if (!audio || (audio.src !== playPath && !audio.src.startsWith('blob:'))) {
           if (audio) { audio.pause(); audio.src = ""; }
           audio = new Audio();
-          audio.crossOrigin = 'anonymous';
+          // 仅对外部 URL 设置 crossOrigin，Tauri asset 协议不需要
+          if (playPath.startsWith('http') && !playPath.includes('asset.localhost')) {
+            audio.crossOrigin = 'anonymous';
+          }
           audio.preload = 'auto';
           audio.src = playPath;
+          audio.onerror = (e) => console.warn('[Audio Error]', item.id, playPath, e);
           audioElsRef.current[item.id] = audio;
         }
 
@@ -1389,18 +1615,28 @@ function App() {
         const targetPos = item.startOffset + (currentPlayTime - item.timelineStart);
 
         if (currentPlayTime >= item.timelineStart && currentPlayTime < itemEnd) {
+          // 计算淡入淡出音量 (任务7)
+          const baseVol = item.volume ?? 1.0;
+          const elapsed = currentPlayTime - item.timelineStart;
+          const remaining = itemEnd - currentPlayTime;
+          const fi = item.fadeIn || 0;
+          const fo = item.fadeOut || 0;
+          let fadeMul = 1.0;
+          if (fi > 0 && elapsed < fi) fadeMul = Math.min(fadeMul, elapsed / fi);
+          if (fo > 0 && remaining < fo) fadeMul = Math.min(fadeMul, remaining / fo);
+          const effectiveVol = Math.max(0, Math.min(1, baseVol * fadeMul));
+
           if (audio.paused) {
             audio.currentTime = targetPos;
-            audio.volume = item.volume ?? 1.0;
+            audio.volume = effectiveVol;
             const p = audio.play();
             if (p) p.catch(() => { });
           } else {
-            if (Math.abs(audio.currentTime - targetPos) > 0.15) {
+            // 放宽容差到 0.5s，避免频繁 seek 导致反复卡顿
+            if (Math.abs(audio.currentTime - targetPos) > 0.5) {
               audio.currentTime = targetPos;
             }
-            if (audio.volume !== (item.volume ?? 1.0)) {
-              audio.volume = item.volume ?? 1.0;
-            }
+            audio.volume = effectiveVol;
           }
         } else {
           if (!audio.paused) audio.pause();
@@ -1429,7 +1665,16 @@ function App() {
 
   const updateSelectedProperty = (key: keyof TimelineItem, val: any) => {
     if (selectedIds.size === 0) return;
-    setTimeline(prev => prev.map(t => selectedIds.has(t.id) ? { ...t, [key]: val } : t));
+    setTimeline(prev => prev.map(t => {
+      if (!selectedIds.has(t.id)) return t;
+      // 自动将修改的字段加入 overrides（全局覆盖模型）
+      const globalKeys: string[] = Object.keys(GLOBAL_DEFAULTS_INIT);
+      if (globalKeys.includes(key as string)) {
+        const newOverrides = Array.from(new Set([...(t.overrides || []), key as string]));
+        return { ...t, [key]: val, overrides: newOverrides };
+      }
+      return { ...t, [key]: val };
+    }));
   };
 
   // Slider 撤销保护：拖动前压栈，拖动结束后自动保存
@@ -1615,7 +1860,9 @@ function App() {
       const overflowX = Math.max(0, rawX - accX);
       targetTime += (overflowX / currentPps);
     }
-    setPlayTime(Math.max(0, targetTime));
+    // 限制不超过最大播放时长
+    const maxT = tl.reduce((s, t) => s + t.duration, 0);
+    setPlayTime(Math.max(0, Math.min(targetTime, maxT + 5)));
   }, []);
 
   const handleTimelineMouseMove = (e: React.MouseEvent) => {
@@ -1652,12 +1899,12 @@ function App() {
     }
   };
 
-  const handleImport = async (type: 'image' | 'audio') => {
+  const handleImport = async (type: 'image' | 'audio' | 'video') => {
     const selected = await open({
       multiple: true,
       filters: [{
-        name: type === 'image' ? '图片' : '音频',
-        extensions: type === 'image' ? ['png', 'jpg', 'jpeg', 'webp', 'dng', 'DNG'] : ['mp3', 'wav', 'm4a']
+        name: type === 'image' ? '图片' : type === 'video' ? '视频' : '音频',
+        extensions: type === 'image' ? ['png', 'jpg', 'jpeg', 'webp', 'dng', 'DNG'] : type === 'video' ? ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm'] : ['mp3', 'wav', 'm4a']
       }]
     });
     if (selected && Array.isArray(selected)) {
@@ -1671,7 +1918,7 @@ function App() {
         };
       });
       setResources(prev => [...prev, ...newResources]);
-      setLibTab(type);
+      setLibTab(type === 'image' ? 'image' : type === 'video' ? 'video' : 'audio');
       setStatusMsg(`🎉 素材处理完成 (${newResources.length}项)`);
       setTimeout(() => setStatusMsg(''), 2000);
     }
@@ -1730,13 +1977,36 @@ function App() {
       for (const t of timeline) {
         if (playTime >= acc && playTime < acc + t.duration) {
           const res = resourceMap.get(t.resourceId);
-          return res ? { ...res, currentItem: t, src: getEffectiveSrc(res.path) } : null;
+          if (res) {
+            return { ...res, currentItem: t, src: getEffectiveSrc(res.path), localTime: playTime - acc };
+          }
+          // 纯文字项（无 resourceId）
+          if (!t.resourceId && t.overlayText) {
+            return { id: t.id, name: t.overlayText, type: 'text' as const, path: '', currentItem: t, src: '', localTime: 0 };
+          }
+          return null;
         }
         acc += t.duration;
       }
     }
-    return monitorRes ? { ...monitorRes, currentItem: null, src: getEffectiveSrc(monitorRes.path) } : null;
+    return monitorRes ? { ...monitorRes, currentItem: null, src: getEffectiveSrc(monitorRes.path), localTime: 0 } : null;
   }, [isPlaying, playTime, timeline, resources, monitorRes, previewCache]);
+
+  // 同步视频播放与时间线
+  useEffect(() => {
+    const videoEl = monitorVideoRef.current;
+    if (!videoEl || !monitorSrc || monitorSrc.type !== 'video') return;
+    const localTime = monitorSrc.localTime || 0;
+    // 同步 currentTime（仅在差异超过 0.3s 时 seek，避免频繁跳帧）
+    if (Math.abs(videoEl.currentTime - localTime) > 0.3) {
+      videoEl.currentTime = localTime;
+    }
+    if (isPlaying) {
+      videoEl.play().catch(() => {});
+    } else {
+      videoEl.pause();
+    }
+  }, [isPlaying, monitorSrc]);
 
   const handleGenerate = async () => {
     const outputPath = await save({ filters: [{ name: '视频文件', extensions: [exportFormat] }] });
@@ -1805,21 +2075,8 @@ function App() {
 
   return (
     <FluentProvider theme={webDarkTheme} style={{ height: '100vh', width: '100vw', background: 'transparent' }}>
-      <div className={`ios-layout ${theme === 'win11' ? 'theme-win11' : ''}`} onClick={() => { setContextMenu(null); setShowShortcuts(false); }}>
+      <div className={`ios-layout ${theme === 'win11' ? 'theme-win11' : ''}`} onClick={() => { setContextMenu(null); setShowShortcuts(false); setShowSortMenu(false); }}>
 
-        {/* 主题切换按钮 */}
-        <button
-          className="theme-switch-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            const next = theme === 'ios' ? 'win11' : 'ios';
-            setTheme(next);
-            localStorage.setItem('__editor_theme__', next);
-          }}
-        >
-          <span className="icon">{theme === 'ios' ? '🍃' : '🪩'}</span>
-          {theme === 'ios' ? 'iOS 26' : 'Win11'}
-        </button>
 
         {/* 全局浮窗 Toast 通知 */}
         {statusMsg && (
@@ -1876,156 +2133,262 @@ function App() {
         )}
 
 
-        {/* TOP ZONE: Sidebars + Monitor */}
-        <div style={{ flex: 1, display: 'flex', gap: 24, minHeight: 0 }}>
+        {/* ═══ 顶部项目操作栏 (任务1: 项目级主流程) ═══ */}
+        <div className="project-toolbar" style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+          background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--ios-hairline)',
+          flexShrink: 0, minHeight: 40,
+        }}>
 
-          {/* 1. 素材库 (图片库/音乐库 双 Tab) */}
-          <div className="glass-panel" style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-
-            {/* 高级质感控制台头部 */}
-            <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--ios-hairline)', display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-              {/* 第一排：库切换 & 导入按钮 */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', background: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: 3, width: 150, boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.3)' }}>
-                  <div
-                    onClick={() => setLibTab('image')}
-                    style={{ flex: 1, textAlign: 'center', padding: '6px 0', background: libTab === 'image' ? 'rgba(255,255,255,0.15)' : 'transparent', borderRadius: 7, cursor: 'pointer', fontSize: 13, fontWeight: libTab === 'image' ? 600 : 400, color: libTab === 'image' ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'all 0.2s cubic-bezier(0.23, 1, 0.32, 1)', boxShadow: libTab === 'image' ? '0 2px 8px rgba(0,0,0,0.2)' : 'none' }}
-                  >
-                    图片库
+          {/* 左侧：主流程按钮组 */}
+          <Button size="small" appearance="primary" style={{ borderRadius: 6, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, padding: '0 14px', height: 30, border: 'none' }} onClick={() => handleImport(leftTab === 'music' ? 'audio' : leftTab === 'video' ? 'video' : 'image')}>
+            📥 导入
+          </Button>
+          {/* 排序下拉菜单 (任务5) */}
+          <div style={{ position: 'relative' }}>
+            <Button size="small" appearance="subtle" style={{ borderRadius: 6, fontSize: 12, padding: '0 10px', height: 30, color: 'rgba(255,255,255,0.7)' }} onClick={(e) => { e.stopPropagation(); setShowSortMenu(!showSortMenu); }}>
+              {sortMode === 'manual' ? '📂 排序' : `📂 ${sortMode === 'time' ? '时间序' : '名称序'}${sortDirection === 'desc' ? '↓' : '↑'}`}
+            </Button>
+            {showSortMenu && (
+              <div className="sort-dropdown" style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'rgba(30,30,46,0.96)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 6, zIndex: 999, minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+                {[
+                  { mode: 'manual' as const, label: '✋ 手动排序', dir: 'asc' as const },
+                  { mode: 'name' as const, label: '🔤 按名称 A→Z', dir: 'asc' as const },
+                  { mode: 'name' as const, label: '🔤 按名称 Z→A', dir: 'desc' as const },
+                  { mode: 'time' as const, label: '🕐 按文件名数字 ↑', dir: 'asc' as const },
+                  { mode: 'time' as const, label: '🕐 按文件名数字 ↓', dir: 'desc' as const },
+                ].map((opt, idx) => (
+                  <div key={idx} style={{ padding: '6px 12px', fontSize: 12, color: (sortMode === opt.mode && sortDirection === opt.dir) ? '#fff' : 'rgba(255,255,255,0.65)', background: (sortMode === opt.mode && sortDirection === opt.dir) ? 'rgba(94,92,230,0.3)' : 'transparent', borderRadius: 6, cursor: 'pointer', transition: 'all 0.15s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = (sortMode === opt.mode && sortDirection === opt.dir) ? 'rgba(94,92,230,0.3)' : 'transparent'; }}
+                    onClick={() => {
+                      if (opt.mode === 'manual') {
+                        setSortMode('manual');
+                        setStatusMsg('✋ 已切换为手动排序'); setTimeout(() => setStatusMsg(''), 1500);
+                      } else {
+                        if (sortMode === 'manual' && timeline.length > 0) {
+                          // 排序前提示
+                          setStatusMsg('⚠️ 排序将覆盖当前手动顺序（可 Ctrl+Z 撤销）');
+                          setTimeout(() => setStatusMsg(''), 2500);
+                        }
+                        pushSnapshot();
+                        setSortMode(opt.mode);
+                        setSortDirection(opt.dir);
+                        const sorted = [...timeline].sort((a, b) => {
+                          const ra = resources.find(r => r.id === a.resourceId);
+                          const rb = resources.find(r => r.id === b.resourceId);
+                          const nameA = ra?.name || '';
+                          const nameB = rb?.name || '';
+                          if (opt.mode === 'name') {
+                            return opt.dir === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+                          } else {
+                            // 按文件名中的数字比较
+                            const numA = parseInt((nameA.match(/\d+/) || ['0'])[0], 10);
+                            const numB = parseInt((nameB.match(/\d+/) || ['0'])[0], 10);
+                            return opt.dir === 'asc' ? numA - numB : numB - numA;
+                          }
+                        });
+                        setTimeline(sorted);
+                        setStatusMsg(`📂 已按${opt.mode === 'name' ? '名称' : '数字'}${opt.dir === 'asc' ? '升序' : '降序'}排列`);
+                        setTimeout(() => setStatusMsg(''), 1500);
+                      }
+                      setShowSortMenu(false);
+                    }}>
+                    {opt.label}
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <Button size="small" appearance="subtle" style={{ borderRadius: 6, fontSize: 12, padding: '0 10px', height: 30, color: 'rgba(255,255,255,0.7)' }} onClick={() => setShowGlobalDefaults(!showGlobalDefaults)} disabled={timeline.length === 0}>
+            ⚙️ 全局设置
+          </Button>
+
+          {/* 中间：项目名称居中 */}
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            {isEditingProjectName ? (
+              <input
+                autoFocus
+                value={projectName}
+                onChange={e => setProjectName(e.target.value)}
+                onBlur={() => setIsEditingProjectName(false)}
+                onKeyDown={e => { if (e.key === 'Enter') setIsEditingProjectName(false); }}
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid var(--ios-indigo)', borderRadius: 4, color: '#fff', fontSize: 13, fontWeight: 600, padding: '2px 8px', width: 160, outline: 'none', textAlign: 'center' }}
+              />
+            ) : (
+              <span
+                onClick={() => setIsEditingProjectName(true)}
+                style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)', cursor: 'pointer', padding: '2px 8px', borderRadius: 4, transition: 'background 0.15s' }}
+                title="点击编辑项目名称"
+              >{projectName}</span>
+            )}
+          </div>
+
+          {/* 右侧：保存/主题切换/导出 */}
+          <Button size="small" appearance="subtle" style={{ fontSize: 11, padding: '0 6px', height: 28, borderRadius: 6, color: 'rgba(255,255,255,0.6)' }} onClick={saveProject} title="Ctrl+S">💾</Button>
+          <Button size="small" appearance="subtle" style={{ fontSize: 11, padding: '0 6px', height: 28, borderRadius: 6, color: 'rgba(255,255,255,0.6)' }} onClick={loadProject} title="Ctrl+O">📂</Button>
+          <button
+            className="theme-switch-btn"
+            style={{ position: 'static', fontSize: 10, padding: '3px 8px', height: 28     }}
+            onClick={(e) => {
+              e.stopPropagation();
+              const next = theme === 'ios' ? 'win11' : 'ios';
+              setTheme(next);
+              localStorage.setItem('__editor_theme__', next);
+            }}
+          >
+            <span className="icon">{theme === 'ios' ? '🍃' : '🪩'}</span>
+            {theme === 'ios' ? 'iOS' : 'Win11'}
+          </button>
+          <Button size="small" appearance="primary" style={{ borderRadius: 6, background: '#10B981', fontWeight: 600, fontSize: 12, padding: '0 16px', height: 30, border: 'none' }} onClick={() => setShowExportPanel(!showExportPanel)}>
+            🚀 导出
+          </Button>
+        </div>
+
+        {/* ═══ 主内容区 ═══ */}
+        <div style={{ flex: 1, display: 'flex', gap: 8, minHeight: 0 }}>
+
+          {/* 1. 左侧资源区 (任务2: 照片/音乐/文字 三标签) */}
+          <div className="glass-panel" style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+
+            {/* 三标签头部 */}
+            <div style={{ padding: '8px 10px 6px', borderBottom: '1px solid var(--ios-hairline)' }}>
+              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.25)', borderRadius: 7, padding: 2 }}>
+                {([['photo', '照片'], ['music', '音乐'], ['video', '视频']] as const).map(([key, label]) => (
                   <div
-                    onClick={() => setLibTab('audio')}
-                    style={{ flex: 1, textAlign: 'center', padding: '6px 0', background: libTab === 'audio' ? 'rgba(255,255,255,0.15)' : 'transparent', borderRadius: 7, cursor: 'pointer', fontSize: 13, fontWeight: libTab === 'audio' ? 600 : 400, color: libTab === 'audio' ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'all 0.2s cubic-bezier(0.23, 1, 0.32, 1)', boxShadow: libTab === 'audio' ? '0 2px 8px rgba(0,0,0,0.2)' : 'none' }}
+                    key={key}
+                    onClick={() => { setLeftTab(key); if (key === 'photo') setLibTab('image'); else if (key === 'music') setLibTab('audio'); else if (key === 'video') setLibTab('video'); }}
+                    style={{ flex: 1, textAlign: 'center', padding: '5px 0', background: leftTab === key ? 'rgba(255,255,255,0.12)' : 'transparent', borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: leftTab === key ? 600 : 400, color: leftTab === key ? '#fff' : 'rgba(255,255,255,0.45)', transition: 'all 0.15s ease-out' }}
                   >
-                    音乐库
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 左侧内容区 */}
+            {leftTab === 'video' ? (
+              /* 视频素材库 */
+              <div style={{ flex: 1, padding: '12px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+                <Button size="small" appearance="primary" style={{ borderRadius: 8, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, height: 36, border: 'none', width: '100%' }} onClick={() => handleImport('video')}>
+                  🎬 导入视频文件
+                </Button>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>支持 MP4 / MOV / AVI / MKV / WebM</div>
+                {resources.filter(r => r.type === 'video').length === 0 ? (
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>暂无视频，点击上方导入</div>
+                ) : (
+                  resources.filter(r => r.type === 'video').map(res => (
+                    <div key={res.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; }}
+                      onClick={() => {
+                        // 获取视频真实时长
+                        const videoEl = document.createElement('video');
+                        videoEl.preload = 'metadata';
+                        videoEl.src = getEffectiveSrc(res.path);
+                        videoEl.onloadedmetadata = () => {
+                          const realDuration = Math.round(videoEl.duration * 10) / 10 || 10;
+                          pushSnapshot();
+                          setTimeline(p => [...p, {
+                            id: `tm_vid_${Date.now()}`, resourceId: res.id, duration: realDuration, transition: 'fade', rotation: 0, contrast: 1, saturation: 1, exposure: 1, brilliance: 1, temp: 0, tint: 0, zoom: 1,
+                          }]);
+                          setStatusMsg(`✨ 已添加视频 (${realDuration}s)`); setTimeout(() => setStatusMsg(''), 1500);
+                        };
+                        videoEl.onerror = () => {
+                          // fallback: 如果无法读取时长，使用默认值
+                          pushSnapshot();
+                          setTimeline(p => [...p, {
+                            id: `tm_vid_${Date.now()}`, resourceId: res.id, duration: 10, transition: 'fade', rotation: 0, contrast: 1, saturation: 1, exposure: 1, brilliance: 1, temp: 0, tint: 0, zoom: 1,
+                          }]);
+                          setStatusMsg(`✨ 已添加视频`); setTimeout(() => setStatusMsg(''), 1500);
+                        };
+                      }}
+                    >
+                      <div style={{ width: 40, height: 28, borderRadius: 4, background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎬</div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{res.name}</div>
+                      </div>
+                      <div onClick={(e) => { e.stopPropagation(); setResources(p => p.filter(r => r.id !== res.id)); }} style={{ width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }} title="删除">×</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              /* 照片/音乐 共用界面 */
+              <>
+                {/* 搜索 + 操作栏 */}
+                <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <Input
+                    value={searchQuery}
+                    onChange={(_e, data) => setSearchQuery(data.value)}
+                    placeholder="🔍 搜索..."
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6, fontSize: 11 }}
+                  />
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <Button size="small" appearance="subtle" style={{ borderRadius: 6, fontSize: 11, padding: '0 6px', color: 'rgba(255,255,255,0.7)' }} onClick={() => {
+                      const allIds = filteredResources.map(r => r.id);
+                      if (selectedResourceIds.size === allIds.length && allIds.length > 0) setSelectedResourceIds(new Set());
+                      else setSelectedResourceIds(new Set(allIds));
+                    }}>
+                      {filteredResources.length > 0 && selectedResourceIds.size === filteredResources.length ? '反选' : '全选'}
+                    </Button>
+                    <Button appearance="primary" size="small" disabled={selectedResourceIds.size === 0} style={{ flex: 1, borderRadius: 6, background: selectedResourceIds.size > 0 ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.04)', color: selectedResourceIds.size > 0 ? '#fff' : 'rgba(255,255,255,0.3)', fontWeight: 600, fontSize: 11, border: 'none' }} onClick={async () => {
+                      const selectedList = resources.filter(r => r.type === libTab && selectedResourceIds.has(r.id));
+                      for (const r of selectedList) {
+                        if (r.type === 'image') {
+                          setTimeline(p => [...p, { id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, duration: 3, transition: 'fade', rotation: 0, contrast: 1.0, saturation: 1.0, exposure: 1.0, brilliance: 1.0, temp: 0, tint: 0, zoom: 1.0, fontSize: 24, fontWeight: 'normal' }]);
+                        } else {
+                          const dur = await getMediaDuration(r.path);
+                          setAudioItems(prev => {
+                            let startPos = 0;
+                            if (prev.length > 0) { const last = prev[prev.length - 1]; startPos = last.timelineStart + last.duration; }
+                            return [...prev, { id: `au_${Date.now()}_${Math.random()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }];
+                          });
+                        }
+                      }
+                      setSelectedResourceIds(new Set());
+                    }}>
+                      {selectedResourceIds.size > 0 ? `+ 编入 ${selectedResourceIds.size}项` : '+ 编入轨道'}
+                    </Button>
+                    <Button size="small" appearance="subtle" disabled={selectedResourceIds.size === 0} style={{ borderRadius: 6, minWidth: 28, padding: 0, fontSize: 12, color: selectedResourceIds.size > 0 ? '#FF3B30' : 'rgba(255,255,255,0.1)' }} onClick={() => removeFromLibrary(selectedResourceIds)}>🗑</Button>
                   </div>
                 </div>
-                <Button
-                  appearance="primary"
-                  style={{ borderRadius: 10, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', height: 32, fontSize: 12, fontWeight: 600, padding: '0 12px', backdropFilter: 'blur(10px)', color: '#fff' }}
-                  onClick={() => handleImport(libTab)}
-                >
-                  <span style={{ marginRight: 4 }}>+</span> 导入素材
-                </Button>
-              </div>
 
-              {/* 搜索框 */}
-              <Input
-                value={searchQuery}
-                onChange={(_e, data) => setSearchQuery(data.value)}
-                placeholder="🔍 搜索素材..."
-                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}
-              />
-
-              {/* 第二排：操作栏按逻辑顺序排列 */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <Button size="small" appearance="subtle" style={{ borderRadius: 8, fontSize: 12, padding: '0 8px', color: 'rgba(255,255,255,0.8)' }} onClick={() => {
-                  const allIds = filteredResources.map(r => r.id);
-                  if (selectedResourceIds.size === allIds.length && allIds.length > 0) {
-                    setSelectedResourceIds(new Set());
-                  } else {
-                    setSelectedResourceIds(new Set(allIds));
-                  }
-                }}>
-                  {filteredResources.length > 0 && selectedResourceIds.size === filteredResources.length ? '反选' : '全选'}
-                </Button>
-
-                <Button appearance="primary" size="small" disabled={selectedResourceIds.size === 0} style={{ flex: 1, borderRadius: 8, background: selectedResourceIds.size > 0 ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.05)', color: selectedResourceIds.size > 0 ? '#fff' : 'rgba(255,255,255,0.3)', fontWeight: 600, fontSize: 13, border: 'none' }} onClick={async () => {
-                  const selectedList = resources.filter(r => r.type === libTab && selectedResourceIds.has(r.id));
-                  for (const r of selectedList) {
-                    if (r.type === 'image') {
-                      setTimeline(p => [...p, {
-                        id: `tm_${Date.now()}_${Math.random()}`,
-                        resourceId: r.id,
-                        duration: 3,
-                        transition: 'fade',
-                        rotation: 0,
-                        contrast: 1.0,
-                        saturation: 1.0,
-                        exposure: 1.0,
-                        brilliance: 1.0,
-                        temp: 0,
-                        tint: 0,
-                        zoom: 1.0,
-                        fontSize: 24,
-                        fontWeight: 'normal'
-                      }]);
-                    } else {
-                      const dur = await getMediaDuration(r.path);
-                      setAudioItems(prev => {
-                        let startPos = 0;
-                        if (prev.length > 0) {
-                          const last = prev[prev.length - 1];
-                          startPos = last.timelineStart + last.duration;
-                        }
-                        return [...prev, { id: `au_${Date.now()}_${Math.random()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }];
-                      });
-                    }
-                  }
-                  setSelectedResourceIds(new Set());
-                }}>
-                  {selectedResourceIds.size > 0 ? `+ 编入轨道 ${selectedResourceIds.size} 项` : '+ 批量编入轨道'}
-                </Button>
-
-                <Button size="small" appearance="subtle" disabled={selectedResourceIds.size === 0} style={{ borderRadius: 8, minWidth: 32, padding: 0, color: selectedResourceIds.size > 0 ? '#FF3B30' : 'rgba(255,255,255,0.1)' }} onClick={() => removeFromLibrary(selectedResourceIds)}>
-                  🗑️
-                </Button>
-              </div>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {filteredResources.length === 0 ? (
-                <div style={{ textAlign: 'center', marginTop: 100, opacity: 0.2, fontSize: 12 }}>暂无素材</div>
-              ) : (
-                filteredResources.map(res => (
-                  <ResourceCardItem
-                    key={res.id} res={res}
-                    isAdded={addedResourceIds.has(res.id)}
-                    isChecked={selectedResourceIds.has(res.id)}
-                    onToggle={(id: string) => {
-                      const n = new Set(selectedResourceIds);
-                      n.has(id) ? n.delete(id) : n.add(id);
-                      setSelectedResourceIds(n);
-                    }}
-                    onSelectPreview={(r: Resource) => setMonitorRes(r)}
-                    onAdd={async (r: Resource) => {
-                      if (r.type === 'image') setTimeline(p => [...p, {
-                        id: `tm_${Date.now()}`,
-                        resourceId: r.id,
-                        duration: 3,
-                        transition: 'fade',
-                        rotation: 0,
-                        contrast: 1.0,
-                        saturation: 1.0,
-                        exposure: 1.0,
-                        brilliance: 1.0,
-                        temp: 0,
-                        tint: 0,
-                        zoom: 1.0,
-                        fontSize: 24,
-                        fontWeight: 'normal'
-                      }]);
-                      else {
-                        const dur = await getMediaDuration(r.path);
-                        setAudioItems(prev => {
-                          let startPos = 0;
-                          if (prev.length > 0) {
-                            const last = prev[prev.length - 1];
-                            startPos = last.timelineStart + last.duration;
+                {/* 资源列表 */}
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  {filteredResources.length === 0 ? (
+                    <div style={{ textAlign: 'center', marginTop: 60, opacity: 0.2, fontSize: 11 }}>
+                      {leftTab === 'photo' ? '暂无照片，点击顶部 📥导入' : '暂无音乐'}
+                    </div>
+                  ) : (
+                    filteredResources.map(res => (
+                      <ResourceCardItem
+                        key={res.id} res={res}
+                        isAdded={addedResourceIds.has(res.id)}
+                        isChecked={selectedResourceIds.has(res.id)}
+                        onToggle={(id: string) => { const n = new Set(selectedResourceIds); n.has(id) ? n.delete(id) : n.add(id); setSelectedResourceIds(n); }}
+                        onSelectPreview={(r: Resource) => setMonitorRes(r)}
+                        onAdd={async (r: Resource) => {
+                          if (r.type === 'image') setTimeline(p => [...p, { id: `tm_${Date.now()}`, resourceId: r.id, duration: 3, transition: 'fade', rotation: 0, contrast: 1.0, saturation: 1.0, exposure: 1.0, brilliance: 1.0, temp: 0, tint: 0, zoom: 1.0, fontSize: 24, fontWeight: 'normal' }]);
+                          else {
+                            const dur = await getMediaDuration(r.path);
+                            setAudioItems(prev => {
+                              let startPos = 0;
+                              if (prev.length > 0) { const last = prev[prev.length - 1]; startPos = last.timelineStart + last.duration; }
+                              return [...prev, { id: `au_${Date.now()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }];
+                            });
                           }
-                          return [...prev, { id: `au_${Date.now()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }];
-                        });
-                      }
-                    }}
-                    onRemove={removeFromLibrary}
-                    onConvert={handleConvertDNG}
-                    onReveal={handleRevealInExplorer}
-                    previewUrl={previewCache[res.path]}
-                  />
-                ))
-              )}
-            </div>
+                        }}
+                        onRemove={removeFromLibrary}
+                        onConvert={handleConvertDNG}
+                        onReveal={handleRevealInExplorer}
+                        previewUrl={previewCache[res.path]}
+                      />
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* 2. 监视器 */}
@@ -2049,27 +2412,72 @@ function App() {
 
             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
               {monitorSrc ? (
-                isCropping ? (
-                  <ReactCrop crop={crop} onChange={c => setCrop(c)} style={{ maxWidth: '85%', maxHeight: '85%' }}>
-                    <img src={monitorSrc.src} style={{ maxWidth: '100%', maxHeight: '100%' }} alt="" />
-                  </ReactCrop>
+                monitorSrc.src ? (
+                  isCropping ? (
+                    <ReactCrop crop={crop} onChange={c => setCrop(c)} style={{ maxWidth: '85%', maxHeight: '85%' }}>
+                      <img src={monitorSrc.src} style={{ maxWidth: '100%', maxHeight: '100%' }} alt="" />
+                    </ReactCrop>
+                  ) : (
+                    <div style={{ position: 'relative', width: '100%', height: '100%', padding: '20px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {monitorSrc.type === 'video' ? (
+                        <video ref={monitorVideoRef} src={monitorSrc.src} muted style={{
+                          maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '12px',
+                          transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
+                          filter: `
+                            brightness(${monitorSrc.currentItem?.exposure ?? 1.0})
+                            contrast(${(monitorSrc.currentItem?.contrast ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.2})
+                            saturate(${(monitorSrc.currentItem?.saturation ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.1})
+                            sepia(${(monitorSrc.currentItem?.temp ?? 0) > 0 ? (monitorSrc.currentItem?.temp ?? 0) / 100 : 0})
+                            hue-rotate(${(monitorSrc.currentItem?.tint ?? 0)}deg)
+                          `,
+                          transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1), filter 0.4s'
+                        }} />
+                      ) : (
+                        <img src={monitorSrc.src} style={{
+                          maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '12px',
+                          transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
+                          filter: `
+                            brightness(${monitorSrc.currentItem?.exposure ?? 1.0})
+                            contrast(${(monitorSrc.currentItem?.contrast ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.2})
+                            saturate(${(monitorSrc.currentItem?.saturation ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.1})
+                            sepia(${(monitorSrc.currentItem?.temp ?? 0) > 0 ? (monitorSrc.currentItem?.temp ?? 0) / 100 : 0})
+                            hue-rotate(${(monitorSrc.currentItem?.tint ?? 0)}deg)
+                          `,
+                          transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1), filter 0.4s'
+                        }} alt="" />
+                      )}
+                      {monitorSrc.currentItem?.overlayText && (
+                        <div
+                          style={{ position: 'absolute', top: `${monitorSrc.currentItem.textY ?? 50}%`, left: `${monitorSrc.currentItem.textX ?? 50}%`, transform: 'translate(-50%, -50%)', textAlign: (monitorSrc.currentItem.textAlign || 'center') as any, color: monitorSrc.currentItem.fontColor || '#fff', fontSize: monitorSrc.currentItem.fontSize || 36, fontWeight: monitorSrc.currentItem.fontWeight === 'bold' ? 700 : 400, fontFamily: monitorSrc.currentItem.fontFamily || 'sans-serif', textShadow: monitorSrc.currentItem.textGlow ? `0 0 20px ${monitorSrc.currentItem.textShadowColor || monitorSrc.currentItem.fontColor || '#fff'}, 0 0 40px ${monitorSrc.currentItem.textShadowColor || monitorSrc.currentItem.fontColor || '#fff'}60` : (monitorSrc.currentItem.textShadowColor ? `2px 2px 8px ${monitorSrc.currentItem.textShadowColor}` : '0 0 20px rgba(0,0,0,0.8)'), WebkitTextStroke: monitorSrc.currentItem.textStrokeColor ? `${monitorSrc.currentItem.textStrokeWidth || 1}px ${monitorSrc.currentItem.textStrokeColor}` : undefined, background: monitorSrc.currentItem.textBg || 'transparent', padding: monitorSrc.currentItem.textBg && monitorSrc.currentItem.textBg !== 'transparent' ? '12px 24px' : 0, borderRadius: 8, cursor: 'move', maxWidth: '80%', userSelect: 'none', zIndex: 10 }}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const container = e.currentTarget.parentElement;
+                            if (!container) return;
+                            const rect = container.getBoundingClientRect();
+                            const startX = e.clientX;
+                            const startY = e.clientY;
+                            const startPctX = monitorSrc.currentItem?.textX ?? 50;
+                            const startPctY = monitorSrc.currentItem?.textY ?? 50;
+                            const onMove = (me: MouseEvent) => {
+                              const dx = ((me.clientX - startX) / rect.width) * 100;
+                              const dy = ((me.clientY - startY) / rect.height) * 100;
+                              const newX = Math.max(0, Math.min(100, startPctX + dx));
+                              const newY = Math.max(0, Math.min(100, startPctY + dy));
+                              setTimeline(p => p.map(t => t.id === monitorSrc.currentItem?.id ? { ...t, textX: newX, textY: newY } : t));
+                            };
+                            const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+                            window.addEventListener('mousemove', onMove);
+                            window.addEventListener('mouseup', onUp);
+                          }}
+                        >{monitorSrc.currentItem.overlayText}</div>
+                      )}
+                    </div>
+                  )
                 ) : (
-                  <div style={{ position: 'relative', maxWidth: '85%', maxHeight: '85%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <img src={monitorSrc.src} style={{
-                      maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '12px',
-                      transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
-                      filter: `
-                        brightness(${monitorSrc.currentItem?.exposure ?? 1.0})
-                        contrast(${(monitorSrc.currentItem?.contrast ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.2})
-                        saturate(${(monitorSrc.currentItem?.saturation ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.1})
-                        sepia(${(monitorSrc.currentItem?.temp ?? 0) > 0 ? (monitorSrc.currentItem?.temp ?? 0) / 100 : 0})
-                        hue-rotate(${(monitorSrc.currentItem?.tint ?? 0)}deg)
-                      `,
-                      transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1), filter 0.4s'
-                    }} alt="" />
-                    {monitorSrc.currentItem?.overlayText && (
-                      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', color: '#fff', fontSize: monitorSrc.currentItem.fontSize || 36, fontWeight: monitorSrc.currentItem.fontWeight === 'bold' ? 700 : 400, textShadow: '0 0 20px rgba(0,0,0,0.8)', pointerEvents: 'none' }}>{monitorSrc.currentItem.overlayText}</div>
-                    )}
+                  /* 纯文字项预览（无图片背景） */
+                  <div style={{ position: 'relative', width: '85%', height: '60%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 16, background: monitorSrc.currentItem?.textBg || 'rgba(30,30,30,0.9)', border: `2px solid ${monitorSrc.currentItem?.fontColor || '#fff'}30` }}>
+                    <div style={{ textAlign: (monitorSrc.currentItem?.textAlign || 'center') as any, color: monitorSrc.currentItem?.fontColor || '#fff', fontSize: monitorSrc.currentItem?.fontSize || 36, fontWeight: monitorSrc.currentItem?.fontWeight === 'bold' ? 700 : 400, fontFamily: monitorSrc.currentItem?.fontFamily || 'sans-serif', textShadow: monitorSrc.currentItem?.textGlow ? `0 0 20px ${monitorSrc.currentItem?.textShadowColor || monitorSrc.currentItem?.fontColor || '#fff'}, 0 0 40px ${monitorSrc.currentItem?.textShadowColor || monitorSrc.currentItem?.fontColor || '#fff'}60` : (monitorSrc.currentItem?.textShadowColor ? `2px 2px 8px ${monitorSrc.currentItem?.textShadowColor}` : '0 0 20px rgba(0,0,0,0.5)'), WebkitTextStroke: monitorSrc.currentItem?.textStrokeColor ? `${monitorSrc.currentItem?.textStrokeWidth || 1}px ${monitorSrc.currentItem?.textStrokeColor}` : undefined, padding: '24px 32px', maxWidth: '80%', wordBreak: 'break-word' as const }}>{monitorSrc.currentItem?.overlayText}</div>
                   </div>
                 )
               ) : (
@@ -2086,14 +2494,23 @@ function App() {
             {/* Mini 进度条 + 播放速度 */}
             <div style={{ position: 'absolute', bottom: 12, left: 20, right: 20, display: 'flex', alignItems: 'center', gap: 10, zIndex: 50 }}>
               <div
-                style={{ flex: 1, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative' }}
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const pct = (e.clientX - rect.left) / rect.width;
-                  setPlayTime(maxPlayTime * pct);
+                style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative' }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const bar = e.currentTarget;
+                  const seek = (clientX: number) => {
+                    const rect = bar.getBoundingClientRect();
+                    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                    setPlayTime(maxPlayTime * pct);
+                  };
+                  seek(e.clientX);
+                  const onMove = (ev: MouseEvent) => seek(ev.clientX);
+                  const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
                 }}
               >
-                <div style={{ width: `${maxPlayTime > 0 ? (playTime / maxPlayTime * 100) : 0}%`, height: '100%', borderRadius: 2, background: 'var(--ios-indigo)', transition: isPlaying ? 'none' : 'width 0.2s' }} />
+                <div style={{ width: `${maxPlayTime > 0 ? (playTime / maxPlayTime * 100) : 0}%`, height: '100%', borderRadius: 3, background: 'var(--ios-indigo)', transition: isPlaying ? 'none' : 'width 0.15s', boxShadow: '0 0 6px var(--ios-indigo-glow)' }} />
               </div>
               <select
                 value={playbackSpeed}
@@ -2110,35 +2527,97 @@ function App() {
             </div>
           </div>
 
-          {/* 3. 属性面板 */}
-          <div className="glass-panel" style={{ width: 320, flexShrink: 0 }}>
-            <div className="panel-header-ios">
-              <span className="header-title">专业调节</span>
-            </div>
-            <div style={{ padding: '8px 16px' }}>
-              <div style={{
-                display: 'flex', background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: 2,
-                border: '1px solid rgba(255,255,255,0.05)', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.2)'
-              }}>
-                {(['effects', 'export'] as const).map(tab => (
-                  <div
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    style={{
-                      flex: 1, textAlign: 'center', padding: '6px 0', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                      cursor: 'pointer', transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                      background: activeTab === tab ? 'rgba(255,255,255,0.1)' : 'transparent',
-                      color: activeTab === tab ? '#fff' : 'rgba(255,255,255,0.4)',
-                      boxShadow: activeTab === tab ? '0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05)' : 'none'
-                    }}
-                  >
-                    {tab === 'effects' ? '🎨 效果调节' : '🚀 渲染输出'}
-                  </div>
-                ))}
-              </div>
+          {/* 3. 右侧属性面板（上下文驱动 + 编辑/导出模式切换） */}
+          <div className="glass-panel" style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="panel-header-ios" style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="header-title" style={{ fontSize: 12 }}>
+                {showGlobalDefaults ? '⚙️ 全局默认设置' : showExportPanel ? '🚀 导出设置' : (
+                  selectedIds.size > 1 ? `🎨 批量编辑 (${selectedIds.size}项)` :
+                  selectedIds.size === 1 ? '🎨 照片属性' :
+                  selectedAudioIds.size > 0 ? '🎵 音频属性' :
+                  '💡 项目信息'
+                )}
+              </span>
+              {showGlobalDefaults && <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 6px', borderRadius: 4, color: 'rgba(255,255,255,0.5)' }} onClick={() => setShowGlobalDefaults(false)}>← 返回</Button>}
+              {!showGlobalDefaults && !showExportPanel && <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 6px', borderRadius: 4, color: 'rgba(255,255,255,0.5)' }} onClick={() => { setShowExportPanel(true); setActiveTab('export'); }}>导出 →</Button>}
+              {!showGlobalDefaults && showExportPanel && <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 6px', borderRadius: 4, color: 'rgba(255,255,255,0.5)' }} onClick={() => { setShowExportPanel(false); setActiveTab('effects'); }}>← 返回</Button>}
             </div>
             <div style={{ flex: 1, padding: '20px', overflowY: 'auto', scrollBehavior: 'smooth' }}>
-              {activeTab === 'effects' ? (
+              {/* ═══ 全局默认设置面板 (任务6) ═══ */}
+              {showGlobalDefaults ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 40 }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
+                    修改全局默认值将自动应用到所有<strong style={{ color: 'rgba(255,255,255,0.65)' }}>未手动覆盖</strong>的图片。单独修改过的图片参数旁会显示 ✏️ 标记。
+                  </div>
+                  <div className="ios-prop-group">
+                    <Text weight="bold" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⏱ 基础参数</Text>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <Field label={`默认时长: ${globalDefaults.duration}s`}>
+                        <Slider min={0.5} max={10} step={0.1} value={globalDefaults.duration} onChange={(_e, d) => {
+                          const v = Math.round(d.value * 10) / 10;
+                          setGlobalDefaults(p => ({ ...p, duration: v }));
+                          setTimeline(prev => prev.map(t => !(t.overrides?.includes('duration')) ? { ...t, duration: v } : t));
+                        }} />
+                      </Field>
+                      <Field label="默认转场">
+                        <select className="ios-dark-select" value={globalDefaults.transition} onChange={e => {
+                          const v = e.target.value;
+                          setGlobalDefaults(p => ({ ...p, transition: v }));
+                          setTimeline(prev => prev.map(t => !(t.overrides?.includes('transition')) ? { ...t, transition: v } : t));
+                        }} style={{ width: '100%', height: 36 }}>
+                          <option value="none">直接切入 (Cut)</option>
+                          <option value="fade">经典叠化 (Dissolve)</option>
+                          <option value="white">模糊闪白 (Dip to White)</option>
+                          <option value="iris">中心扩散 (Iris)</option>
+                          <option value="slide">平滑推入 (Push)</option>
+                          <option value="zoom">专业缩放 (Zoom)</option>
+                        </select>
+                      </Field>
+                    </div>
+                  </div>
+                  <div className="ios-prop-group">
+                    <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 8, display: 'block' }}>🌓 影像参数默认值</Text>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {([['exposure', '曝光', 0.5, 2.0, 0.05], ['brilliance', '鲜明度', 0.5, 2.0, 0.05], ['contrast', '对比度', 0.5, 2.0, 0.05], ['saturation', '饱和度', 0.0, 2.0, 0.05]] as const).map(([key, label, min, max, step]) => (
+                        <Field key={key} label={`${label}: ${globalDefaults[key].toFixed(2)}`}>
+                          <Slider min={min} max={max} step={step} value={globalDefaults[key]} onChange={(_e, d) => {
+                            setGlobalDefaults(p => ({ ...p, [key]: d.value }));
+                            setTimeline(prev => prev.map(t => !(t.overrides?.includes(key)) ? { ...t, [key]: d.value } : t));
+                          }} />
+                        </Field>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="ios-prop-group">
+                    <Text weight="bold" style={{ color: '#C084FC', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 色彩默认值</Text>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {([['temp', '色温', -100, 100, 1], ['tint', '色调', -100, 100, 1]] as const).map(([key, label, min, max, step]) => (
+                        <Field key={key} label={`${label}: ${globalDefaults[key]}`}>
+                          <Slider min={min} max={max} step={step} value={globalDefaults[key]} onChange={(_e, d) => {
+                            setGlobalDefaults(p => ({ ...p, [key]: d.value }));
+                            setTimeline(prev => prev.map(t => !(t.overrides?.includes(key)) ? { ...t, [key]: d.value } : t));
+                          }} />
+                        </Field>
+                      ))}
+                    </div>
+                  </div>
+                  <Button appearance="subtle" style={{ marginTop: 8, borderRadius: 10, height: 36, fontSize: 12, color: '#FF3B30', border: '1px solid rgba(255,59,48,0.2)' }} onClick={() => {
+                    pushSnapshot();
+                    setGlobalDefaults(GLOBAL_DEFAULTS_INIT);
+                    setTimeline(prev => prev.map(t => {
+                      const clean: any = { ...t };
+                      Object.keys(GLOBAL_DEFAULTS_INIT).forEach(k => {
+                        if (!(t.overrides?.includes(k))) clean[k] = (GLOBAL_DEFAULTS_INIT as any)[k];
+                      });
+                      return clean;
+                    }));
+                    setStatusMsg('🔄 已重置所有全局参数为默认值'); setTimeout(() => setStatusMsg(''), 1500);
+                  }}>
+                    🔄 重置全部为默认
+                  </Button>
+                </div>
+              ) :
+              activeTab === 'effects' ? (
                 (selectedIds.size > 0 || selectedAudioIds.size > 0) ? (
                   selectedIds.size > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
@@ -2188,48 +2667,156 @@ function App() {
                         </Button>
                       )}
 
-                      {/* GROUP 1: 影像调优 */}
+                      {/* GROUP 1: 影像与色彩 (合并) */}
                       <div className="ios-prop-group">
-                        <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 8, display: 'block' }}>🌓 影像调优矩阵 {selectedIds.size > 1 && <span style={{ fontSize: 11, opacity: 0.5, fontWeight: 400 }}>({selectedIds.size} 项已选)</span>}</Text>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-                          <Field label={`入点时长: ${localDuration !== null ? localDuration : (selectedItem?.duration || 3)}秒`}>
+                        <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 11, marginBottom: 2, display: 'block' }}>🎨 影像与色彩 {selectedIds.size > 1 && <span style={{ fontSize: 9, opacity: 0.5, fontWeight: 400 }}>({selectedIds.size} 项)</span>}</Text>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+                          <Field label={
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span>{`时长: ${localDuration !== null ? localDuration : (selectedItem?.duration || 3)}s`}</span>
+                              {selectedItem && <span onClick={() => selectedItem && (isOverridden(selectedItem, 'duration') ? restoreInheritance(selectedItem.id, 'duration') : null)} style={{ cursor: isOverridden(selectedItem, 'duration') ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, 'duration') ? '点击恢复继承全局默认' : '正在继承全局默认'}>{isOverridden(selectedItem, 'duration') ? '✏️' : '🔗'}</span>}
+                            </span>
+                          }>
                             <div style={{ width: '100%', minWidth: 0 }} onMouseUp={() => { if (localDuration !== null) { pushSnapshot(); updateSelectedProperty('duration', localDuration); setLocalDuration(null); } }}>
                               <Slider min={0.1} max={10} step={0.1} value={localDuration !== null ? localDuration : (selectedItem?.duration || 3)} onChange={(_e, d) => setLocalDuration(Math.round(d.value * 10) / 10)} style={{ width: '100%', maxWidth: '100%' }} />
                             </div>
                           </Field>
-                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('exposure', 1.0); }} style={{ cursor: 'pointer' }} title="双击重置">{`曝光: ${selectedItem?.exposure?.toFixed(2) || '1.00'}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.5} max={2.0} step={0.05} value={selectedItem?.exposure || 1.0} onChange={(_e, d) => updatePropertyWithUndo('exposure', d.value)} /></div></Field>
-                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('brilliance', 1.0); }} style={{ cursor: 'pointer' }} title="双击重置">{`鲜明度: ${selectedItem?.brilliance?.toFixed(2) || '1.00'}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.5} max={2.0} step={0.05} value={selectedItem?.brilliance || 1.0} onChange={(_e, d) => updatePropertyWithUndo('brilliance', d.value)} /></div></Field>
-                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('contrast', 1.0); }} style={{ cursor: 'pointer' }} title="双击重置">{`对比度: ${selectedItem?.contrast?.toFixed(2) || '1.00'}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.5} max={2.0} step={0.05} value={selectedItem?.contrast || 1.0} onChange={(_e, d) => updatePropertyWithUndo('contrast', d.value)} /></div></Field>
-                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('saturation', 1.0); }} style={{ cursor: 'pointer' }} title="双击重置">{`饱和度: ${selectedItem?.saturation?.toFixed(2) || '1.00'}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={0.0} max={2.0} step={0.05} value={selectedItem?.saturation || 1.0} onChange={(_e, d) => updatePropertyWithUndo('saturation', d.value)} /></div></Field>
-                        </div>
-                      </div>
-
-                      {/* GROUP 2: 色彩平衡 */}
-                      <div className="ios-prop-group">
-                        <Text weight="bold" style={{ color: '#C084FC', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 色彩平衡</Text>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('temp', 0); }} style={{ cursor: 'pointer' }} title="双击重置">{`色温: ${selectedItem?.temp || 0}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={-100} max={100} step={1} value={selectedItem?.temp || 0} onChange={(_e, d) => updatePropertyWithUndo('temp', d.value)} /></div></Field>
-                          <Field label={<span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty('tint', 0); }} style={{ cursor: 'pointer' }} title="双击重置">{`色调: ${selectedItem?.tint || 0}`}</span>}><div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}><Slider style={{ width: '100%', maxWidth: '100%' }} min={-100} max={100} step={1} value={selectedItem?.tint || 0} onChange={(_e, d) => updatePropertyWithUndo('tint', d.value)} /></div></Field>
-                        </div>
-                      </div>
-
-                      {/* GROUP 3: 文字工坊 */}
-                      <div className="ios-prop-group">
-                        <Text weight="bold" style={{ color: '#34D399', fontSize: 13, marginBottom: 8, display: 'block' }}>⌨️ 文字工坊 (虚幻底)</Text>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-                          <Input value={selectedItem?.overlayText || ''} onChange={(_e, data) => updateSelectedProperty('overlayText', data.value)} placeholder="输入浮空文字..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 8, width: '100%' }} />
-                          <div style={{ display: 'flex', gap: 10, alignItems: 'center', width: '100%' }}>
-                            <Field label={`字号: ${selectedItem?.fontSize || 24}`} style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ width: '100%', minWidth: 0 }}>
-                                <Slider style={{ width: '100%', maxWidth: '100%' }} min={12} max={120} step={2} value={selectedItem?.fontSize || 24} onChange={(_e, d) => updateSelectedProperty('fontSize', d.value)} />
+                          {([['exposure', '曝光', 0.5, 2.0, 0.05], ['brilliance', '鲜明度', 0.5, 2.0, 0.05], ['contrast', '对比度', 0.5, 2.0, 0.05], ['saturation', '饱和度', 0.0, 2.0, 0.05], ['temp', '色温', -100, 100, 1], ['tint', '色调', -100, 100, 1]] as [keyof GlobalDefaults, string, number, number, number][]).map(([key, label, min, max, step]) => (
+                            <Field key={key} label={
+                              <span onDoubleClick={() => { pushSnapshot(); updateSelectedProperty(key, key === 'temp' || key === 'tint' ? 0 : (GLOBAL_DEFAULTS_INIT as any)[key]); }} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }} title="双击重置">
+                                <span>{`${label}: ${key === 'temp' || key === 'tint' ? ((selectedItem as any)?.[key] || 0) : ((selectedItem as any)?.[key]?.toFixed(2) || (GLOBAL_DEFAULTS_INIT as any)[key].toFixed(2))}`}</span>
+                                {selectedItem && <span onClick={(e) => { e.stopPropagation(); if (isOverridden(selectedItem, key)) restoreInheritance(selectedItem.id, key); }} style={{ cursor: isOverridden(selectedItem, key) ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, key) ? '点击恢复继承' : '继承全局默认'}>{isOverridden(selectedItem, key) ? '✏️' : '🔗'}</span>}
+                              </span>
+                            }>
+                              <div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}>
+                                <Slider style={{ width: '100%', maxWidth: '100%' }} min={min} max={max} step={step} value={key === 'temp' || key === 'tint' ? ((selectedItem as any)?.[key] || 0) : ((selectedItem as any)?.[key] || (GLOBAL_DEFAULTS_INIT as any)[key])} onChange={(_e, d) => updatePropertyWithUndo(key, d.value)} />
                               </div>
                             </Field>
-                            <Button
-                              size="small"
-                              appearance={selectedItem?.fontWeight === 'bold' ? 'primary' : 'subtle'}
-                              style={{ flexShrink: 0, width: 40, height: 40, borderRadius: 10 }}
-                              onClick={() => updateSelectedProperty('fontWeight', selectedItem?.fontWeight === 'bold' ? 'normal' : 'bold')}
-                            >B</Button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* GROUP 2: 文字工坊 */}
+                      <div className="ios-prop-group">
+                        <Text weight="bold" style={{ color: '#34D399', fontSize: 11, marginBottom: 2, display: 'block' }}>⌨️ 文字工坊</Text>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                          <Input value={selectedItem?.overlayText || ''} onChange={(_e, data) => updateSelectedProperty('overlayText', data.value)} placeholder="输入文字..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '3px 6px', width: '100%', fontSize: 11 }} />
+
+                          {/* 字体 + 字号一行 */}
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                            <select
+                              value={selectedItem?.fontFamily || 'sans-serif'}
+                              onChange={e => updateSelectedProperty('fontFamily', e.target.value)}
+                              style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 4px', color: '#fff', fontSize: 10, outline: 'none', cursor: 'pointer', minWidth: 0 }}
+                            >
+                              <optgroup label="常用" style={{ background: '#1e1e2e' }}>
+                                <option value="sans-serif">默认</option>
+                                <option value="'Microsoft YaHei', sans-serif">微软雅黑</option>
+                                <option value="'SimHei', sans-serif">黑体</option>
+                                <option value="'SimSun', serif">宋体</option>
+                                <option value="'KaiTi', serif">楷体</option>
+                                <option value="'FangSong', serif">仿宋</option>
+                              </optgroup>
+                              <optgroup label="艺术字体" style={{ background: '#1e1e2e' }}>
+                                <option value="'STXingkai', cursive">华文行楷</option>
+                                <option value="'STCaiyun', cursive">华文彩云</option>
+                                <option value="'STHupo', cursive">华文琥珀</option>
+                                <option value="'STLiti', serif">华文隶书</option>
+                                <option value="'STXinwei', serif">华文新魏</option>
+                                <option value="'YouYuan', sans-serif">幼圆</option>
+                                <option value="'LiSu', serif">隶书</option>
+                                <option value="'STZhongsong', serif">华文中宋</option>
+                                <option value="'FZShuTi', serif">方正舒体</option>
+                                <option value="'FZYaoTi', serif">方正姚体</option>
+                              </optgroup>
+                              <optgroup label="英文字体" style={{ background: '#1e1e2e' }}>
+                                <option value="'Impact', sans-serif">Impact</option>
+                                <option value="'Georgia', serif">Georgia</option>
+                                <option value="'Palatino Linotype', serif">Palatino</option>
+                                <option value="'Comic Sans MS', cursive">Comic Sans</option>
+                                <option value="'Lucida Console', monospace">Lucida Console</option>
+                                <option value="'Brush Script MT', cursive">Brush Script</option>
+                                <option value="'Copperplate Gothic', serif">Copperplate</option>
+                                <option value="'Bookman Old Style', serif">Bookman</option>
+                              </optgroup>
+                            </select>
+                            <input type="number" value={selectedItem?.fontSize || 24} onChange={e => updateSelectedProperty('fontSize', Number(e.target.value))} min={8} max={200} style={{ width: 40, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 4px', color: '#fff', fontSize: 10, outline: 'none', textAlign: 'center' }} />
+                          </div>
+
+                          {/* 粗体/斜体/对齐 + 颜色 一行 */}
+                          <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                            <div onClick={() => updateSelectedProperty('fontWeight', selectedItem?.fontWeight === 'bold' ? 'normal' : 'bold')} style={{ width: 24, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selectedItem?.fontWeight === 'bold' ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontWeight: 800, fontSize: 11, color: '#fff' }}>B</div>
+                            <div onClick={() => updateSelectedProperty('fontWeight', selectedItem?.fontWeight === 'italic' ? 'normal' : 'italic')} style={{ width: 24, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selectedItem?.fontWeight === 'italic' ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontStyle: 'italic', fontSize: 11, color: '#fff' }}>I</div>
+                            {(['left', 'center', 'right'] as const).map(a => (
+                              <div key={a} onClick={() => updateSelectedProperty('textAlign', a)} style={{ width: 24, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: (selectedItem?.textAlign || 'center') === a ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: 9, color: '#fff' }}>
+                                {a === 'left' ? '◧' : a === 'center' ? '◻' : '◨'}
+                              </div>
+                            ))}
+                            <div style={{ flex: 1 }} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>色</span>
+                              <input type="color" value={selectedItem?.fontColor || '#FFFFFF'} onChange={e => updateSelectedProperty('fontColor', e.target.value)} style={{ width: 24, height: 24, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }} />
+                            </div>
+                          </div>
+
+                          {/* 艺术字预设 5列 */}
+                          <div>
+                            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 2 }}>艺术字预设</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 3 }}>
+                              {([
+                                { label: '霓虹', color: '#00FFFF', shadow: '#00FFFF', stroke: '', glow: true, font: 'sans-serif' },
+                                { label: '金属', color: '#FFD700', shadow: '#B8860B', stroke: '#DAA520', glow: false, font: "'Impact', sans-serif" },
+                                { label: '冰雪', color: '#E0F4FF', shadow: '#4FC3F7', stroke: '#81D4FA', glow: true, font: 'serif' },
+                                { label: '烈焰', color: '#FF6B35', shadow: '#FF0000', stroke: '#FFD700', glow: true, font: "'SimHei', sans-serif" },
+                                { label: '科技', color: '#00FF88', shadow: '#00FF88', stroke: '', glow: true, font: 'monospace' },
+                                { label: '优雅', color: '#FFFFFF', shadow: 'rgba(0,0,0,0.5)', stroke: '', glow: false, font: "'KaiTi', serif" },
+                                { label: '复古', color: '#D4A574', shadow: '#8B4513', stroke: '', glow: false, font: 'serif' },
+                                { label: '浪漫', color: '#FF69B4', shadow: '#FF1493', stroke: '', glow: true, font: "'STXingkai', cursive" },
+                                { label: '暗夜', color: '#9370DB', shadow: '#4B0082', stroke: '#6A0DAD', glow: true, font: "'STHupo', cursive" },
+                                { label: '朋克', color: '#FF00FF', shadow: '#FF00FF', stroke: '#00FF00', glow: true, font: "'Impact', sans-serif" },
+                                { label: '水墨', color: '#2F2F2F', shadow: 'rgba(0,0,0,0.3)', stroke: '', glow: false, font: "'STXingkai', cursive" },
+                                { label: '彩虹', color: '#FF6B6B', shadow: '#FFD93D', stroke: '#6BCB77', glow: true, font: "'STCaiyun', cursive" },
+                                { label: '极光', color: '#7DF9FF', shadow: '#00CED1', stroke: '#20B2AA', glow: true, font: 'sans-serif' },
+                                { label: '古典', color: '#8B7355', shadow: '#5C4033', stroke: '#DEB887', glow: false, font: "'STLiti', serif" },
+                                { label: '清除', color: '#FFFFFF', shadow: '', stroke: '', glow: false, font: 'sans-serif' },
+                              ]).map(preset => (
+                                <div
+                                  key={preset.label}
+                                  onClick={() => {
+                                    pushSnapshot();
+                                    setTimeline(p => p.map(t => selectedIds.has(t.id) ? {
+                                      ...t,
+                                      fontColor: preset.color,
+                                      textShadowColor: preset.shadow,
+                                      textStrokeColor: preset.stroke,
+                                      textGlow: preset.glow,
+                                      fontFamily: preset.font,
+                                    } : t));
+                                  }}
+                                  style={{ padding: '3px 1px', borderRadius: 4, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', textAlign: 'center', fontSize: 9, color: preset.color, fontWeight: 600, transition: 'all 0.12s', textShadow: preset.shadow ? `0 0 6px ${preset.shadow}` : 'none', lineHeight: '1.2' }}
+                                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = preset.color + '60'; (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
+                                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
+                                >{preset.label}</div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 文字效果 */}
+                          <div>
+                            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 2 }}>效果</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
+                              <div onClick={() => updateSelectedProperty('textGlow', !selectedItem?.textGlow)} style={{ padding: '3px 1px', borderRadius: 4, background: selectedItem?.textGlow ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${selectedItem?.textGlow ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`, cursor: 'pointer', textAlign: 'center', fontSize: 9, color: '#fff' }}>✨发光</div>
+                              <div onClick={() => updateSelectedProperty('textStrokeColor', selectedItem?.textStrokeColor ? '' : '#000000')} style={{ padding: '3px 1px', borderRadius: 4, background: selectedItem?.textStrokeColor ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${selectedItem?.textStrokeColor ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`, cursor: 'pointer', textAlign: 'center', fontSize: 9, color: '#fff' }}>🔲描边</div>
+                              <div onClick={() => updateSelectedProperty('textShadowColor', selectedItem?.textShadowColor ? '' : 'rgba(0,0,0,0.8)')} style={{ padding: '3px 1px', borderRadius: 4, background: selectedItem?.textShadowColor ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${selectedItem?.textShadowColor ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`, cursor: 'pointer', textAlign: 'center', fontSize: 9, color: '#fff' }}>🌑阴影</div>
+                              <div onClick={() => updateSelectedProperty('textBg', selectedItem?.textBg && selectedItem.textBg !== 'transparent' ? 'transparent' : 'rgba(0,0,0,0.5)')} style={{ padding: '3px 1px', borderRadius: 4, background: selectedItem?.textBg && selectedItem.textBg !== 'transparent' ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${selectedItem?.textBg && selectedItem.textBg !== 'transparent' ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`, cursor: 'pointer', textAlign: 'center', fontSize: 9, color: '#fff' }}>◼底板</div>
+                            </div>
+                            {selectedItem?.textStrokeColor ? (
+                              <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 3 }}>
+                                <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.35)', flexShrink: 0 }}>描边{selectedItem?.textStrokeWidth || 1}px</span>
+                                <input type="range" min={0.5} max={6} step={0.5} value={selectedItem?.textStrokeWidth || 1} onChange={e => updateSelectedProperty('textStrokeWidth', Number(e.target.value))} style={{ flex: 1, height: 3, accentColor: '#6366F1' }} />
+                                <input type="color" value={selectedItem?.textStrokeColor || '#000000'} onChange={e => updateSelectedProperty('textStrokeColor', e.target.value)} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }} />
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -2281,20 +2868,32 @@ function App() {
                           <span style={{ fontSize: 11, background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 12, cursor: 'pointer', boxShadow: '0 2px 8px rgba(16,185,129,0.3)', transition: 'all 0.2s' }} className="ios-hover-scale" onClick={stitchSelectedAudioGaps}>🧲 缝合所选残片</span>
                         )}
                       </Text>
-                      <div className="ios-prop-group" style={{ padding: '16px', borderRadius: 16, background: 'rgba(139,92,246,0.05)', border: '1px solid rgba(139,92,246,0.1)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                      <div className="ios-prop-group" style={{ padding: '16px', borderRadius: 16, background: 'rgba(139,92,246,0.05)', border: '1px solid rgba(139,92,246,0.1)', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
                         <Field label={`播放音量: ${Math.round((audioItems.find(a => selectedAudioIds.has(a.id))?.volume || 1) * 100)}%`}>
                           <div style={{ width: '100%', minWidth: 0 }}>
                             <Slider style={{ width: '100%', maxWidth: '100%' }} min={0} max={2} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.volume || 1} onChange={(_e, d) => selectedAudioIds.forEach(id => updateAudioItem(id, { volume: d.value }))} />
                           </div>
                         </Field>
-                        <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+                        {/* 淡入淡出控制 (任务7) */}
+                        <Field label={`淡入: ${(audioItems.find(a => selectedAudioIds.has(a.id))?.fadeIn || 0).toFixed(1)}s`}>
+                          <div style={{ width: '100%', minWidth: 0 }}>
+                            <Slider style={{ width: '100%', maxWidth: '100%' }} min={0} max={5} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.fadeIn || 0} onChange={(_e, d) => selectedAudioIds.forEach(id => updateAudioItem(id, { fadeIn: d.value }))} />
+                          </div>
+                        </Field>
+                        <Field label={`淡出: ${(audioItems.find(a => selectedAudioIds.has(a.id))?.fadeOut || 0).toFixed(1)}s`}>
+                          <div style={{ width: '100%', minWidth: 0 }}>
+                            <Slider style={{ width: '100%', maxWidth: '100%' }} min={0} max={5} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.fadeOut || 0} onChange={(_e, d) => selectedAudioIds.forEach(id => updateAudioItem(id, { fadeOut: d.value }))} />
+                          </div>
+                        </Field>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
                           <Button
                             appearance={isEditingAudio ? "primary" : "outline"}
-                            style={{ height: 38, borderRadius: 10 }}
+                            size="small"
+                            style={{ height: 34, borderRadius: 8, fontSize: 12 }}
                             onClick={() => setIsEditingAudio(!isEditingAudio)}
                             disabled={selectedAudioIds.size > 1}
                           >
-                            {isEditingAudio ? "✅ 正在剪辑" : "✂️ 进入剪辑模式 (单音频)"}
+                            {isEditingAudio ? "✅ 正在剪辑" : "✂️ 剪辑模式"}
                           </Button>
                           {(isEditingAudio && selectedAudioIds.size === 1) && (
                             <div style={{ display: 'flex', gap: 6 }}>
@@ -2434,26 +3033,24 @@ function App() {
         <div className="glass-panel ios-timeline">
           <div
             className="panel-header-ios"
-            style={{ height: 36, padding: '0 20px', background: 'rgba(0,0,0,0.1)', cursor: 'pointer' }}
+            style={{ height: 30, padding: '0 12px', background: 'rgba(0,0,0,0.1)', cursor: 'pointer' }}
             onDoubleClick={() => { setPlayTime(0); setIsPlaying(false); setStatusMsg(' ⏮ 跳至开头'); setTimeout(() => setStatusMsg(''), 1000); }}
             onClick={handleTripleClickZone}
-            title="双击此区域指针快速归零"
+            title="双击归零"
           >
-            <span style={{ fontSize: 9, fontWeight: 300, color: 'rgba(255,255,255,0.4)', letterSpacing: 1.0, textTransform: 'uppercase' }}>
-              照片合成视频王 <span style={{ color: 'rgba(255,255,255,0.15)', margin: '0 8px' }}>|</span> {playTime.toFixed(2)}s / {maxPlayTime.toFixed(2)}s
+            <span style={{ fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
+              {playTime.toFixed(2)}s / {maxPlayTime.toFixed(2)}s
             </span>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px' }} onClick={(e) => { e.stopPropagation(); saveProject(); }} title="Ctrl+S">💾</Button>
-              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px' }} onClick={(e) => { e.stopPropagation(); loadProject(); }} title="Ctrl+O">📂</Button>
-              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px' }} onClick={(e) => { e.stopPropagation(); splitAtPlayhead(); }} title="Ctrl+B 分割">✂️</Button>
-              <span style={{ color: 'rgba(255,255,255,0.12)', margin: '0 2px' }}>|</span>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); splitAtPlayhead(); }} title="Ctrl+B 分割">✂️</Button>
+              <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
               <div className="zoom-control" onClick={e => e.stopPropagation()}>
                 <span>🔍</span>
                 <input type="range" min={8} max={120} value={pps} onChange={e => setPps(Number(e.target.value))} />
                 <span>{Math.round(pps / 24 * 100)}%</span>
               </div>
-              <span style={{ color: 'rgba(255,255,255,0.12)', margin: '0 2px' }}>|</span>
-              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px' }} onClick={(e) => { e.stopPropagation(); pushSnapshot(); setTimeline([]); setAudioItems([]); }}>清空轨道</Button>
+              <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
+              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); pushSnapshot(); setTimeline([]); setAudioItems([]); }}>清空</Button>
             </div>
           </div>
 
@@ -2649,16 +3246,28 @@ function App() {
               )}
               <div style={{ display: 'flex', alignItems: 'center', height: 210, marginBottom: 30 }}>
                 <div style={{ width: 60, flexShrink: 0, textAlign: 'center', fontSize: 11, fontWeight: 900, opacity: 0.5 }}>图片</div>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => {
+                <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToParentElement, restrictToHorizontalAxis]} onDragEnd={(e) => {
                   const { active, over } = e;
+                  // 拖动后自动标记为手动排序
+                  if (over && active.id !== over.id && sortMode !== 'manual') {
+                    setSortMode('manual');
+                    setStatusMsg('✋ 拖动后已切换为手动排序'); setTimeout(() => setStatusMsg(''), 1500);
+                  }
                   if (over && active.id !== over.id) setTimeline(items => arrayMove(items, items.findIndex(i => i.id === active.id), items.findIndex(i => i.id === over.id)));
                 }}>
                   <div style={{ display: 'flex', gap: 4, height: '100%' }}>
                     <SortableContext items={timeline.map(t => t.id)} strategy={horizontalListSortingStrategy}>
-                      {timeline.map(item => (
+                      {timeline.map((item, _idx) => {
+                        const isMulti = selectedIds.size > 1 && selectedIds.has(item.id);
+                        // 计算多选序号（在选中集合中的出现顺序）
+                        const multiIdx = isMulti ? Array.from(selectedIds).indexOf(item.id) : undefined;
+                        return (
                         <SortableImageCard
                           key={item.id} item={item} resource={resourceMap.get(item.resourceId)}
-                          isSelected={selectedIds.has(item.id)} onSelect={(id, isCtrl) => {
+                          isSelected={selectedIds.has(item.id)}
+                          isMultiSelected={isMulti}
+                          multiSelectIndex={multiIdx}
+                          onSelect={(id, isCtrl) => {
                             setSelectedIds(prev => {
                               const next = new Set(prev);
                               if (isCtrl) {
@@ -2677,7 +3286,6 @@ function App() {
                           onContextMenu={(e) => setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', targetId: item.id })}
                           onTrimDuration={(id, delta) => { pushSnapshot(); setTimeline(p => p.map(t => t.id === id ? { ...t, duration: Math.max(0.3, t.duration + delta) } : t)); }}
                           onDoubleClickCard={() => {
-                            // 计算此卡片的起始时间并跳转播放头
                             let startTime = 0;
                             for (const t of timeline) {
                               if (t.id === item.id) break;
@@ -2685,7 +3293,6 @@ function App() {
                             }
                             setPlayTime(startTime);
                             setIsPlaying(true);
-                            // 滚动时间轴到该位置
                             const scrollEl = timelineScrollRef.current;
                             if (scrollEl) {
                               let accX = 0;
@@ -2697,7 +3304,8 @@ function App() {
                             }
                           }}
                         />
-                      ))}
+                        );
+                      })}
                     </SortableContext>
                   </div>
                 </DndContext>
@@ -2709,7 +3317,6 @@ function App() {
                   {audioItems.map(item => {
                     const isItPlaying = isPlaying && playTime >= item.timelineStart && playTime < (item.timelineStart + item.duration);
                     return (
-                      <>
                       <AudioTrackItem
                         key={item.id}
                         item={item}
@@ -2734,13 +3341,6 @@ function App() {
                         editingMode={isEditingAudio && selectedAudioIds.has(item.id)}
                         onUpdateItem={updateAudioItem}
                       />
-                      {/* 音频右键菜单触发层 */}
-                      <div
-                        key={`ctx_${item.id}`}
-                        style={{ position: 'absolute', left: item.timelineStart * pps, top: 0, bottom: 0, width: item.duration * pps, zIndex: 1 }}
-                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY, type: 'audio', targetId: item.id }); }}
-                      />
-                      </>
                     );
                   })}
                 </div>

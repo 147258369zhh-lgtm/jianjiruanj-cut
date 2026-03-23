@@ -34,6 +34,12 @@
   }
 }
 
+html {
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -44,6 +50,12 @@ body {
   height: 100vh;
   width: 100vw;
   position: relative;
+}
+
+#root {
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
 }
 
 /* 弥散粒子底层 */
@@ -176,6 +188,7 @@ body::before {
   overflow: visible !important;
   user-select: none;
   will-change: transform; /* GPU 加速提示 */
+  touch-action: none; /* 防止拖拽时触发页面滚动 */
 }
 
 .ios-play-container {
@@ -376,11 +389,11 @@ body::before {
 
 /* ─── 属性面板分组与工业对齐 ─── */
 .ios-prop-group {
-  padding: 18px;
+  padding: 12px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 18px;
-  margin-bottom: 8px;
+  border-radius: 12px;
+  margin-bottom: 6px;
   transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -396,7 +409,13 @@ body::before {
   text-transform: uppercase !important;
   letter-spacing: 1.2px !important;
   color: #fff !important;
-  margin-bottom: 4px !important;
+  margin-bottom: 0px !important;
+  padding-bottom: 0px !important;
+}
+
+.ios-prop-group .fui-Field {
+  margin-bottom: 0 !important;
+  padding-bottom: 0 !important;
 }
 
 /* 交互增强 */
@@ -573,11 +592,10 @@ body::before {
 
 /* ─── 滤镜预设卡片 ─── */
 .filter-preset-scroll {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
   padding: 4px 0;
-  scrollbar-width: none;
 }
 
 .filter-preset-scroll::-webkit-scrollbar {
@@ -585,20 +603,20 @@ body::before {
 }
 
 .filter-preset-card {
-  flex-shrink: 0;
-  padding: 8px 14px;
-  border-radius: 12px;
+  padding: 5px 6px;
+  border-radius: 8px;
   background: rgba(255,255,255,0.04);
   border: 1px solid rgba(255,255,255,0.08);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: rgba(255,255,255,0.7);
   white-space: nowrap;
   transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 2px;
 }
 
 .filter-preset-card:hover {
