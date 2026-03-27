@@ -22,7 +22,7 @@ import "./App.css";
 import "./Win11Theme.css";
 
 // ─── 类型定义 ────────────────────────────────────────────────────────
-interface Resource { id: string; name: string; path: string; type: 'image' | 'audio' | 'video' }
+interface Resource { id: string; name: string; path: string; type: 'image' | 'audio' | 'video'; focusX?: number; focusY?: number; hasFace?: boolean; }
 
 interface AudioTimelineItem {
   id: string;
@@ -1174,6 +1174,18 @@ function App() {
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
+  // ─── 智能面部检测引擎 WebWorker ─────────────────────────
+  const faceWorkerRef = useRef<Worker | null>(null);
+  
+  useEffect(() => {
+    faceWorkerRef.current = new Worker(new URL('./workers/faceDetector.worker.ts', import.meta.url), { type: 'module' });
+    faceWorkerRef.current.onmessage = (e) => {
+      const { id, focusX, focusY, found } = e.data;
+      setResources(prev => prev.map(r => r.id === id ? { ...r, focusX, focusY, hasFace: found } : r));
+    };
+    return () => faceWorkerRef.current?.terminate();
+  }, []);
+
   // ─── 性能优化：状态 Ref (消除播放时级联重渲染) ─────────────────
   const timelineRef = useRef(timeline);
   timelineRef.current = timeline;
@@ -2043,12 +2055,26 @@ function App() {
     if (selected && Array.isArray(selected)) {
       const newResources: Resource[] = (selected as any[]).map(rawSelected => {
         const path = typeof rawSelected === 'string' ? rawSelected : rawSelected.path;
-        return {
-          id: `res_${Date.now()}_${Math.random()}`,
-          name: path.split(/[\\/]/).pop() || '',
-          path,
-          type
-        };
+        const id = `res_${Date.now()}_${Math.random()}`;
+        
+        if (type === 'image') {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = async () => {
+            try {
+              const bitmap = await createImageBitmap(img);
+              faceWorkerRef.current?.postMessage({
+                id,
+                imageBitmap: bitmap,
+                width: img.naturalWidth,
+                height: img.naturalHeight
+              }, [bitmap]);
+            } catch (err) { console.error('Face detection task dispatch failed', err); }
+          };
+          img.src = convertFileSrc(path);
+        }
+
+        return { id, name: path.split(/[\\/]/).pop() || '', path, type };
       });
       setResources(prev => [...prev, ...newResources]);
       setLibTab(type === 'image' ? 'image' : type === 'video' ? 'video' : 'audio');
@@ -2707,6 +2733,7 @@ function App() {
                       ) : (
                         <img key={monitorSrc.currentItem?.id} src={monitorSrc.src} className={monitorSrc.currentItem?.animation && monitorSrc.currentItem.animation !== 'none' ? monitorSrc.currentItem.animation : ''} style={{
                           maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '12px',
+                          transformOrigin: (monitorSrc.currentItem && resourceMap.get(monitorSrc.currentItem.resourceId)?.focusX) ? `${resourceMap.get(monitorSrc.currentItem.resourceId)?.focusX}% ${resourceMap.get(monitorSrc.currentItem.resourceId)?.focusY}%` : 'center center',
                           transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
                           filter: `
                             brightness(${monitorSrc.currentItem?.exposure ?? 1.0})
