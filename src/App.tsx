@@ -1256,21 +1256,46 @@ function App() {
 
   // ─── 滤镜预设 ──────────────────────────────────────────────────
   const FILTER_PRESETS = useMemo(() => [
-    { name: '🎞 胶片', exposure: 0.95, contrast: 1.15, saturation: 0.85, temp: 15, tint: 5, brilliance: 1.0 },
-    { name: '🌸 日系', exposure: 1.1, contrast: 0.9, saturation: 0.7, temp: -10, tint: -5, brilliance: 1.05 },
-    { name: '🎬 电影', exposure: 0.9, contrast: 1.3, saturation: 0.8, temp: 10, tint: -10, brilliance: 1.1 },
-    { name: '⬛ 黑白', exposure: 1.0, contrast: 1.2, saturation: 0.0, temp: 0, tint: 0, brilliance: 1.0 },
-    { name: '🌅 暖阳', exposure: 1.05, contrast: 1.1, saturation: 1.1, temp: 30, tint: 10, brilliance: 1.05 },
-    { name: '❄️ 冷调', exposure: 1.0, contrast: 1.15, saturation: 0.9, temp: -25, tint: -15, brilliance: 1.0 },
-    { name: '📷 复古', exposure: 0.92, contrast: 1.1, saturation: 0.65, temp: 20, tint: 8, brilliance: 0.95 },
-    { name: '🍃 清新', exposure: 1.08, contrast: 0.95, saturation: 1.15, temp: -5, tint: 5, brilliance: 1.1 },
-    { name: '🔮 梦幻', exposure: 1.1, contrast: 0.85, saturation: 0.9, temp: -15, tint: 15, brilliance: 1.15 },
-    { name: '🎨 鲜艳', exposure: 1.0, contrast: 1.2, saturation: 1.5, temp: 5, tint: 0, brilliance: 1.1 },
-    { name: '🏚 褪色', exposure: 1.05, contrast: 0.85, saturation: 0.5, temp: 10, tint: 5, brilliance: 0.9 },
-    { name: '🌇 夕照', exposure: 0.95, contrast: 1.15, saturation: 1.2, temp: 40, tint: 15, brilliance: 1.0 },
-    { name: '🧊 青橙', exposure: 1.0, contrast: 1.2, saturation: 1.1, temp: -20, tint: 20, brilliance: 1.05 },
-    { name: '✨ 柔光', exposure: 1.15, contrast: 0.88, saturation: 0.95, temp: 5, tint: 0, brilliance: 1.2 },
-    { name: '🔄 重置', exposure: 1.0, contrast: 1.0, saturation: 1.0, temp: 0, tint: 0, brilliance: 1.0 },
+    { icon: '🔄', name: '重置', exposure: 1.0, contrast: 1.0, saturation: 1.0, temp: 0, tint: 0, brilliance: 1.0 },
+    { icon: '🎞', name: '胶片', exposure: 0.95, contrast: 1.15, saturation: 0.85, temp: 15, tint: 5, brilliance: 1.0 },
+    { icon: '🌸', name: '日系', exposure: 1.1, contrast: 0.9, saturation: 0.7, temp: -10, tint: -5, brilliance: 1.05 },
+    { icon: '🎬', name: '电影', exposure: 0.9, contrast: 1.3, saturation: 0.8, temp: 10, tint: -10, brilliance: 1.1 },
+    { icon: '⬛', name: '黑白', exposure: 1.0, contrast: 1.2, saturation: 0.0, temp: 0, tint: 0, brilliance: 1.0 },
+    { icon: '🌅', name: '暖阳', exposure: 1.05, contrast: 1.1, saturation: 1.1, temp: 30, tint: 10, brilliance: 1.05 },
+    { icon: '❄️', name: '冷调', exposure: 1.0, contrast: 1.15, saturation: 0.9, temp: -25, tint: -15, brilliance: 1.0 },
+    { icon: '📷', name: '复古', exposure: 0.92, contrast: 1.1, saturation: 0.65, temp: 20, tint: 8, brilliance: 0.95 },
+    { icon: '🍃', name: '清新', exposure: 1.08, contrast: 0.95, saturation: 1.15, temp: -5, tint: 5, brilliance: 1.1 },
+    { icon: '🔮', name: '梦幻', exposure: 1.1, contrast: 0.85, saturation: 0.9, temp: -15, tint: 15, brilliance: 1.15 },
+    { icon: '🎨', name: '鲜艳', exposure: 1.0, contrast: 1.2, saturation: 1.5, temp: 5, tint: 0, brilliance: 1.1 },
+    { icon: '🏚', name: '褪色', exposure: 1.05, contrast: 0.85, saturation: 0.5, temp: 10, tint: 5, brilliance: 0.9 },
+    { icon: '🌇', name: '夕照', exposure: 0.95, contrast: 1.15, saturation: 1.2, temp: 40, tint: 15, brilliance: 1.0 },
+    { icon: '🧊', name: '青橙', exposure: 1.0, contrast: 1.2, saturation: 1.1, temp: -20, tint: 20, brilliance: 1.05 },
+    { icon: '✨', name: '柔光', exposure: 1.15, contrast: 0.88, saturation: 0.95, temp: 5, tint: 0, brilliance: 1.2 },
+    { icon: '🌌', name: '赛博', exposure: 0.9, contrast: 1.25, saturation: 1.3, temp: -15, tint: 30, brilliance: 1.1 },
+    { icon: '☕', name: '拿铁', exposure: 1.05, contrast: 0.9, saturation: 0.8, temp: 25, tint: 10, brilliance: 0.9 },
+    { icon: '🌲', name: '森系', exposure: 0.95, contrast: 1.1, saturation: 1.05, temp: -10, tint: -5, brilliance: 0.9 },
+    { icon: '🍂', name: '秋意', exposure: 1.0, contrast: 1.1, saturation: 1.2, temp: 35, tint: 15, brilliance: 1.05 },
+    { icon: '🍒', name: '元气', exposure: 1.1, contrast: 1.05, saturation: 1.2, temp: 5, tint: 10, brilliance: 1.1 },
+    { icon: '🖤', name: '银灰', exposure: 0.95, contrast: 1.1, saturation: 0.2, temp: -5, tint: -5, brilliance: 0.95 },
+    { icon: '🍰', name: '奶油', exposure: 1.15, contrast: 0.85, saturation: 0.9, temp: 10, tint: 0, brilliance: 1.1 },
+    { icon: '🥂', name: '香槟', exposure: 1.1, contrast: 0.95, saturation: 0.85, temp: 15, tint: 5, brilliance: 1.15 },
+    { icon: '🌙', name: '夜景', exposure: 1.15, contrast: 1.2, saturation: 1.1, temp: -10, tint: -5, brilliance: 1.2 },
+    { icon: '🗻', name: '富士CC', exposure: 0.95, contrast: 1.2, saturation: 0.8, temp: -5, tint: 10, brilliance: 1.05 },
+    { icon: '📸', name: '柯达金', exposure: 1.05, contrast: 1.1, saturation: 1.2, temp: 15, tint: 5, brilliance: 1.1 },
+    { icon: '🔴', name: '徕卡德', exposure: 0.9, contrast: 1.3, saturation: 0.9, temp: 5, tint: 5, brilliance: 0.95 },
+    { icon: '📹', name: '索尼C', exposure: 1.0, contrast: 1.15, saturation: 1.1, temp: 0, tint: -5, brilliance: 1.0 },
+    { icon: '🌸', name: '佳能人', exposure: 1.1, contrast: 0.9, saturation: 0.95, temp: -10, tint: -5, brilliance: 1.15 },
+    { icon: '🔲', name: '伊尔福', exposure: 1.0, contrast: 1.4, saturation: 0.0, temp: 0, tint: 0, brilliance: 0.9 },
+    { icon: '📷', name: '爱克发', exposure: 1.05, contrast: 1.15, saturation: 1.25, temp: 5, tint: 0, brilliance: 1.1 },
+    { icon: '⬛', name: '哈苏然', exposure: 1.0, contrast: 1.05, saturation: 1.0, temp: 0, tint: -5, brilliance: 1.05 },
+    { icon: '🍃', name: '宾得绿', exposure: 0.95, contrast: 1.1, saturation: 1.15, temp: -10, tint: 15, brilliance: 1.0 },
+    { icon: '🌸', name: '奥林巴', exposure: 1.1, contrast: 0.95, saturation: 0.9, temp: 5, tint: 5, brilliance: 1.1 },
+    { icon: '🎨', name: '柯达E', exposure: 1.0, contrast: 1.25, saturation: 1.3, temp: 10, tint: 5, brilliance: 1.15 },
+    { icon: '🌆', name: '柯达P', exposure: 1.05, contrast: 1.1, saturation: 1.05, temp: 20, tint: 0, brilliance: 1.1 },
+    { icon: '🌲', name: '富士S', exposure: 0.95, contrast: 1.15, saturation: 1.1, temp: -5, tint: 5, brilliance: 1.0 },
+    { icon: '⬛', name: '伊尔福D', exposure: 0.95, contrast: 1.45, saturation: 0.0, temp: 0, tint: 0, brilliance: 0.85 },
+    { icon: '📷', name: '宝丽来', exposure: 1.15, contrast: 0.85, saturation: 0.8, temp: 15, tint: -10, brilliance: 0.95 },
+    { icon: '🎢', name: 'Lomo', exposure: 0.85, contrast: 1.5, saturation: 1.4, temp: 10, tint: 15, brilliance: 0.8 },
   ], []);
   // ─── 收藏预设管理 ───────────────────────────────────────────────
   const [favTrans, setFavTrans] = useState<string[]>(() => {
@@ -3094,7 +3119,7 @@ function App() {
           </div>
 
           {/* 3. 右侧属性面板（上下文驱动 + 编辑/导出模式切换） */}
-          <div className="glass-panel" style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+          <div className="glass-panel" style={{ width: 350, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
             <div className="panel-header-ios" style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="header-title" style={{ fontSize: 12 }}>
                 {showGlobalDefaults ? '⚙️ 全局默认设置' : showExportPanel ? '🚀 导出设置' : (
@@ -3218,7 +3243,7 @@ function App() {
               activeTab === 'effects' ? (
                 (selectedIds.size > 0 || selectedAudioIds.size > 0) ? (
                   selectedIds.size > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 40 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 40, minHeight: '100%' }}>
 
                       {/* ======= 胶囊切换栏 ======= */}
                       <div style={{
@@ -3251,11 +3276,12 @@ function App() {
                       {/* 滤镜预设 */}
                       <div className="ios-prop-group" style={{ display: propertyTab === 'presets' ? 'block' : 'none' }}>
                         <Text weight="bold" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 一键滤镜预设</Text>
-                        <div className="filter-preset-scroll">
+                        <div className="filter-preset-scroll" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, maxHeight: 'none', paddingRight: 14, marginLeft: -4 }}>
                           {FILTER_PRESETS.map((preset) => (
                             <div
                               key={preset.name}
                               className="filter-preset-card"
+                              style={{ padding: '8px 0px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                               onClick={() => {
                                 commitSnapshotNow();
                                 setTimeline(prev => prev.map(t => selectedIds.has(t.id) ? {
@@ -3264,7 +3290,12 @@ function App() {
                                 setStatusMsg(`✨ 已应用${preset.name}预设`); setTimeout(() => setStatusMsg(''), 1500);
                               }}
                             >
-                              {preset.name}
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <span style={{ flexShrink: 0, fontSize: 13, marginRight: 6 }}>{preset.icon}</span>
+                                <span style={{ width: 42, display: 'flex', justifyContent: 'space-between', fontSize: 11, whiteSpace: 'nowrap', fontWeight: 500 }}>
+                                  {preset.name.split('').map((c, i) => <span key={i}>{c}</span>)}
+                                </span>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -3381,21 +3412,24 @@ function App() {
                       </div>
 
                       {/* 批量操作按钮组 */}
-                      <div style={{ display: propertyTab === 'presets' ? 'flex' : 'none', flexDirection: 'column', gap: 8 }}>
-                        <Button appearance="primary" style={{ borderRadius: 10, background: 'var(--ios-indigo)', height: 38, fontWeight: 600, fontSize: 12 }} onClick={applyAllToTimeline}>
-                          ✨ 一键分发至全部图片
+                      <div style={{ display: propertyTab === 'presets' ? 'flex' : 'none', flexDirection: 'row', gap: 8, marginTop: 'auto' }}>
+                        <Button appearance="primary" style={{ flex: 1, borderRadius: 10, background: 'var(--ios-indigo)', height: 38, fontWeight: 600, fontSize: 11, padding: '0 4px' }} onClick={applyAllToTimeline}>
+                          ✨ 一键分发至全轨
                         </Button>
-                        <Button appearance="subtle" style={{ borderRadius: 10, height: 34, fontWeight: 500, fontSize: 12, border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => {
-                              const anims = ['anim-img-fadeIn', 'anim-img-slideLeft', 'anim-img-slideRight', 'anim-img-slideUp', 'anim-img-slideDown', 'anim-img-zoomIn', 'anim-img-zoomOut', 'anim-img-panLeft', 'anim-img-panRight'];
+                        <Button appearance="subtle" style={{ flex: 1, borderRadius: 10, height: 38, fontWeight: 500, fontSize: 11, padding: '0 4px', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => {
                               commitSnapshotNow();
-                              // Randomize ALL images on timeline 
+                              const validFilters = FILTER_PRESETS.slice(1);
                               setTimeline(prev => prev.map(t => {
-                                const isImage = resourceMap.get(t.resourceId)?.type === 'image';
-                                return isImage ? { ...t, animation: anims[Math.floor(Math.random() * anims.length)] } : t;
+                                if (resourceMap.get(t.resourceId)?.type === 'image') {
+                                  const r = Math.pow(Math.random(), 1.6);
+                                  const preset = validFilters[Math.floor(r * validFilters.length)];
+                                  return { ...t, exposure: preset.exposure, contrast: preset.contrast, saturation: preset.saturation, temp: preset.temp, tint: preset.tint, brilliance: preset.brilliance };
+                                }
+                                return t;
                               }));
-                              setStatusMsg(`🎲 已为全轨所有照片重新随机分配动效`); setTimeout(() => setStatusMsg(''), 2000);
+                              setStatusMsg(`🎨 已为全轨照片根据权重随机分配滤镜`); setTimeout(() => setStatusMsg(''), 2000);
                         }}>
-                          🎲 一键随机全部照片动效
+                          🎨 智能化随机全轨滤镜
                         </Button>
                         {audioItems.length > 0 && timeline.length > 0 && (
                           <Button appearance="subtle" style={{ borderRadius: 10, height: 34, fontWeight: 500, fontSize: 12, border: '1px solid rgba(255,255,255,0.1)' }}
@@ -3664,10 +3698,6 @@ function App() {
                             </div>
                           </Field>
                         </div>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                        <Button appearance="subtle" style={{ color: '#FF3B30', height: 36 }} onClick={() => { setTimeline(p => p.filter(t => !selectedIds.has(t.id))); setSelectedIds(new Set()); }}>🗑️ 从轨道移除素材</Button>
                       </div>
                     </div>
                   ) : (
