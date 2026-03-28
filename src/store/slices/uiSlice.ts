@@ -48,16 +48,16 @@ export interface UiSlice {
   setLibTab: (v: 'image' | 'audio' | 'video') => void;
   setLeftTab: (v: 'photo' | 'music' | 'video') => void;
   setStatusMsg: (v: string) => void;
-  setShowShortcuts: (v: boolean) => void;
+  setShowShortcuts: (v: boolean | ((prev: boolean) => boolean)) => void;
   setShowSortMenu: (v: boolean) => void;
   setShowExportPanel: (v: boolean) => void;
   setShowGlobalDefaults: (v: boolean) => void;
-  setShowMoreMenu: (v: boolean) => void;
+  setShowMoreMenu: (v: boolean | ((prev: boolean) => boolean)) => void;
   setIsEditingProjectName: (v: boolean) => void;
   setIsDragOver: (v: boolean) => void;
   setIsGenerating: (v: boolean) => void;
   setContextMenu: (v: UiSlice['contextMenu']) => void;
-  setSelectionBox: (v: UiSlice['selectionBox']) => void;
+  setSelectionBox: (v: UiSlice['selectionBox'] | ((prev: UiSlice['selectionBox']) => UiSlice['selectionBox'])) => void;
   setCrop: (v: Crop | undefined) => void;
   setIsCropping: (v: boolean) => void;
   setIsEditingAudio: (v: boolean) => void;
@@ -108,16 +108,16 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   setLibTab: (v) => set({ libTab: v }),
   setLeftTab: (v) => set({ leftTab: v }),
   setStatusMsg: (v) => set({ statusMsg: v }),
-  setShowShortcuts: (v) => set({ showShortcuts: v }),
+  setShowShortcuts: (v) => set(s => ({ showShortcuts: typeof v === 'function' ? v(s.showShortcuts) : v })),
   setShowSortMenu: (v) => set({ showSortMenu: v }),
   setShowExportPanel: (v) => set({ showExportPanel: v }),
   setShowGlobalDefaults: (v) => set({ showGlobalDefaults: v }),
-  setShowMoreMenu: (v) => set({ showMoreMenu: v }),
+  setShowMoreMenu: (v) => set(s => ({ showMoreMenu: typeof v === 'function' ? v(s.showMoreMenu) : v })),
   setIsEditingProjectName: (v) => set({ isEditingProjectName: v }),
   setIsDragOver: (v) => set({ isDragOver: v }),
   setIsGenerating: (v) => set({ isGenerating: v }),
   setContextMenu: (v) => set({ contextMenu: v }),
-  setSelectionBox: (v) => set({ selectionBox: v }),
+  setSelectionBox: (v) => set(s => ({ selectionBox: typeof v === 'function' ? v(s.selectionBox) : v })),
   setCrop: (v) => set({ crop: v }),
   setIsCropping: (v) => set({ isCropping: v }),
   setIsEditingAudio: (v) => set({ isEditingAudio: v }),

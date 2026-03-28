@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useStore } from "./store";
+import { useShallow } from 'zustand/react/shallow';
 import { useProjectHistory } from './hooks/useProjectHistory';
 
 
@@ -10,6 +12,7 @@ import { arrayMove, SortableContext, horizontalListSortingStrategy } from '@dnd-
 import { restrictToParentElement, restrictToHorizontalAxis } from '@dnd-kit/modifiers';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import ReactCrop, { Crop } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
 import 'react-image-crop/dist/ReactCrop.css';
 import "./App.css";
 import "./Win11Theme.css";
@@ -86,12 +89,79 @@ function App() {
   const [selectedResourceIds, setSelectedResourceIds] = useState<Set<string>>(new Set());
   const [isPlaying, setIsPlaying] = useState(false);
   const [playTime, setPlayTime] = useState(0);
-  const [monitorRes, setMonitorRes] = useState<Resource | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [statusMsg, setStatusMsg] = useState('');
-  const [activeTab, setActiveTab] = useState<'effects' | 'export'>('effects');
-  const [propertyTab, setPropertyTab] = useState<'presets' | 'color' | 'text' | 'transform'>('presets');
-  const [libTab, setLibTab] = useState<'image' | 'audio' | 'video'>('image');
+  const {
+    activeTab, setActiveTab,
+    propertyTab, setPropertyTab,
+    libTab, setLibTab,
+    leftTab, setLeftTab,
+    statusMsg, setStatusMsg,
+    showShortcuts, setShowShortcuts,
+    showSortMenu, setShowSortMenu,
+    showExportPanel, setShowExportPanel,
+    showGlobalDefaults, setShowGlobalDefaults,
+    showMoreMenu, setShowMoreMenu,
+    isEditingProjectName, setIsEditingProjectName,
+    isDragOver, setIsDragOver,
+    isGenerating, setIsGenerating,
+    contextMenu, setContextMenu,
+    selectionBox, setSelectionBox,
+    crop, setCrop,
+    isCropping, setIsCropping,
+    isEditingAudio, setIsEditingAudio,
+    isDraggingHead, setIsDraggingHead,
+    isJumping, setIsJumping,
+    localDuration, setLocalDuration,
+    theme, setTheme,
+    exportFormat, setExportFormat,
+    exportResolution, setExportResolution,
+    exportFps, setExportFps,
+    exportQuality, setExportQuality,
+    exportCodec, setExportCodec,
+    exportHdr, setExportHdr
+  } = useStore(useShallow(state => ({
+    activeTab: state.activeTab, setActiveTab: state.setActiveTab,
+    propertyTab: state.propertyTab, setPropertyTab: state.setPropertyTab,
+    libTab: state.libTab, setLibTab: state.setLibTab,
+    leftTab: state.leftTab, setLeftTab: state.setLeftTab,
+    statusMsg: state.statusMsg, setStatusMsg: state.setStatusMsg,
+    showShortcuts: state.showShortcuts, setShowShortcuts: state.setShowShortcuts,
+    showSortMenu: state.showSortMenu, setShowSortMenu: state.setShowSortMenu,
+    showExportPanel: state.showExportPanel, setShowExportPanel: state.setShowExportPanel,
+    showGlobalDefaults: state.showGlobalDefaults, setShowGlobalDefaults: state.setShowGlobalDefaults,
+    showMoreMenu: state.showMoreMenu, setShowMoreMenu: state.setShowMoreMenu,
+    isEditingProjectName: state.isEditingProjectName, setIsEditingProjectName: state.setIsEditingProjectName,
+    isDragOver: state.isDragOver, setIsDragOver: state.setIsDragOver,
+    isGenerating: state.isGenerating, setIsGenerating: state.setIsGenerating,
+    contextMenu: state.contextMenu, setContextMenu: state.setContextMenu,
+    selectionBox: state.selectionBox, setSelectionBox: state.setSelectionBox,
+    crop: state.crop, setCrop: state.setCrop,
+    isCropping: state.isCropping, setIsCropping: state.setIsCropping,
+    isEditingAudio: state.isEditingAudio, setIsEditingAudio: state.setIsEditingAudio,
+    isDraggingHead: state.isDraggingHead, setIsDraggingHead: state.setIsDraggingHead,
+    isJumping: state.isJumping, setIsJumping: state.setIsJumping,
+    localDuration: state.localDuration, setLocalDuration: state.setLocalDuration,
+    theme: state.theme, setTheme: state.setTheme,
+    exportFormat: state.exportFormat, setExportFormat: state.setExportFormat,
+    exportResolution: state.exportResolution, setExportResolution: state.setExportResolution,
+    exportFps: state.exportFps, setExportFps: state.setExportFps,
+    exportQuality: state.exportQuality, setExportQuality: state.setExportQuality,
+    exportCodec: state.exportCodec, setExportCodec: state.setExportCodec,
+    exportHdr: state.exportHdr, setExportHdr: state.setExportHdr
+  })));
+
+  const {
+    projectName, setProjectName,
+    sortMode, setSortMode,
+    sortDirection, setSortDirection,
+    globalDefaults, setGlobalDefaults,
+    monitorRes, setMonitorRes
+  } = useStore(useShallow(state => ({
+    projectName: state.projectName, setProjectName: state.setProjectName,
+    sortMode: state.sortMode, setSortMode: state.setSortMode,
+    sortDirection: state.sortDirection, setSortDirection: state.setSortDirection,
+    globalDefaults: state.globalDefaults, setGlobalDefaults: state.setGlobalDefaults,
+    monitorRes: state.monitorRes, setMonitorRes: state.setMonitorRes
+  })));
 
   // AI 配音相关状态
   const [musicSubTab, setMusicSubTab] = useState<'audio' | 'tts'>('audio');
@@ -101,54 +171,24 @@ function App() {
   const [ttsGenerating, setTtsGenerating] = useState(false);
   const [generatedVoiceovers, setGeneratedVoiceovers] = useState<{ id: string; name: string; path: string; duration: number; selected: boolean }[]>([]);
 
-  // 导出设置
-  const [exportFormat, setExportFormat] = useState<'mp4' | 'mov'>('mp4');
-  const [exportResolution, setExportResolution] = useState<'1080p' | '4k' | 'original'>('original');
-  const [exportFps, setExportFps] = useState<'30' | '60'>('60');
-  const [exportQuality, setExportQuality] = useState<'medium' | 'high' | 'lossless'>('lossless');
-  const [exportCodec, setExportCodec] = useState<'h264' | 'h265'>('h264');
-  const [exportHdr, setExportHdr] = useState(false);
+  // 导出设置 (已迁移至 Zustand)
 
-  // 裁切编辑
-  const [crop, setCrop] = useState<Crop>();
-  const [isCropping, setIsCropping] = useState(false);
+  // 裁切编辑 (已迁移至 Zustand)
 
-  // 音频剪辑
-  const [isEditingAudio, setIsEditingAudio] = useState(false);
+  // 音频剪辑 (已迁移至 Zustand)
 
-  // 播放指针拖拽
-  const [isDraggingHead, setIsDraggingHead] = useState(false);
-  const [isJumping, setIsJumping] = useState(false); // 控制双击时的平滑跳转
-  const [selectionBox, setSelectionBox] = useState<{ x1: number; x2: number; y: number; h: number } | null>(null);
-  const [localDuration, setLocalDuration] = useState<number | null>(null);
+  // 播放指针拖拽 (已迁移至 Zustand)
   const [audioBlobs, setAudioBlobs] = useState<{ [id: string]: string }>({}); // 核心：URL 映射缓存
   const [previewCache, setPreviewCache] = useState<{ [path: string]: string }>({}); // RAW 预览图映射缓存
-  const [isDragOver, setIsDragOver] = useState(false);
-  
   const lastScrubTimeRef = useRef<number>(0);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'image' | 'audio'; targetId: string } | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showShortcuts, setShowShortcuts] = useState(false);
   const [_isFullscreen, setIsFullscreen] = useState(false);
-  const [theme, setTheme] = useState<'ios' | 'win11'>(() => {
-    return (localStorage.getItem('__editor_theme__') as 'ios' | 'win11') || 'ios';
-  });
 
   // ─── 改版新增状态 ────────────────────────────────────────────────────
-  const [projectName, setProjectName] = useState('未命名项目');
-  const [sortMode, setSortMode] = useState<'manual' | 'time' | 'name'>('manual');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [showSortMenu, setShowSortMenu] = useState(false);
-  const [showExportPanel, setShowExportPanel] = useState(false);
-  const [leftTab, setLeftTab] = useState<'photo' | 'music' | 'video'>('photo');
   const [_showAdvancedExport, _setShowAdvancedExport] = useState(false);
-  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
-  const [showGlobalDefaults, setShowGlobalDefaults] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   // ─── 全局默认值系统 (任务6) ──────────────────────────────────────────
-  const [globalDefaults, setGlobalDefaults] = useState<GlobalDefaults>(GLOBAL_DEFAULTS_INIT);
   const globalDefaultsRef = useRef(globalDefaults);
   globalDefaultsRef.current = globalDefaults;
 
@@ -1915,7 +1955,7 @@ function App() {
               {monitorSrc ? (
                 monitorSrc.src ? (
                   isCropping ? (
-                    <ReactCrop crop={crop} onChange={c => setCrop(c)} style={{ maxWidth: '85%', maxHeight: '85%' }}>
+                    <ReactCrop crop={crop} onChange={(c: any) => setCrop(c)} style={{ maxWidth: '85%', maxHeight: '85%' }}>
                       <img src={monitorSrc.src} style={{ maxWidth: '100%', maxHeight: '100%' }} alt="" />
                     </ReactCrop>
                   ) : (
@@ -2037,7 +2077,7 @@ function App() {
                                   startCoords[txt.id] = { x: txt.textX ?? 50, y: txt.textY ?? 50 };
                                 } else {
                                   const textItemContext = monitorSrc.currentItem?.textOverlays || [];
-                                  textItemContext.forEach(layer => {
+                                  textItemContext.forEach((layer: any) => {
                                     if (newSelectedSet.has(layer.id) || layer.id === txt.id) {
                                       startCoords[layer.id] = { x: layer.textX ?? 50, y: layer.textY ?? 50 };
                                     }
@@ -3426,4 +3466,4 @@ function App() {
   );
 }
 
-export default App;
+export default App;

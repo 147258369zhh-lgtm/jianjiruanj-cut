@@ -12,7 +12,7 @@ export interface ProjectSlice {
   setProjectName: (v: string) => void;
   setSortMode: (v: 'manual' | 'time' | 'name') => void;
   setSortDirection: (v: 'asc' | 'desc') => void;
-  setGlobalDefaults: (v: GlobalDefaults) => void;
+  setGlobalDefaults: (v: GlobalDefaults | ((prev: GlobalDefaults) => GlobalDefaults)) => void;
   setMonitorRes: (v: any) => void;
 }
 
@@ -26,6 +26,6 @@ export const createProjectSlice: StateCreator<ProjectSlice> = (set) => ({
   setProjectName: (v) => set({ projectName: v }),
   setSortMode: (v) => set({ sortMode: v }),
   setSortDirection: (v) => set({ sortDirection: v }),
-  setGlobalDefaults: (v) => set({ globalDefaults: v }),
+  setGlobalDefaults: (v) => set(s => ({ globalDefaults: typeof v === 'function' ? v(s.globalDefaults) : v })),
   setMonitorRes: (v) => set({ monitorRes: v }),
 });
