@@ -21,7 +21,7 @@ import 'react-image-crop/dist/ReactCrop.css';
 import "./App.css";
 import "./Win11Theme.css";
 
-import { Resource, AudioTimelineItem, TimelineItem, GlobalDefaults, GLOBAL_DEFAULTS_INIT, ANIMATION_PRESETS } from './types';
+import { Resource, AudioTimelineItem, TimelineItem, GlobalDefaults, GLOBAL_DEFAULTS_INIT, ANIMATION_PRESETS, TextOverlay } from './types';
 
 // ─── 用户自定义无极大平层滑块 ────────────────────────────────────────────────────────
 const ProSlider = memo(({
@@ -305,38 +305,116 @@ const IosSelect = ({ value, options, onChange, style, favSet, onToggleFav }: { v
           {options.map(opt => {
             const isFav = favSet ? favSet.includes(opt.value) : false;
             return (
-            <div
-              key={opt.value}
-              style={{
-                padding: '8px 12px',
-                fontSize: 13,
-                color: opt.value === value ? '#fff' : 'rgba(255,255,255,0.7)',
-                background: opt.value === value ? 'rgba(99, 102, 241, 0.3)' : 'transparent',
-                borderRadius: 8,
-                cursor: 'pointer',
-                marginBottom: 2,
-                transition: 'all 0.15s'
-              }}
-              onMouseEnter={e => { if (opt.value !== value) { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff'; } }}
-              onMouseLeave={e => { if (opt.value !== value) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; } }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange(opt.value);
-                setIsOpen(false);
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>{opt.label}</span>
-                {onToggleFav && opt.value !== 'none' && (
-                  <span 
-                    onClick={(e) => { e.stopPropagation(); onToggleFav(opt.value); }}
-                    style={{ color: isFav ? '#ffd700' : 'rgba(255,255,255,0.2)', paddingLeft: 8 }}
-                    title={isFav ? "取消收藏" : "加入收藏"}
-                  >★</span>
-                )}
+              <div
+                key={opt.value}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  color: opt.value === value ? '#fff' : 'rgba(255,255,255,0.7)',
+                  background: opt.value === value ? 'rgba(99, 102, 241, 0.3)' : 'transparent',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  marginBottom: 2,
+                  transition: 'all 0.15s'
+                }}
+                onMouseEnter={e => { if (opt.value !== value) { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff'; } }}
+                onMouseLeave={e => { if (opt.value !== value) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; } }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>{opt.label}</span>
+                  {onToggleFav && opt.value !== 'none' && (
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); onToggleFav(opt.value); }}
+                      style={{ color: isFav ? '#ffd700' : 'rgba(255,255,255,0.2)', paddingLeft: 8 }}
+                      title={isFav ? "取消收藏" : "加入收藏"}
+                    >★</span>
+                  )}
+                </div>
               </div>
+            );
+          })}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
+// ─── 子组件: 沉浸式多层级字体选择器 (支持下拉框直接字体预览和历史名家分类) ───
+const ProFontSelect = ({ value, optGroups, onChange, style }: { value: string; optGroups: {label: string, options: {label: string, value: string}[]}[]; onChange: (v: string) => void; style?: React.CSSProperties; }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    if (!isOpen) return;
+    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false); };
+    window.addEventListener('mousedown', onClick, true); // mousedown captures better than click
+    return () => window.removeEventListener('mousedown', onClick, true);
+  }, [isOpen]);
+
+  const flatOptions = optGroups.flatMap(g => g.options);
+  const selectedOpt = flatOptions.find(o => o.value === value) || { label: '默认字体 (Default)', value };
+
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%', ...style }}>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        style={{ width: '100%', height: 36, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.05)', color: '#fff', border: isOpen ? '1px solid rgba(139, 92, 246, 0.6)' : '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 8, padding: '0 12px', fontSize: 13, cursor: 'pointer', transition: 'all 0.2s', boxShadow: isOpen ? '0 0 0 2px rgba(139, 92, 246, 0.2)' : 'none', fontFamily: selectedOpt.value }}
+        onMouseEnter={e => { if (!isOpen) { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; } }}
+        onMouseLeave={e => { if (!isOpen) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; } }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedOpt.label}</span>
+        <span style={{ fontSize: 9, opacity: 0.5, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s cubic-bezier(0.23, 1, 0.32, 1)', flexShrink: 0 }}>▼</span>
+      </div>
+      {isOpen && createPortal(
+        <div style={{
+          position: 'absolute',
+          top: ref.current ? ref.current.getBoundingClientRect().bottom + 4 : 0,
+          left: ref.current ? ref.current.getBoundingClientRect().left : 0,
+          width: ref.current ? ref.current.getBoundingClientRect().width : 'auto',
+          background: 'rgba(25, 25, 30, 0.98)',
+          backdropFilter: 'blur(40px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          borderRadius: 12,
+          padding: '8px 6px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.05)',
+          zIndex: 999999,
+          maxHeight: 340,
+          overflowY: 'auto',
+          scrollbarWidth: 'none' // Firefox
+        }}>
+          {optGroups.map((group, gIdx) => (
+            <div key={group.label} style={{ marginBottom: gIdx === optGroups.length - 1 ? 0 : 12 }}>
+              <div style={{ padding: '4px 12px 6px', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: 1 }}>{group.label}</div>
+              {group.options.map(opt => (
+                <div
+                  key={opt.value}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: 14,
+                    fontFamily: opt.value, // 核心逻辑：直接在列表处呈现该字体的形变，让用户知道安没安装
+                    color: opt.value === value ? '#C4B5FD' : 'rgba(255,255,255,0.85)',
+                    background: opt.value === value ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                    marginBottom: 2,
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={e => { if (opt.value !== value) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#fff'; } }}
+                  onMouseLeave={e => { if (opt.value !== value) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.85)'; } }}
+                  onClick={() => { onChange(opt.value); setIsOpen(false); }}
+                >
+                  {opt.label}
+                </div>
+              ))}
             </div>
-          )})}
+          ))}
         </div>,
         document.body
       )}
@@ -1097,6 +1175,7 @@ function App() {
   const audioItems = project.audioItems;
   const voiceoverClips = project.voiceoverClips;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedTextIds, setSelectedTextIds] = useState<Set<string>>(new Set()); // 文字图层多选集合
   const [selectedAudioIds, setSelectedAudioIds] = useState<Set<string>>(new Set());
   const [selectedVoiceoverIds, setSelectedVoiceoverIds] = useState<Set<string>>(new Set());
   const [selectedResourceIds, setSelectedResourceIds] = useState<Set<string>>(new Set());
@@ -1936,9 +2015,27 @@ function App() {
 
   const updateSelectedProperty = (key: keyof TimelineItem, val: any) => {
     if (selectedIds.size === 0) return;
+    
+    const textRelatedKeys = ['overlayText', 'fontFamily', 'fontColor', 'fontSize', 'fontWeight', 'textAlign', 'textBg', 'textBgPadding', 'textBgRadius', 'textShadowColor', 'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY', 'textStrokeColor', 'textStrokeWidth', 'textGlow', 'textGlowColor', 'textGlowRadius', 'textLetterSpacing', 'textLineHeight', 'textOpacity', 'textRotation', 'textX', 'textY', 'textAnimation', 'textAnimDuration'];
+    
     setTimeline(prev => prev.map(t => {
       if (!selectedIds.has(t.id)) return t;
-      // 自动将修改的字段加入 overrides（全局覆盖模型）
+
+      // 核心业务：当用户选定了一个或多个 TextOverlay，且修改的是文字专属属性时，仅改变子图层
+      if (selectedTextIds.size > 0 && textRelatedKeys.includes(key as string)) {
+        let textKey = key as keyof TextOverlay;
+        if (key === 'overlayText') textKey = 'text'; // 兼容字段
+        
+        const newOverlays = (t.textOverlays || []).map(layer => {
+          if (selectedTextIds.has(layer.id)) {
+            return { ...layer, [textKey]: val };
+          }
+          return layer;
+        });
+        return { ...t, textOverlays: newOverlays };
+      }
+
+      // 全局修改，影响整体主属
       const globalKeys: string[] = Object.keys(GLOBAL_DEFAULTS_INIT);
       if (globalKeys.includes(key as string)) {
         const newOverrides = Array.from(new Set([...(t.overrides || []), key as string]));
@@ -2539,6 +2636,64 @@ function App() {
     return `${blurStr}brightness(${calcBrightness}) contrast(${calcContrast}) saturate(${calcSaturate}) sepia(${calcSepia}) hue-rotate(${calcHueRotate}deg)`;
   };
 
+  // 高阶文字引擎渲染：融合各种 CSS Text 和 Box 属性来实现剪辑软件级别的文字特效
+  const computeTextStyles = (item: any): React.CSSProperties => {
+    if (!item) return {};
+    let shadows = [];
+    
+    // 渲染阴影层：有独立开关色，若无则如果没有 Glow 就渲染一个默认物理投影
+    if (item.textShadowColor) {
+      shadows.push(`${item.textShadowOffsetX ?? 2}px ${item.textShadowOffsetY ?? 2}px ${item.textShadowBlur ?? 8}px ${item.textShadowColor}`);
+    } else if (!item.textGlow) {
+      shadows.push('0 4px 16px rgba(0,0,0,0.5)'); // clean base shadow
+    }
+    
+    // 渲染发光层：利用多重重叠的大模糊高斯阴影来模拟辉光
+    if (item.textGlow) {
+      const gc = item.textGlowColor || item.fontColor || '#fff';
+      const gr = item.textGlowRadius ?? 20;
+      shadows.push(`0 0 ${gr}px ${gc}`, `0 0 ${gr * 2}px ${gc}80`);
+    }
+
+    return {
+      textAlign: (item.textAlign || 'center') as any,
+      color: item.fontColor || '#fff',
+      fontSize: item.fontSize || 36,
+      fontWeight: item.fontWeight === 'bold' ? 700 : 400,
+      fontFamily: item.fontFamily && item.fontFamily !== '默认' ? item.fontFamily : 'sans-serif',
+      textShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
+      WebkitTextStroke: item.textStrokeColor ? `${item.textStrokeWidth ?? 1}px ${item.textStrokeColor}` : undefined,
+      background: item.textBg || 'transparent',
+      padding: item.textBg && item.textBg !== 'transparent' ? `${item.textBgPadding ?? 12}px ${item.textBgPadding ? item.textBgPadding * 2 : 24}px` : 0,
+      borderRadius: item.textBgRadius ?? 8,
+      letterSpacing: `${item.textLetterSpacing ?? 0}px`,
+      lineHeight: item.textLineHeight ?? 1.2,
+      opacity: item.textOpacity ?? 1,
+      // 注意：Rotation 不在这里直接输出 transform，因为外层包围盒需要 translate(-50%, -50%)
+    };
+  };
+
+  // 莫兰迪影视级色盘封装组件
+  const renderPremiumColorPicker = (propKey: string, currentVal: string, defVal: string) => {
+    // 莫兰迪 + 经典色系 - 单行紧凑
+    const palette = [
+      '#FFFFFF', '#F5F5F5', '#1A1A1A', '#D9B8B5', '#C4A882', '#9BB4C4', '#BBCDBA', '#ABA3B2',
+      '#FF6B6B', '#E85D75', '#FF9F43', '#FECA57', '#48DBFB', '#0ABDE3', '#6C5CE7', '#A29BFE',
+      '#1DD1A1', '#10AC84', '#FF6348', '#2ED573', '#FFA502', '#3742FA'
+    ];
+    return (
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '2px 0' }}>
+        {palette.map(c => (
+          <div key={c} onClick={() => updateSelectedProperty(propKey as keyof TimelineItem, c)} title={c} style={{ width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer', border: currentVal === c ? '2px solid #6366F1' : '1px solid rgba(255,255,255,0.2)', boxShadow: currentVal === c ? '0 0 8px rgba(99,102,241,0.6)' : '0 1px 3px rgba(0,0,0,0.3)', transition: 'all 0.15s', transform: currentVal === c ? 'scale(1.1)' : 'scale(1)' }} />
+        ))}
+        {/* 彩虹兜底自由拾色器 */}
+        <div style={{ position: 'relative', width: 22, height: 22, borderRadius: '50%', overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.5)', background: 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)', cursor: 'pointer', marginLeft: 4 }} title="自由取色">
+          <input type="color" value={currentVal || defVal} onChange={e => updateSelectedProperty(propKey as keyof TimelineItem, e.target.value)} style={{ position: 'absolute', top: -10, left: -10, width: 44, height: 44, cursor: 'pointer', opacity: 0 }} />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <FluentProvider theme={webDarkTheme} style={{ height: '100vh', width: '100vw', background: 'transparent' }}>
       <div className={`ios-layout ${theme === 'win11' ? 'theme-win11' : ''}`} onClick={() => { setContextMenu(null); setShowShortcuts(false); setShowSortMenu(false); setShowMoreMenu(false); }}>
@@ -3064,62 +3219,120 @@ function App() {
                           ) : null}
                         </div>
                       )}
-                      {monitorSrc.currentItem?.overlayText && (
-                        <div
-                          key={`txt-${monitorSrc.currentItem.id}`}
-                          className={`text-anim-${monitorSrc.currentItem.textAnimation || 'none'}`}
-                          style={{
-                            position: 'absolute',
-                            top: `${monitorSrc.currentItem.textY ?? 50}%`,
-                            left: `${monitorSrc.currentItem.textX ?? 50}%`,
-                            transform: 'translate(-50%, -50%)',
-                            '--text-anim-dur': `${monitorSrc.currentItem.textAnimDuration ?? 0.6}s`,
-                            textAlign: (monitorSrc.currentItem.textAlign || 'center') as any,
-                            color: monitorSrc.currentItem.fontColor || '#fff',
-                            fontSize: monitorSrc.currentItem.fontSize || 36,
-                            fontWeight: monitorSrc.currentItem.fontWeight === 'bold' ? 700 : 400,
-                            fontFamily: monitorSrc.currentItem.fontFamily || 'sans-serif',
-                            textShadow: monitorSrc.currentItem.textGlow
-                              ? `0 0 20px ${monitorSrc.currentItem.textShadowColor || monitorSrc.currentItem.fontColor || '#fff'}, 0 0 40px ${monitorSrc.currentItem.textShadowColor || monitorSrc.currentItem.fontColor || '#fff'}60`
-                              : (monitorSrc.currentItem.textShadowColor ? `2px 2px 8px ${monitorSrc.currentItem.textShadowColor}` : '0 0 20px rgba(0,0,0,0.8)'),
-                            WebkitTextStroke: monitorSrc.currentItem.textStrokeColor
-                              ? `${monitorSrc.currentItem.textStrokeWidth || 1}px ${monitorSrc.currentItem.textStrokeColor}`
-                              : undefined,
-                            background: monitorSrc.currentItem.textBg || 'transparent',
-                            padding: monitorSrc.currentItem.textBg && monitorSrc.currentItem.textBg !== 'transparent' ? '12px 24px' : 0,
-                            borderRadius: 8,
-                            cursor: 'move',
-                            maxWidth: '80%',
-                            userSelect: 'none',
-                            zIndex: 10,
-                          } as React.CSSProperties}
-                          onMouseDown={(e) => {
-                            e.preventDefault(); e.stopPropagation();
-                            const container = e.currentTarget.parentElement;
-                            if (!container) return;
-                            const rect = container.getBoundingClientRect();
-                            const startX = e.clientX, startY = e.clientY;
-                            const startPctX = monitorSrc.currentItem?.textX ?? 50;
-                            const startPctY = monitorSrc.currentItem?.textY ?? 50;
-                            const onMove = (me: MouseEvent) => {
-                              const dx = ((me.clientX - startX) / rect.width) * 100;
-                              const dy = ((me.clientY - startY) / rect.height) * 100;
-                              setTimeline(p => p.map(t => t.id === monitorSrc.currentItem?.id
-                                ? { ...t, textX: Math.max(0, Math.min(100, startPctX + dx)), textY: Math.max(0, Math.min(100, startPctY + dy)) }
-                                : t));
-                            };
-                            const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-                            window.addEventListener('mousemove', onMove);
-                            window.addEventListener('mouseup', onUp);
-                          }}
-                        >{monitorSrc.currentItem.overlayText}</div>
-                      )}
+                      {(() => {
+                        const activeTexts: any[] = [];
+                        if (monitorSrc.currentItem) {
+                          if (monitorSrc.currentItem.overlayText) {
+                            activeTexts.push({ ...monitorSrc.currentItem, id: monitorSrc.currentItem.id + '_root', text: monitorSrc.currentItem.overlayText, isRoot: true });
+                          }
+                          if (monitorSrc.currentItem.textOverlays?.length) {
+                            activeTexts.push(...monitorSrc.currentItem.textOverlays);
+                          }
+                        }
+                        
+                        return activeTexts.map((txt, layerIdx) => {
+                          const isSelected = selectedTextIds.has(txt.id) || (txt.isRoot && selectedIds.has(monitorSrc.currentItem!.id) && selectedTextIds.size === 0);
+                          return (
+                            <div
+                              key={`tlayer-${txt.id}`}
+                              className={`text-anim-${txt.textAnimation || 'none'}`}
+                              style={{
+                                position: 'absolute',
+                                top: `${txt.textY ?? 50}%`,
+                                left: `${txt.textX ?? 50}%`,
+                                transform: `translate(-50%, -50%) rotate(${txt.textRotation ?? 0}deg)`,
+                                '--text-anim-dur': `${txt.textAnimDuration ?? 0.6}s`,
+                                cursor: 'move',
+                                maxWidth: '100%',
+                                userSelect: 'none',
+                                zIndex: 10 + layerIdx,
+                                outline: isSelected ? '2px dashed rgba(99,102,241,0.8)' : 'none',
+                                outlineOffset: '4px',
+                                padding: '4px 8px',
+                                ...computeTextStyles(txt as any)
+                              } as React.CSSProperties}
+                              onMouseDown={(e) => {
+                                e.preventDefault(); e.stopPropagation();
+                                
+                                // 处理 Alt 多选逻辑
+                                let newSelectedSet = new Set(selectedTextIds);
+                                if (e.altKey) {
+                                  if (newSelectedSet.has(txt.id)) {
+                                    newSelectedSet.delete(txt.id);
+                                  } else {
+                                    newSelectedSet.add(txt.id);
+                                  }
+                                } else {
+                                  if (!newSelectedSet.has(txt.id)) {
+                                    newSelectedSet = new Set([txt.id]);
+                                  }
+                                }
+                                setSelectedTextIds(newSelectedSet);
+                                
+                                const container = e.currentTarget.parentElement;
+                                if (!container) return;
+                                const rect = container.getBoundingClientRect();
+                                const startX = e.clientX, startY = e.clientY;
+                                
+                                // 提取所有被选中图层的初始坐标，用于群体位移
+                                const startCoords: Record<string, {x: number, y: number}> = {};
+                                if (txt.isRoot) {
+                                  startCoords[txt.id] = { x: txt.textX ?? 50, y: txt.textY ?? 50 };
+                                } else {
+                                  const textItemContext = monitorSrc.currentItem?.textOverlays || [];
+                                  textItemContext.forEach(layer => {
+                                    if (newSelectedSet.has(layer.id) || layer.id === txt.id) {
+                                      startCoords[layer.id] = { x: layer.textX ?? 50, y: layer.textY ?? 50 };
+                                    }
+                                  });
+                                }
+
+                                const onMove = (me: MouseEvent) => {
+                                  const dx = ((me.clientX - startX) / rect.width) * 100;
+                                  const dy = ((me.clientY - startY) / rect.height) * 100;
+                                  
+                                  if (txt.isRoot) {
+                                    setTimeline(p => p.map(t => t.id === monitorSrc.currentItem?.id
+                                      ? { ...t, textX: Math.max(0, Math.min(100, startCoords[txt.id].x + dx)), textY: Math.max(0, Math.min(100, startCoords[txt.id].y + dy)) }
+                                      : t));
+                                  } else {
+                                    setTimeline(p => p.map(t => {
+                                      if (t.id !== monitorSrc.currentItem?.id) return t;
+                                      return {
+                                        ...t,
+                                        textOverlays: (t.textOverlays || []).map(layer => {
+                                          if (startCoords[layer.id]) {
+                                            return { 
+                                              ...layer, 
+                                              textX: Math.max(0, Math.min(100, startCoords[layer.id].x + dx)), 
+                                              textY: Math.max(0, Math.min(100, startCoords[layer.id].y + dy)) 
+                                            };
+                                          }
+                                          return layer;
+                                        })
+                                      };
+                                    }));
+                                  }
+                                };
+                                const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+                                window.addEventListener('mousemove', onMove);
+                                window.addEventListener('mouseup', onUp);
+                              }}
+                            >{txt.text}</div>
+                          );
+                        });
+                      })()}
                     </div>
                   )
                 ) : (
                   /* 纯文字项预览（无图片背景） */
                   <div style={{ position: 'relative', width: '85%', height: '60%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 16, background: monitorSrc.currentItem?.textBg || 'rgba(30,30,30,0.9)', border: `2px solid ${monitorSrc.currentItem?.fontColor || '#fff'}30` }}>
-                    <div style={{ textAlign: (monitorSrc.currentItem?.textAlign || 'center') as any, color: monitorSrc.currentItem?.fontColor || '#fff', fontSize: monitorSrc.currentItem?.fontSize || 36, fontWeight: monitorSrc.currentItem?.fontWeight === 'bold' ? 700 : 400, fontFamily: monitorSrc.currentItem?.fontFamily || 'sans-serif', textShadow: monitorSrc.currentItem?.textGlow ? `0 0 20px ${monitorSrc.currentItem?.textShadowColor || monitorSrc.currentItem?.fontColor || '#fff'}, 0 0 40px ${monitorSrc.currentItem?.textShadowColor || monitorSrc.currentItem?.fontColor || '#fff'}60` : (monitorSrc.currentItem?.textShadowColor ? `2px 2px 8px ${monitorSrc.currentItem?.textShadowColor}` : '0 0 20px rgba(0,0,0,0.5)'), WebkitTextStroke: monitorSrc.currentItem?.textStrokeColor ? `${monitorSrc.currentItem?.textStrokeWidth || 1}px ${monitorSrc.currentItem?.textStrokeColor}` : undefined, padding: '24px 32px', maxWidth: '80%', wordBreak: 'break-word' as const }}>{monitorSrc.currentItem?.overlayText}</div>
+                    <div style={{ 
+                      maxWidth: '80%', 
+                      wordBreak: 'break-word' as const,
+                      transform: `rotate(${monitorSrc.currentItem?.textRotation ?? 0}deg)`,
+                      ...computeTextStyles(monitorSrc.currentItem)
+                    }}>{monitorSrc.currentItem?.overlayText}</div>
                   </div>
                 )
               ) : (
@@ -3562,169 +3775,300 @@ function App() {
                         )}
                       </div>
 
-                      {/* GROUP 2: 文字工坊 */}
-                      <div className="ios-prop-group" style={{ display: propertyTab === 'text' ? 'block' : 'none' }}>
-                        <Text weight="bold" style={{ color: '#34D399', fontSize: 11, marginBottom: 2, display: 'block' }}>⌨️ 文字工坊</Text>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                          <Input value={selectedItem?.overlayText || ''} onChange={(_e, data) => updateSelectedProperty('overlayText', data.value)} placeholder="输入文字..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '3px 6px', width: '100%', fontSize: 11 }} />
+                      {/* GROUP 2: 文字工坊 - 影视级重构版 */}
+                      <div className="ios-prop-group" style={{ display: propertyTab === 'text' ? 'flex' : 'none', flexDirection: 'column', gap: 16, padding: '0', background: 'transparent', border: 'none' }}>
+                        
+                        {/* 模块一：基础排版区域 */}
+                        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1 }}>基础排版</span>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button className="ios-hover-scale" style={{ minWidth: 0, padding: '0 12px', height: 26, fontSize: 12, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, boxShadow: '0 2px 8px rgba(99,102,241,0.4)' }} onClick={() => {
+                                if (!selectedItem) return;
+                                commitSnapshotNow();
+                                const newId = `txt_${Date.now()}_${Math.random().toString(36).substr(2,4)}`;
+                                setTimeline(prev => prev.map(t => {
+                                  if (!selectedIds.has(t.id)) return t;
+                                  return {
+                                    ...t,
+                                    textOverlays: [...(t.textOverlays || []), { id: newId, text: '新建文本层', fontSize: Math.floor(Math.random()*15)+20, fontColor: '#ffffff', fontFamily: 'sans-serif', textX: 50 + (Math.random()*10 - 5), textY: 50 + (Math.random()*10 - 5), textAlign: 'center' }]
+                                  };
+                                }));
+                                setSelectedTextIds(new Set([newId]));
+                              }}>✨ 插入文本图层</button>
+                            </div>
+                          </div>
 
-                          {/* 字体 + 字号一行 */}
-                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                            <select
+                          {(() => {
+                            const getActiveTextProp = (key: string, defVal: any) => {
+                              if (!selectedItem) return defVal;
+                              if (selectedTextIds.size > 0) {
+                                const activeOverlays = (selectedItem.textOverlays || []).filter(o => selectedTextIds.has(o.id));
+                                if (activeOverlays.length > 0) {
+                                  let k = key;
+                                  if (key === 'overlayText') k = 'text';
+                                  return (activeOverlays[0] as any)[k] !== undefined ? (activeOverlays[0] as any)[k] : defVal;
+                                }
+                              }
+                              return (selectedItem as any)[key] !== undefined ? (selectedItem as any)[key] : defVal;
+                            };
+
+                            const activeOverlays = (selectedItem?.textOverlays || []).filter(o => selectedTextIds.has(o.id));
+                            const displayVal = activeOverlays.length > 0 ? (activeOverlays.every(o => o.text === activeOverlays[0].text) ? activeOverlays[0].text : '(多选状态 - 分别保留原文本)') : (selectedItem?.overlayText || '');
+                            
+                            return (
+                              <>
+                                <textarea 
+                                  value={displayVal} 
+                                  onChange={(e) => updateSelectedProperty('overlayText', e.target.value)} 
+                                  placeholder={activeOverlays.length > 0 ? "输入选中文本..." : "输入片头字幕、标题或解说（全局备用）..."} 
+                                  style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '12px 14px', width: '100%', boxSizing: 'border-box', fontSize: 13, color: '#fff', outline: 'none', resize: 'vertical', minHeight: 70, fontFamily: 'inherit', lineHeight: 1.5 }} 
+                                />
+
+                                {/* 极简色盘挂载：字色 */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 0' }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>文字主色 (Font Color)</span>
+                                  {renderPremiumColorPicker('fontColor', getActiveTextProp('fontColor', '#FFFFFF'), '#FFFFFF')}
+                                </div>
+
+                          {/* 字体配置 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <ProFontSelect
                               value={selectedItem?.fontFamily || 'sans-serif'}
-                              onChange={e => updateSelectedProperty('fontFamily', e.target.value)}
-                              style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 4px', color: '#fff', fontSize: 10, outline: 'none', cursor: 'pointer', minWidth: 0 }}
-                            >
-                              <optgroup label="常用" style={{ background: '#1e1e2e' }}>
-                                <option value="sans-serif">默认</option>
-                                <option value="'Microsoft YaHei', sans-serif">微软雅黑</option>
-                                <option value="'SimHei', sans-serif">黑体</option>
-                                <option value="'SimSun', serif">宋体</option>
-                                <option value="'KaiTi', serif">楷体</option>
-                                <option value="'FangSong', serif">仿宋</option>
-                              </optgroup>
-                              <optgroup label="艺术字体" style={{ background: '#1e1e2e' }}>
-                                <option value="'STXingkai', cursive">华文行楷</option>
-                                <option value="'STCaiyun', cursive">华文彩云</option>
-                                <option value="'STHupo', cursive">华文琥珀</option>
-                                <option value="'STLiti', serif">华文隶书</option>
-                                <option value="'STXinwei', serif">华文新魏</option>
-                                <option value="'YouYuan', sans-serif">幼圆</option>
-                                <option value="'LiSu', serif">隶书</option>
-                                <option value="'STZhongsong', serif">华文中宋</option>
-                                <option value="'FZShuTi', serif">方正舒体</option>
-                                <option value="'FZYaoTi', serif">方正姚体</option>
-                              </optgroup>
-                              <optgroup label="英文字体" style={{ background: '#1e1e2e' }}>
-                                <option value="'Impact', sans-serif">Impact</option>
-                                <option value="'Georgia', serif">Georgia</option>
-                                <option value="'Palatino Linotype', serif">Palatino</option>
-                                <option value="'Comic Sans MS', cursive">Comic Sans</option>
-                                <option value="'Lucida Console', monospace">Lucida Console</option>
-                                <option value="'Brush Script MT', cursive">Brush Script</option>
-                                <option value="'Copperplate Gothic', serif">Copperplate</option>
-                                <option value="'Bookman Old Style', serif">Bookman</option>
-                              </optgroup>
-                            </select>
-                            <input type="number" value={selectedItem?.fontSize || 24} onChange={e => updateSelectedProperty('fontSize', Number(e.target.value))} min={8} max={200} style={{ width: 40, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 4, padding: '2px 4px', color: '#fff', fontSize: 10, outline: 'none', textAlign: 'center' }} />
+                              onChange={v => updateSelectedProperty('fontFamily', v)}
+                              optGroups={[
+                                { label: '✨ 系统预装', options: [
+                                  { label: '默认黑体', value: 'sans-serif' },
+                                  { label: '微软雅黑', value: "'Microsoft YaHei', sans-serif" },
+                                  { label: '黑体 SimHei', value: "'SimHei', sans-serif" },
+                                  { label: '宋体 SimSun', value: "'SimSun', serif" },
+                                  { label: '楷体 KaiTi', value: "'KaiTi', serif" },
+                                  { label: '华文行楷', value: "'STXingkai', cursive" },
+                                  { label: '华文隶书', value: "'STLiti', serif" },
+                                  { label: '华文彩云', value: "'STCaiyun', cursive" },
+                                  { label: '幼圆', value: "'YouYuan', sans-serif" },
+                                ]},
+                                { label: '🖌️ 云端书法 (免安装即用)', options: [
+                                  { label: '志莽行书 · 行草奔放', value: "'Zhi Mang Xing', cursive" },
+                                  { label: '马善政楷书 · 端庄大气', value: "'Ma Shan Zheng', cursive" },
+                                  { label: '龙藏体 · 古朴苍劲', value: "'Long Cang', cursive" },
+                                  { label: '流建毛草 · 飘逸草书', value: "'Liu Jian Mao Cao', cursive" },
+                                  { label: '站酷庆科黄油体', value: "'ZCOOL QingKe HuangYou', cursive" },
+                                  { label: '站酷快乐体', value: "'ZCOOL KuaiLe', cursive" },
+                                  { label: '站酷小薇体', value: "'ZCOOL XiaoWei', serif" },
+                                ]},
+                                { label: '🎨 西文艺术', options: [
+                                  { label: 'Impact 海报体', value: "'Impact', sans-serif" },
+                                  { label: 'Georgia 优雅衬线', value: "'Georgia', serif" },
+                                  { label: 'Courier 打字机', value: "'Courier New', monospace" },
+                                  { label: 'Comic Sans 手写', value: "'Comic Sans MS', cursive" },
+                                ]}
+                              ]}
+                            />
+
+                            {/* 对齐与格式控制栏 */}
+                            <div style={{ display: 'flex', gap: 6, background: 'rgba(0,0,0,0.2)', padding: 6, borderRadius: 10 }}>
+                              <div onClick={() => updateSelectedProperty('fontWeight', selectedItem?.fontWeight === 'bold' ? 'normal' : 'bold')} style={{ flex: 1, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selectedItem?.fontWeight === 'bold' ? 'rgba(99,102,241,0.2)' : 'transparent', color: selectedItem?.fontWeight === 'bold' ? '#fff' : 'rgba(255,255,255,0.6)', fontWeight: 800, fontSize: 13, transition: '0.2s' }}>B</div>
+                              <div onClick={() => updateSelectedProperty('fontWeight', selectedItem?.fontWeight === 'italic' ? 'normal' : 'italic')} style={{ flex: 1, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selectedItem?.fontWeight === 'italic' ? 'rgba(99,102,241,0.2)' : 'transparent', color: selectedItem?.fontWeight === 'italic' ? '#fff' : 'rgba(255,255,255,0.6)', fontStyle: 'italic', fontSize: 13, transition: '0.2s' }}>I</div>
+                              <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', alignSelf: 'center', margin: '0 4px' }} />
+                              {(['left', 'center', 'right'] as const).map(a => (
+                                <div key={a} onClick={() => updateSelectedProperty('textAlign', a)} style={{ flex: 1, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: (selectedItem?.textAlign || 'center') === a ? 'rgba(255,255,255,0.1)' : 'transparent', color: (selectedItem?.textAlign || 'center') === a ? '#fff' : 'rgba(255,255,255,0.5)', fontSize: 11, transition: '0.2s' }}>
+                                  {a === 'left' ? '←' : a === 'center' ? '—' : '→'}
+                                </div>
+                              ))}
+                            </div>
                           </div>
 
-                          {/* 粗体/斜体/对齐 + 颜色 一行 */}
-                          <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                            <div onClick={() => updateSelectedProperty('fontWeight', selectedItem?.fontWeight === 'bold' ? 'normal' : 'bold')} style={{ width: 24, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selectedItem?.fontWeight === 'bold' ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontWeight: 800, fontSize: 11, color: '#fff' }}>B</div>
-                            <div onClick={() => updateSelectedProperty('fontWeight', selectedItem?.fontWeight === 'italic' ? 'normal' : 'italic')} style={{ width: 24, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selectedItem?.fontWeight === 'italic' ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontStyle: 'italic', fontSize: 11, color: '#fff' }}>I</div>
-                            {(['left', 'center', 'right'] as const).map(a => (
-                              <div key={a} onClick={() => updateSelectedProperty('textAlign', a)} style={{ width: 24, height: 24, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: (selectedItem?.textAlign || 'center') === a ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', fontSize: 9, color: '#fff' }}>
-                                {a === 'left' ? '◧' : a === 'center' ? '◻' : '◨'}
-                              </div>
+                                {/* 专业排版无极滑块矩阵 */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 8 }}>
+                                  {([
+                                    ['fontSize', '字号', 8, 200, 1, 36],
+                                    ['textLetterSpacing', '字偶距', -10, 50, 1, 0],
+                                    ['textLineHeight', '行间距', 0.5, 3.0, 0.1, 1.2],
+                                    ['textOpacity', '不透明度', 0, 1, 0.05, 1],
+                                    ['textRotation', '旋转轴向', -180, 180, 1, 0]
+                                  ]).map(([key, label, min, max, step, defVal]: any) => {
+                                    const val = getActiveTextProp(key, defVal);
+                                    return (
+                                      <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>{label}</span>
+                                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.9)', fontVariantNumeric: 'tabular-nums' }}>{Number(val).toFixed(step < 1 ? 1 : 0)}</span>
+                                        </div>
+                                        <ProSlider min={min} max={max} step={step} value={val} isCentered={key === 'textRotation' || key === 'textLetterSpacing'} centerValue={0} onChange={d => updatePropertyWithUndo(key, d)} onMouseUp={finalizeSliderUndo} />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+
+                        {/* 模块二：场控动效（入场时间线）调至排版之下 */}
+                        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1 }}>🎬 入场时间线</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                            {([
+                              ['none', '🚫 刚性瞬间'], ['fadeIn', '☁️ 电影淡入'], ['slideUp', '↑ 稳重上升'],
+                              ['typewriter', '⌨️ 原型打字'], ['zoom', '🔍 夸张冲刺'], ['bounce', '⬆ 俏皮弹跳'],
+                              ['slideLeft', '→ 左侧划入'], ['slideRight', '← 右侧划入'], ['rotateIn', '🌀 炫酷旋入'],
+                              ['flipInX', '🔁 翻转入场'], ['zoomInDown', '🛸 空降缩放'], ['jackInTheBox', '📦 魔盒弹出']
+                            ] as [string, string][]).map(([val, label]) => (
+                              <div
+                                key={val}
+                                onClick={() => updateSelectedProperty('textAnimation', val)}
+                                style={{
+                                  padding: '8px 4px', borderRadius: 8, cursor: 'pointer', textAlign: 'center',
+                                  fontSize: 10, fontWeight: (selectedItem?.textAnimation || 'none') === val ? 700 : 500,
+                                  color: (selectedItem?.textAnimation || 'none') === val ? '#fff' : 'rgba(255,255,255,0.5)',
+                                  background: (selectedItem?.textAnimation || 'none') === val ? 'rgba(99,102,241,0.3)' : 'rgba(0,0,0,0.2)',
+                                  border: `1px solid ${(selectedItem?.textAnimation || 'none') === val ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.03)'}`,
+                                  transition: '0.2s'
+                                }}
+                              >{label}</div>
                             ))}
-                            <div style={{ flex: 1 }} />
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                              <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>色</span>
-                              <input type="color" value={selectedItem?.fontColor || '#FFFFFF'} onChange={e => updateSelectedProperty('fontColor', e.target.value)} style={{ width: 24, height: 24, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }} />
-                            </div>
                           </div>
-
-                          {/* 艺术字预设 5列 */}
-                          <div>
-                            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 2 }}>艺术字预设</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 3 }}>
-                              {([
-                                { label: '霓虹', color: '#00FFFF', shadow: '#00FFFF', stroke: '', glow: true, font: 'sans-serif' },
-                                { label: '金属', color: '#FFD700', shadow: '#B8860B', stroke: '#DAA520', glow: false, font: "'Impact', sans-serif" },
-                                { label: '冰雪', color: '#E0F4FF', shadow: '#4FC3F7', stroke: '#81D4FA', glow: true, font: 'serif' },
-                                { label: '烈焰', color: '#FF6B35', shadow: '#FF0000', stroke: '#FFD700', glow: true, font: "'SimHei', sans-serif" },
-                                { label: '科技', color: '#00FF88', shadow: '#00FF88', stroke: '', glow: true, font: 'monospace' },
-                                { label: '优雅', color: '#FFFFFF', shadow: 'rgba(0,0,0,0.5)', stroke: '', glow: false, font: "'KaiTi', serif" },
-                                { label: '复古', color: '#D4A574', shadow: '#8B4513', stroke: '', glow: false, font: 'serif' },
-                                { label: '浪漫', color: '#FF69B4', shadow: '#FF1493', stroke: '', glow: true, font: "'STXingkai', cursive" },
-                                { label: '暗夜', color: '#9370DB', shadow: '#4B0082', stroke: '#6A0DAD', glow: true, font: "'STHupo', cursive" },
-                                { label: '朋克', color: '#FF00FF', shadow: '#FF00FF', stroke: '#00FF00', glow: true, font: "'Impact', sans-serif" },
-                                { label: '水墨', color: '#2F2F2F', shadow: 'rgba(0,0,0,0.3)', stroke: '', glow: false, font: "'STXingkai', cursive" },
-                                { label: '彩虹', color: '#FF6B6B', shadow: '#FFD93D', stroke: '#6BCB77', glow: true, font: "'STCaiyun', cursive" },
-                                { label: '极光', color: '#7DF9FF', shadow: '#00CED1', stroke: '#20B2AA', glow: true, font: 'sans-serif' },
-                                { label: '古典', color: '#8B7355', shadow: '#5C4033', stroke: '#DEB887', glow: false, font: "'STLiti', serif" },
-                                { label: '清除', color: '#FFFFFF', shadow: '', stroke: '', glow: false, font: 'sans-serif' },
-                              ]).map(preset => (
-                                <div
-                                  key={preset.label}
-                                  onClick={() => {
-                                    commitSnapshotNow();
-                                    setTimeline(p => p.map(t => selectedIds.has(t.id) ? {
-                                      ...t,
-                                      fontColor: preset.color,
-                                      textShadowColor: preset.shadow,
-                                      textStrokeColor: preset.stroke,
-                                      textGlow: preset.glow,
-                                      fontFamily: preset.font,
-                                    } : t));
-                                  }}
-                                  style={{ padding: '3px 1px', borderRadius: 4, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', textAlign: 'center', fontSize: 9, color: preset.color, fontWeight: 600, transition: 'all 0.12s', textShadow: preset.shadow ? `0 0 6px ${preset.shadow}` : 'none', lineHeight: '1.2' }}
-                                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = preset.color + '60'; (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
-                                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
-                                >{preset.label}</div>
-                              ))}
+                          {(selectedItem?.textAnimation && selectedItem.textAnimation !== 'none') && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>动效行进总时长</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{(selectedItem?.textAnimDuration ?? 0.6).toFixed(1)}s</span></div>
+                              <ProSlider min={0.1} max={5.0} step={0.1} value={selectedItem?.textAnimDuration ?? 0.6} onChange={d => updatePropertyWithUndo('textAnimDuration', d)} onMouseUp={finalizeSliderUndo} />
                             </div>
-                          </div>
+                          )}
+                        </div>
 
-                          {/* 文字效果 */}
-                          <div>
-                            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 2 }}>效果</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 3 }}>
-                              <div onClick={() => updateSelectedProperty('textGlow', !selectedItem?.textGlow)} style={{ padding: '3px 1px', borderRadius: 4, background: selectedItem?.textGlow ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${selectedItem?.textGlow ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`, cursor: 'pointer', textAlign: 'center', fontSize: 9, color: '#fff' }}>✨发光</div>
-                              <div onClick={() => updateSelectedProperty('textStrokeColor', selectedItem?.textStrokeColor ? '' : '#000000')} style={{ padding: '3px 1px', borderRadius: 4, background: selectedItem?.textStrokeColor ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${selectedItem?.textStrokeColor ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`, cursor: 'pointer', textAlign: 'center', fontSize: 9, color: '#fff' }}>🔲描边</div>
-                              <div onClick={() => updateSelectedProperty('textShadowColor', selectedItem?.textShadowColor ? '' : 'rgba(0,0,0,0.8)')} style={{ padding: '3px 1px', borderRadius: 4, background: selectedItem?.textShadowColor ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${selectedItem?.textShadowColor ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`, cursor: 'pointer', textAlign: 'center', fontSize: 9, color: '#fff' }}>🌑阴影</div>
-                              <div onClick={() => updateSelectedProperty('textBg', selectedItem?.textBg && selectedItem.textBg !== 'transparent' ? 'transparent' : 'rgba(0,0,0,0.5)')} style={{ padding: '3px 1px', borderRadius: 4, background: selectedItem?.textBg && selectedItem.textBg !== 'transparent' ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${selectedItem?.textBg && selectedItem.textBg !== 'transparent' ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`, cursor: 'pointer', textAlign: 'center', fontSize: 9, color: '#fff' }}>◼底板</div>
-                            </div>
-                            {selectedItem?.textStrokeColor ? (
-                              <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 3 }}>
-                                <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.35)', flexShrink: 0 }}>描边{selectedItem?.textStrokeWidth || 1}px</span>
-                                <input type="range" min={0.5} max={6} step={0.5} value={selectedItem?.textStrokeWidth || 1} onChange={e => updateSelectedProperty('textStrokeWidth', Number(e.target.value))} style={{ flex: 1, height: 3, accentColor: '#6366F1' }} />
-                                <input type="color" value={selectedItem?.textStrokeColor || '#000000'} onChange={e => updateSelectedProperty('textStrokeColor', e.target.value)} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }} />
+                        {/* 模块三：特效涂装系统（发光、阴影、描边、底板高度定制） */}
+                        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1, marginBottom: 4 }}>高阶特效容器</span>
+
+                          {/* 涂装子模块：发光 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateSelectedProperty('textGlow', !selectedItem?.textGlow)}>
+                              <span style={{ fontSize: 12, color: selectedItem?.textGlow ? '#6EE7B7' : 'rgba(255,255,255,0.6)', fontWeight: selectedItem?.textGlow ? 600 : 400 }}>✨ 霓虹发光 (Glow)</span>
+                              <div style={{ width: 36, height: 20, borderRadius: 10, background: selectedItem?.textGlow ? '#34D399' : 'rgba(255,255,255,0.1)', position: 'relative' }}>
+                                <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: selectedItem?.textGlow ? 18 : 2, transition: '0.2s' }} />
                               </div>
-                            ) : null}
-                          </div>
-
-                          {/* 入场动画 */}
-                          <div>
-                            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', marginBottom: 3 }}>🎬 入场动画</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3, marginBottom: 4 }}>
-                              {([
-                                ['none', '🚫 无'],
-                                ['fadeIn', '☁️ 淡入'],
-                                ['slideLeft', '→ 左飘入'],
-                                ['slideRight', '← 右飘入'],
-                                ['slideUp', '↑ 下飘入'],
-                                ['slideDown', '↓ 上飘入'],
-                                ['zoom', '🔍 缩放弹出'],
-                                ['bounce', '⬆ 弹跳落入'],
-                                ['typewriter', '⌨️ 打字机'],
-                                ['rotateIn', '🌀 旋转飘入'],
-                              ] as [string, string][]).map(([val, label]) => (
-                                <div
-                                  key={val}
-                                  onClick={() => updateSelectedProperty('textAnimation', val)}
-                                  style={{
-                                    padding: '3px 2px', borderRadius: 5, cursor: 'pointer', textAlign: 'center',
-                                    fontSize: 9, fontWeight: (selectedItem?.textAnimation || 'none') === val ? 700 : 400,
-                                    color: (selectedItem?.textAnimation || 'none') === val ? '#fff' : 'rgba(255,255,255,0.55)',
-                                    background: (selectedItem?.textAnimation || 'none') === val ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.03)',
-                                    border: `1px solid ${(selectedItem?.textAnimation || 'none') === val ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.06)'}`,
-                                    transition: 'all 0.15s',
-                                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                                  }}
-                                >{label}</div>
-                              ))}
                             </div>
-                            {(selectedItem?.textAnimation && selectedItem.textAnimation !== 'none') && (
-                              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', flexShrink: 0 }}>动画 {(selectedItem?.textAnimDuration ?? 0.6).toFixed(1)}s</span>
-                                <input type="range" min={0.2} max={2.0} step={0.1}
-                                  value={selectedItem?.textAnimDuration ?? 0.6}
-                                  onChange={e => updateSelectedProperty('textAnimDuration', Number(e.target.value))}
-                                  style={{ flex: 1, height: 3, accentColor: '#6366F1' }} />
+                            {selectedItem?.textGlow && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>发光光谱色</span>
+                                  {renderPremiumColorPicker('textGlowColor', selectedItem?.textGlowColor || selectedItem?.fontColor || '#FFFFFF', selectedItem?.fontColor || '#FFFFFF')}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>扩散半径</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{selectedItem?.textGlowRadius ?? 20}</span></div>
+                                  <ProSlider min={0} max={100} step={1} value={selectedItem?.textGlowRadius ?? 20} onChange={d => updatePropertyWithUndo('textGlowRadius', d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
                               </div>
                             )}
+                          </div>
+
+                          {/* 涂装子模块：阴影 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateSelectedProperty('textShadowColor', selectedItem?.textShadowColor ? '' : 'rgba(0,0,0,0.8)')}>
+                              <span style={{ fontSize: 12, color: selectedItem?.textShadowColor ? '#A78BFA' : 'rgba(255,255,255,0.6)', fontWeight: selectedItem?.textShadowColor ? 600 : 400 }}>🌑 物理投影 (Shadow)</span>
+                              <div style={{ width: 36, height: 20, borderRadius: 10, background: selectedItem?.textShadowColor ? '#8B5CF6' : 'rgba(255,255,255,0.1)', position: 'relative' }}>
+                                <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: selectedItem?.textShadowColor ? 18 : 2, transition: '0.2s' }} />
+                              </div>
+                            </div>
+                            {selectedItem?.textShadowColor && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>阴影深度色</span>
+                                  {renderPremiumColorPicker('textShadowColor', selectedItem?.textShadowColor?.length === 7 ? selectedItem.textShadowColor : '#000000', '#000000')}
+                                </div>
+                                {([['textShadowBlur', '柔焦模糊度', 0, 50, 1, 8], ['textShadowOffsetX', '水平光偏 X', -50, 50, 1, 2], ['textShadowOffsetY', '垂直光偏 Y', -50, 50, 1, 2]] as any).map(([key, label, min, max, step, defVal]: any) => (
+                                  <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{label}</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{((selectedItem as any)?.[key] ?? defVal)}</span></div>
+                                    <ProSlider min={min} max={max} step={step} value={(selectedItem as any)?.[key] ?? defVal} isCentered={min < 0} centerValue={0} onChange={d => updatePropertyWithUndo(key, d)} onMouseUp={finalizeSliderUndo} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 涂装子模块：描边 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateSelectedProperty('textStrokeColor', selectedItem?.textStrokeColor ? '' : '#000000')}>
+                              <span style={{ fontSize: 12, color: selectedItem?.textStrokeColor ? '#F472B6' : 'rgba(255,255,255,0.6)', fontWeight: selectedItem?.textStrokeColor ? 600 : 400 }}>🔲 坚实描边 (Stroke)</span>
+                              <div style={{ width: 36, height: 20, borderRadius: 10, background: selectedItem?.textStrokeColor ? '#EC4899' : 'rgba(255,255,255,0.1)', position: 'relative' }}>
+                                <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: selectedItem?.textStrokeColor ? 18 : 2, transition: '0.2s' }} />
+                              </div>
+                            </div>
+                            {selectedItem?.textStrokeColor && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>边界色彩</span>
+                                  {renderPremiumColorPicker('textStrokeColor', selectedItem?.textStrokeColor || '#000000', '#000000')}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>边界粗细</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{selectedItem?.textStrokeWidth ?? 1}px</span></div>
+                                  <ProSlider min={0.5} max={15} step={0.5} value={selectedItem?.textStrokeWidth ?? 1} onChange={d => updatePropertyWithUndo('textStrokeWidth', d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 涂装子模块：底板 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateSelectedProperty('textBg', selectedItem?.textBg && selectedItem.textBg !== 'transparent' ? 'transparent' : 'rgba(0,0,0,0.5)')}>
+                              <span style={{ fontSize: 12, color: (selectedItem?.textBg && selectedItem.textBg !== 'transparent') ? '#60A5FA' : 'rgba(255,255,255,0.6)', fontWeight: (selectedItem?.textBg && selectedItem.textBg !== 'transparent') ? 600 : 400 }}>◼ 遮罩底板 (Plate)</span>
+                              <div style={{ width: 36, height: 20, borderRadius: 10, background: (selectedItem?.textBg && selectedItem.textBg !== 'transparent') ? '#3B82F6' : 'rgba(255,255,255,0.1)', position: 'relative' }}>
+                                <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: (selectedItem?.textBg && selectedItem.textBg !== 'transparent') ? 18 : 2, transition: '0.2s' }} />
+                              </div>
+                            </div>
+                            {(selectedItem?.textBg && selectedItem.textBg !== 'transparent') && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>填充材质色</span>
+                                  {renderPremiumColorPicker('textBg', selectedItem?.textBg?.length === 7 ? selectedItem.textBg : '#1A1A1A', '#1A1A1A')}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>容器内边距</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{selectedItem?.textBgPadding ?? 12}px</span></div>
+                                  <ProSlider min={0} max={60} step={1} value={selectedItem?.textBgPadding ?? 12} onChange={d => updatePropertyWithUndo('textBgPadding', d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>裁剪圆角</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{selectedItem?.textBgRadius ?? 8}px</span></div>
+                                  <ProSlider min={0} max={100} step={1} value={selectedItem?.textBgRadius ?? 8} onChange={d => updatePropertyWithUndo('textBgRadius', d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 模块四：艺术字材质预设（展示全部平铺态） */}
+                        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1 }}>一键应用画廊</span>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 6 }}>
+                            {([
+                              { label: '清除', color: '#FFFFFF', shadow: '', stroke: '', glow: false, font: 'sans-serif' },
+                              { label: '浪漫霓虹', color: '#00FFFF', shadow: '#00FFFF', stroke: '', glow: true, font: 'sans-serif' },
+                              { label: '重金属', color: '#FFD700', shadow: '#B8860B', stroke: '#DAA520', glow: false, font: "'Impact', sans-serif" },
+                              { label: '国风水墨', color: '#2F2F2F', shadow: 'rgba(0,0,0,0.3)', stroke: '', glow: false, font: "'STXingkai', cursive" },
+                              { label: '赛博朋克', color: '#FF00FF', shadow: '#FF00FF', stroke: '#00FF00', glow: true, font: "'Impact', sans-serif" },
+                              { label: '烈焰红玫', color: '#FF6B35', shadow: '#FF0000', stroke: '#FFD700', glow: true, font: "'SimHei', sans-serif" },
+                              { label: '高冷极冰', color: '#E0F4FF', shadow: '#4FC3F7', stroke: '#81D4FA', glow: true, font: 'serif' },
+                              { label: '古典碑帖', color: '#8B7355', shadow: '#5C4033', stroke: '#DEB887', glow: false, font: "'STLiti', serif" },
+                              { label: '毒液侵袭', color: '#9D00FF', shadow: '#4A00E0', stroke: '#00B4DB', glow: true, font: "'Impact', sans-serif" },
+                              { label: '血金王座', color: '#8B0000', shadow: '#3E0000', stroke: '#FFD700', glow: false, font: "'Microsoft YaHei', sans-serif" },
+                              { label: '纯享豆沙', color: '#D9B8B5', shadow: '', stroke: '', glow: false, font: "'KaiTi', serif" },
+                            ]).map(preset => (
+                              <div
+                                key={preset.label}
+                                onClick={() => {
+                                  commitSnapshotNow();
+                                  setTimeline(p => p.map(t => selectedIds.has(t.id) ? {
+                                    ...t,
+                                    fontColor: preset.color,
+                                    textShadowColor: preset.shadow,
+                                    textStrokeColor: preset.stroke,
+                                    textGlow: preset.glow,
+                                    fontFamily: preset.font,
+                                  } : t));
+                                }}
+                                style={{ padding: '6px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', textAlign: 'center', fontSize: 13, color: preset.color, fontWeight: 800, textShadow: preset.shadow ? `0 0 8px ${preset.shadow}` : 'none', letterSpacing: 1 }}
+                              >{preset.label}</div>
+                            ))}
                           </div>
                         </div>
                       </div>

@@ -16,6 +16,35 @@ export interface AudioTimelineItem {
   cutPoints?: number[];      // 在夹内的时间位置 (0~duration)，左闭右开
   selectedRegions?: number[]; // 被选中待删除的区域索引
 }
+export interface TextOverlay {
+  id: string; // 唯一文本ID
+  text: string;
+  fontFamily?: string;
+  fontColor?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  textAlign?: 'left' | 'center' | 'right';
+  textOpacity?: number;
+  textLetterSpacing?: number;
+  textLineHeight?: number;
+  textRotation?: number;
+  textX?: number;
+  textY?: number;
+  textBg?: string;     
+  textBgPadding?: number; 
+  textBgRadius?: number; 
+  textShadowColor?: string;  
+  textShadowBlur?: number;   
+  textShadowOffsetX?: number; 
+  textShadowOffsetY?: number; 
+  textStrokeColor?: string;  
+  textStrokeWidth?: number;  
+  textGlow?: boolean;        
+  textGlowColor?: string;    
+  textGlowRadius?: number;   
+  textAnimation?: string; 
+  textAnimDuration?: number;
+}
 
 export interface TimelineItem {
   id: string;
@@ -52,15 +81,29 @@ export interface TimelineItem {
   fontFamily?: string; // 字体
   textAlign?: 'left' | 'center' | 'right'; // 对齐方式
   textBg?: string;     // 文字背景色 (rgba)
+  textBgPadding?: number; // 文字底板内边距
+  textBgRadius?: number; // 文字底板圆角
   textShadowColor?: string;  // 文字阴影颜色
+  textShadowBlur?: number;   // 文字阴影模糊半径
+  textShadowOffsetX?: number; // 文字阴影 X 偏移
+  textShadowOffsetY?: number; // 文字阴影 Y 偏移
   textStrokeColor?: string;  // 文字描边颜色
   textStrokeWidth?: number;  // 文字描边宽度
-  textGlow?: boolean;        // 文字发光
+  textGlow?: boolean;        // 文字发光开关
+  textGlowColor?: string;    // 文字发光颜色
+  textGlowRadius?: number;   // 文字发光半径
+  textLetterSpacing?: number;// 字间距
+  textLineHeight?: number;   // 行间距
+  textOpacity?: number;      // 不透明度 (0-1)
+  textRotation?: number;     // 文字旋转角度
   textX?: number;            // 文字X位置 (0-100%, 默认50)
   textY?: number;            // 文字Y位置 (0-100%, 默认50)
   cropPos?: Crop;
   textAnimation?: string; // 文字入场动画，如 'fadeIn' | 'slideLeft' | 'slideUp' | 'zoom' | 'bounce' | 'typewriter' 等
   textAnimDuration?: number; // 动画时长 (秒，默认 0.6)
+  
+  // 新引入的多图层复数文字组件系统
+  textOverlays?: TextOverlay[];
   animation?: string; // 图片入场动效 / 镜头推进
   fillMode?: 'contain' | 'cover'; // 画面填充模式
   overrides?: string[]; // 被手动修改过的字段名列表（全局覆盖模型）
