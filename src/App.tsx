@@ -6,7 +6,6 @@ import {
   webDarkTheme,
   Button,
   Text,
-  Slider,
   Field,
   Input,
 } from "@fluentui/react-components";
@@ -22,79 +21,47 @@ import 'react-image-crop/dist/ReactCrop.css';
 import "./App.css";
 import "./Win11Theme.css";
 
-// ─── 类型定义 ────────────────────────────────────────────────────────
-interface Resource { id: string; name: string; path: string; type: 'image' | 'audio' | 'video'; focusX?: number; focusY?: number; hasFace?: boolean; }
+import { Resource, AudioTimelineItem, TimelineItem, GlobalDefaults, GLOBAL_DEFAULTS_INIT, ANIMATION_PRESETS } from './types';
 
-interface AudioTimelineItem {
-  id: string;
-  resourceId: string;
-  timelineStart: number;
-  startOffset: number;
-  duration: number;
-  volume: number;
-  fadeIn?: number;   // 淡入时长 (秒，默认0)
-  fadeOut?: number;  // 淡出时长 (秒，默认0)
-  // 剪辑点系统
-  cutPoints?: number[];      // 在夹内的时间位置 (0~duration)，左闭右开
-  selectedRegions?: number[]; // 被选中待删除的区域索引
-}
+// ─── 用户自定义无极大平层滑块 ────────────────────────────────────────────────────────
+const ProSlider = memo(({
+  min, max, step, value, onChange, isCentered = false, centerValue = 0, gradient, style, onMouseUp
+}: {
+  min: number; max: number; step: number; value: number; onChange: (val: number) => void;
+  isCentered?: boolean; centerValue?: number; gradient?: string; style?: React.CSSProperties; onMouseUp?: () => void;
+}) => {
+  const percentage = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+  let fillStyle = {};
+  if (!gradient) {
+    if (isCentered) {
+      const zeroPercentage = Math.max(0, Math.min(100, ((centerValue - min) / (max - min)) * 100));
+      if (value >= centerValue) {
+        fillStyle = { left: `${zeroPercentage}%`, width: `${percentage - zeroPercentage}%` };
+      } else {
+        fillStyle = { left: `${percentage}%`, width: `${zeroPercentage - percentage}%` };
+      }
+    } else {
+      fillStyle = { left: 0, width: `${percentage}%` };
+    }
+  } else {
+    fillStyle = { display: 'none' };
+  }
 
-interface TimelineItem {
-  id: string;
-  resourceId: string;
-  duration: number;
-  transition: string;
-  rotation: number;
-  contrast: number;
-  saturation: number;
-  exposure: number;    // 曝光 (1.0)
-  brilliance: number;  // 鲜明度 (1.0)
-  temp: number;        // 色温 (0)
-  tint: number;        // 色调 (0)
-  zoom: number;
-  overlayText?: string;
-  fontSize?: number;   // 24
-  fontWeight?: string; // "bold"
-  fontColor?: string;  // 文字颜色 (#fff)
-  fontFamily?: string; // 字体
-  textAlign?: 'left' | 'center' | 'right'; // 对齐方式
-  textBg?: string;     // 文字背景色 (rgba)
-  textShadowColor?: string;  // 文字阴影颜色
-  textStrokeColor?: string;  // 文字描边颜色
-  textStrokeWidth?: number;  // 文字描边宽度
-  textGlow?: boolean;        // 文字发光
-  textX?: number;            // 文字X位置 (0-100%, 默认50)
-  textY?: number;            // 文字Y位置 (0-100%, 默认50)
-  cropPos?: Crop;
-  textAnimation?: string; // 文字入场动画，如 'fadeIn' | 'slideLeft' | 'slideUp' | 'zoom' | 'bounce' | 'typewriter' 等
-  textAnimDuration?: number; // 动画时长 (秒，默认 0.6)
-  animation?: string; // 图片入场动效 / 镜头推进
-  fillMode?: 'contain' | 'cover'; // 画面填充模式
-  overrides?: string[]; // 被手动修改过的字段名列表（全局覆盖模型）
-}
-
-// 全局默认值接口
-interface GlobalDefaults {
-  duration: number;
-  transition: string;
-  exposure: number;
-  brilliance: number;
-  contrast: number;
-  saturation: number;
-  temp: number;
-  tint: number;
-  zoom: number;
-  rotation: number;
-  animation: string;
-}
-
-const GLOBAL_DEFAULTS_INIT: GlobalDefaults = {
-  duration: 3, transition: 'fade',
-  exposure: 1.0, brilliance: 1.0, contrast: 1.0, saturation: 1.0,
-  temp: 0, tint: 0, zoom: 1.0, rotation: 0, animation: 'none'
-};
-
-const ANIMATION_PRESETS = ['anim-img-fadeIn', 'anim-img-slideLeft', 'anim-img-slideRight', 'anim-img-slideUp', 'anim-img-slideDown', 'anim-img-zoomIn', 'anim-img-zoomOut', 'anim-img-panLeft', 'anim-img-panRight'];
+  return (
+    <div style={{ position: 'relative', width: '100%', height: 20, display: 'flex', alignItems: 'center', touchAction: 'none', ...style }}>
+      <div style={{ position: 'absolute', width: '100%', height: 4, background: gradient || 'rgba(255,255,255,0.15)', borderRadius: 2 }} />
+      <div style={{ position: 'absolute', height: 4, background: 'rgba(255,255,255,0.85)', borderRadius: 2, ...fillStyle, pointerEvents: 'none' }} />
+      {isCentered && !gradient && <div style={{ position: 'absolute', height: 8, width: 2, background: 'rgba(255,255,255,0.6)', left: '50%', transform: 'translateX(-50%)', borderRadius: 1 }} />}
+      {isCentered && gradient && <div style={{ position: 'absolute', height: 10, width: 2, background: 'rgba(255,255,255,0.9)', left: '50%', transform: 'translateX(-50%)', borderRadius: 1, boxShadow: '0 0 2px rgba(0,0,0,0.5)' }} />}
+      <input type="range" min={min} max={max} step={step} value={value} 
+        onChange={e => onChange(Number(e.target.value))} 
+        onMouseUp={onMouseUp}
+        onTouchEnd={onMouseUp}
+        className="pro-slider-input" 
+      />
+    </div>
+  );
+});
 
 // ─── 媒体特征无损高速探测引擎 ───────────────────────────────────────────────────
 const getMediaDuration = (path: string): Promise<number> => {
@@ -312,8 +279,8 @@ const IosSelect = ({ value, options, onChange, style, favSet, onToggleFav }: { v
       <div 
         onClick={() => setIsOpen(!isOpen)}
         style={{ width: '100%', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(20, 20, 25, 0.8)', color: '#fff', border: isOpen ? '1px solid var(--ios-indigo)' : '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 12, padding: '0 12px', fontSize: 13, cursor: 'pointer', transition: 'all 0.2s', boxShadow: isOpen ? '0 0 0 2px var(--ios-indigo-glow)' : 'none' }}
-        onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = 'rgba(30,30,35,0.9)'; e.currentTarget.style.borderColor = isOpen ? 'var(--ios-indigo)' : 'var(--ios-indigo)'; }}
-        onMouseLeave={e => { if (!isOpen) e.currentTarget.style.background = 'rgba(20,20,25,0.8)'; e.currentTarget.style.borderColor = isOpen ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.1)'; }}
+        onMouseEnter={e => { if (!isOpen) { e.currentTarget.style.background = 'rgba(30,30,35,0.9)'; e.currentTarget.style.borderColor = 'var(--ios-indigo)'; } }}
+        onMouseLeave={e => { if (!isOpen) { e.currentTarget.style.background = 'rgba(20,20,25,0.8)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; } }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedOpt?.label}</span>
         <span style={{ fontSize: 9, opacity: 0.5, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s cubic-bezier(0.23, 1, 0.32, 1)', flexShrink: 0 }}>▼</span>
@@ -2318,6 +2285,8 @@ function App() {
         duration: gd.duration, transition: gd.transition, 
         rotation: gd.rotation, contrast: gd.contrast, saturation: gd.saturation, 
         exposure: gd.exposure, brilliance: gd.brilliance, temp: gd.temp, tint: gd.tint, zoom: gd.zoom,
+        highlights: gd.highlights, shadows: gd.shadows, whites: gd.whites, blacks: gd.blacks, vibrance: gd.vibrance,
+        sharpness: gd.sharpness, fade: gd.fade, vignette: gd.vignette, grain: gd.grain,
         animation: anim, overrides, fontSize: 24, fontWeight: 'normal'
       }]);
     } else {
@@ -2516,6 +2485,59 @@ function App() {
   const maxAudioEnd = useMemo(() => audioItems.length > 0 ? Math.max(...audioItems.map(a => a.timelineStart + a.duration)) : 0, [audioItems]);
   const maxTime = useMemo(() => Math.max(maxVideoEnd, maxAudioEnd, playTime), [maxVideoEnd, maxAudioEnd, playTime]);
   const timelineWidth = useMemo(() => Math.max(8000, maxTime * pps + 1000), [maxTime, pps]);
+
+  const computeFilter = (item: any) => {
+    if (!item) return '';
+    const exp = Number(item.exposure ?? 1.0);
+    const hi = Number(item.highlights ?? 1.0);
+    const sh = Number(item.shadows ?? 1.0);
+    const wh = Number(item.whites ?? 1.0);
+    const bl = Number(item.blacks ?? 1.0);
+    const fade = Number(item.fade ?? 0.0);
+    
+    const dHi = hi - 1.0;
+    const dSh = sh - 1.0;
+    const dWh = wh - 1.0;
+    const dBl = bl - 1.0;
+
+    // 真正的 LR 曲线模拟：高光主要增亮且增加对比，阴影主要增亮但降低对比
+    const brightOffset = (dHi * 0.15) + (dSh * 0.15) + (dWh * 0.1) + (dBl * 0.1);
+    const contrastOffset = (dHi * 0.1) - (dSh * 0.15) + (dWh * 0.2) - (dBl * 0.2);
+
+    // 遵循标准“褪色”逻辑：大幅降低饱和度，同时极轻微抬升黑点曝光，绝不降低对比度（防止发糊）
+    const fadeSatDrop = fade * 0.6; 
+    const fadeBrightLift = fade * 0.05;
+
+    const baseBrightness = exp + brightOffset + fadeBrightLift;
+    const calcBrightness = Math.max(0, baseBrightness);
+    
+    const cnt = Number(item.contrast ?? 1.0);
+    const bri = Number(item.brilliance ?? 1.0);
+    const sharp = Number(item.sharpness ?? 0);
+    const dBri = bri - 1.0;
+    
+    // 鲜明度 (Brilliance) 增加中灰度对比和轻微饱和度
+    const baseContrast = cnt + contrastOffset + (dBri * 0.15) + (sharp > 0 ? sharp * 0.15 : 0);
+    const calcContrast = Math.max(0, baseContrast);
+    
+    const sat = Number(item.saturation ?? 1.0);
+    const vib = Number(item.vibrance ?? 1.0);
+    
+    // 基础饱和度 = (饱和度 * 自然饱和度) 平滑减去 褪色所损失的饱和度 + 鲜明度带来的色彩提亮
+    const baseSaturate = (sat * vib) * (1 - fadeSatDrop) + (dBri * 0.1);
+    const calcSaturate = Math.max(0, baseSaturate);
+    
+    const temp = Number(item.temp ?? 0);
+    const tint = Number(item.tint ?? 0);
+    // 色温模拟：用 sepia 与 hue-rotate 的组合变换出冷暖色调
+    const calcSepia = Math.abs(temp) / 100 * 0.6;
+    const calcHueRotate = (temp < 0 ? 180 + tint : tint);
+    
+    // 负锐度则使用高斯模糊处理
+    const blurStr = sharp < 0 ? `blur(${Math.abs(sharp) * 4}px) ` : '';
+    
+    return `${blurStr}brightness(${calcBrightness}) contrast(${calcContrast}) saturate(${calcSaturate}) sepia(${calcSepia}) hue-rotate(${calcHueRotate}deg)`;
+  };
 
   return (
     <FluentProvider theme={webDarkTheme} style={{ height: '100vh', width: '100vw', background: 'transparent' }}>
@@ -2788,6 +2810,8 @@ function App() {
                             transition: gd.transition, rotation: gd.rotation, contrast: gd.contrast,
                             saturation: gd.saturation, exposure: gd.exposure, brilliance: gd.brilliance,
                             temp: gd.temp, tint: gd.tint, zoom: gd.zoom,
+                            highlights: gd.highlights, shadows: gd.shadows, whites: gd.whites, blacks: gd.blacks, vibrance: gd.vibrance,
+                            sharpness: gd.sharpness, fade: gd.fade, vignette: gd.vignette, grain: gd.grain,
                           }]);
                           setStatusMsg(`✨ 已添加视频 (${realDuration}s)`); setTimeout(() => setStatusMsg(''), 1500);
                         };
@@ -2796,6 +2820,7 @@ function App() {
                           commitSnapshotNow();
                           setTimeline(p => [...p, {
                             id: `tm_vid_${Date.now()}`, resourceId: res.id, duration: 10, transition: 'fade', rotation: 0, contrast: 1, saturation: 1, exposure: 1, brilliance: 1, temp: 0, tint: 0, zoom: 1,
+                            highlights: 1, shadows: 1, whites: 1, blacks: 1, vibrance: 1, sharpness: 0, fade: 0, vignette: 0, grain: 0
                           }]);
                           setStatusMsg(`✨ 已添加视频`); setTimeout(() => setStatusMsg(''), 1500);
                         };
@@ -2922,7 +2947,7 @@ function App() {
                           const selectedList = resources.filter(r => r.type === libTab && selectedResourceIds.has(r.id));
                           for (const r of selectedList) {
                             if (r.type === 'image') {
-                              setTimeline(p => [...p, { id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, duration: 3, transition: 'fade', rotation: 0, contrast: 1.0, saturation: 1.0, exposure: 1.0, brilliance: 1.0, temp: 0, tint: 0, zoom: 1.0, fontSize: 24, fontWeight: 'normal' }]);
+                              setTimeline(p => [...p, { id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, duration: 3, transition: 'fade', rotation: 0, contrast: 1.0, saturation: 1.0, exposure: 1.0, brilliance: 1.0, temp: 0, tint: 0, zoom: 1.0, highlights: 1.0, shadows: 1.0, whites: 1.0, blacks: 1.0, vibrance: 1.0, sharpness: 0, fade: 0, vignette: 0, grain: 0, fontSize: 24, fontWeight: 'normal' }]);
                             } else {
                               const dur = await getMediaDuration(r.path);
                               setAudioItems(prev => { let startPos = 0; if (prev.length > 0) { const last = prev[prev.length - 1]; startPos = last.timelineStart + last.duration; } return [...prev, { id: `au_${Date.now()}_${Math.random()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }]; });
@@ -2984,34 +3009,60 @@ function App() {
                   ) : (
                     <div style={{ position: 'relative', width: '100%', height: '100%', padding: '20px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {monitorSrc.type === 'video' ? (
-                        <video ref={monitorVideoRef} src={monitorSrc.src} muted style={{
-                          maxWidth: '100%', maxHeight: '100%', objectFit: monitorSrc.currentItem?.fillMode === 'contain' ? 'contain' : 'cover', borderRadius: '12px',
-                          clipPath: monitorSrc.currentItem?.cropPos ? `inset(${monitorSrc.currentItem.cropPos.y}% ${100 - monitorSrc.currentItem.cropPos.x - monitorSrc.currentItem.cropPos.width}% ${100 - monitorSrc.currentItem.cropPos.y - monitorSrc.currentItem.cropPos.height}% ${monitorSrc.currentItem.cropPos.x}%)` : 'none',
+                        <div style={{
+                          position: 'relative', display: monitorSrc.currentItem?.fillMode === 'cover' ? 'flex' : 'inline-flex', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', maxWidth: '100%', maxHeight: '100%', justifyContent: 'center', alignItems: 'center',
                           transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
-                          filter: `
-                            brightness(${monitorSrc.currentItem?.exposure ?? 1.0})
-                            contrast(${(monitorSrc.currentItem?.contrast ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.2})
-                            saturate(${(monitorSrc.currentItem?.saturation ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.1})
-                            sepia(${(monitorSrc.currentItem?.temp ?? 0) > 0 ? (monitorSrc.currentItem?.temp ?? 0) / 100 : 0})
-                            hue-rotate(${(monitorSrc.currentItem?.tint ?? 0)}deg)
-                          `,
-                          transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1), filter 0.4s'
-                        }} />
+                          transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)'
+                        }}>
+                          <video ref={monitorVideoRef} src={monitorSrc.src} muted style={{
+                            display: 'block', maxWidth: '100%', maxHeight: '100%', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', objectFit: monitorSrc.currentItem?.fillMode === 'contain' ? 'contain' : 'cover', borderRadius: '12px',
+                            clipPath: monitorSrc.currentItem?.cropPos ? `inset(${monitorSrc.currentItem.cropPos.y}% ${100 - monitorSrc.currentItem.cropPos.x - monitorSrc.currentItem.cropPos.width}% ${100 - monitorSrc.currentItem.cropPos.y - monitorSrc.currentItem.cropPos.height}% ${monitorSrc.currentItem.cropPos.x}%)` : 'none',
+                            filter: computeFilter(monitorSrc.currentItem),
+                            transition: 'filter 0.4s'
+                          }} />
+                          {(monitorSrc.currentItem?.vignette || monitorSrc.currentItem?.grain) ? (
+                            <div style={{
+                              position: 'absolute', pointerEvents: 'none', inset: 0, zIndex: 5, borderRadius: 12, overflow: 'hidden',
+                              background: monitorSrc.currentItem?.vignette ? `radial-gradient(ellipse at center, transparent ${60 - Math.abs(monitorSrc.currentItem.vignette)*40}%, rgba(${monitorSrc.currentItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(monitorSrc.currentItem.vignette)}) 120%)` : 'none',
+                              mixBlendMode: 'overlay'
+                            }}>
+                              {monitorSrc.currentItem?.grain > 0 && (
+                                <div style={{
+                                  position: 'absolute', inset: 0, opacity: monitorSrc.currentItem.grain, mixBlendMode: 'soft-light',
+                                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`
+                                }} />
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
                       ) : (
-                        <img key={monitorSrc.currentItem?.id} src={monitorSrc.src} className={monitorSrc.currentItem?.animation && monitorSrc.currentItem.animation !== 'none' ? monitorSrc.currentItem.animation : ''} style={{
-                          maxWidth: '100%', maxHeight: '100%', objectFit: monitorSrc.currentItem?.fillMode === 'contain' ? 'contain' : 'cover', borderRadius: '12px',
-                          clipPath: monitorSrc.currentItem?.cropPos ? `inset(${monitorSrc.currentItem.cropPos.y}% ${100 - monitorSrc.currentItem.cropPos.x - monitorSrc.currentItem.cropPos.width}% ${100 - monitorSrc.currentItem.cropPos.y - monitorSrc.currentItem.cropPos.height}% ${monitorSrc.currentItem.cropPos.x}%)` : 'none',
+                        <div style={{
+                          position: 'relative', display: monitorSrc.currentItem?.fillMode === 'cover' ? 'flex' : 'inline-flex', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', maxWidth: '100%', maxHeight: '100%', justifyContent: 'center', alignItems: 'center',
                           transformOrigin: (monitorSrc.currentItem && resourceMap.get(monitorSrc.currentItem.resourceId)?.focusX) ? `${resourceMap.get(monitorSrc.currentItem.resourceId)?.focusX}% ${resourceMap.get(monitorSrc.currentItem.resourceId)?.focusY}%` : 'center center',
                           transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
-                          filter: `
-                            brightness(${monitorSrc.currentItem?.exposure ?? 1.0})
-                            contrast(${(monitorSrc.currentItem?.contrast ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.2})
-                            saturate(${(monitorSrc.currentItem?.saturation ?? 1.0) + ((monitorSrc.currentItem?.brilliance ?? 1.0) - 1.0) * 0.1})
-                            sepia(${(monitorSrc.currentItem?.temp ?? 0) > 0 ? (monitorSrc.currentItem?.temp ?? 0) / 100 : 0})
-                            hue-rotate(${(monitorSrc.currentItem?.tint ?? 0)}deg)
-                          `,
-                          transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1), filter 0.4s'
-                        }} alt="" />
+                          transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)'
+                        }}>
+                          <img key={monitorSrc.currentItem?.id} src={monitorSrc.src} className={monitorSrc.currentItem?.animation && monitorSrc.currentItem.animation !== 'none' ? monitorSrc.currentItem.animation : ''} style={{
+                            display: 'block', maxWidth: '100%', maxHeight: '100%', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', objectFit: monitorSrc.currentItem?.fillMode === 'contain' ? 'contain' : 'cover', borderRadius: '12px',
+                            clipPath: monitorSrc.currentItem?.cropPos ? `inset(${monitorSrc.currentItem.cropPos.y}% ${100 - monitorSrc.currentItem.cropPos.x - monitorSrc.currentItem.cropPos.width}% ${100 - monitorSrc.currentItem.cropPos.y - monitorSrc.currentItem.cropPos.height}% ${monitorSrc.currentItem.cropPos.x}%)` : 'none',
+                            filter: computeFilter(monitorSrc.currentItem),
+                            transition: 'filter 0.4s'
+                          }} alt="" />
+                          {(monitorSrc.currentItem?.vignette || monitorSrc.currentItem?.grain) ? (
+                            <div style={{
+                              position: 'absolute', pointerEvents: 'none', inset: 0, zIndex: 5, borderRadius: 12, overflow: 'hidden',
+                              background: monitorSrc.currentItem?.vignette ? `radial-gradient(ellipse at center, transparent ${60 - Math.abs(monitorSrc.currentItem.vignette)*40}%, rgba(${monitorSrc.currentItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(monitorSrc.currentItem.vignette)}) 120%)` : 'none',
+                              mixBlendMode: 'overlay'
+                            }}>
+                              {monitorSrc.currentItem?.grain > 0 && (
+                                <div style={{
+                                  position: 'absolute', inset: 0, opacity: monitorSrc.currentItem.grain, mixBlendMode: 'soft-light',
+                                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`
+                                }} />
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
                       )}
                       {monitorSrc.currentItem?.overlayText && (
                         <div
@@ -3141,13 +3192,14 @@ function App() {
                   <div className="ios-prop-group">
                     <Text weight="bold" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⏱ 基础参数</Text>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <Field label={`默认时长: ${globalDefaults.duration}s`}>
-                        <Slider min={0.5} max={10} step={0.1} value={globalDefaults.duration} onChange={(_e, d) => {
-                          const v = Math.round(d.value * 10) / 10;
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>默认时长: {globalDefaults.duration}s</span>
+                        <ProSlider min={0.5} max={10} step={0.1} value={globalDefaults.duration} onChange={d => {
+                          const v = Math.round(d * 10) / 10;
                           setGlobalDefaults(p => ({ ...p, duration: v }));
                           setTimeline(prev => prev.map(t => !(t.overrides?.includes('duration')) ? { ...t, duration: v } : t));
                         }} />
-                      </Field>
+                      </div>
                       <Field label="默认片段转场">
                         <IosSelect
                           value={globalDefaults.transition}
@@ -3201,27 +3253,42 @@ function App() {
                   <div className="ios-prop-group">
                     <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 8, display: 'block' }}>🌓 影像参数默认值</Text>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {([['exposure', '曝光', 0.5, 2.0, 0.05], ['brilliance', '鲜明度', 0.5, 2.0, 0.05], ['contrast', '对比度', 0.5, 2.0, 0.05], ['saturation', '饱和度', 0.0, 2.0, 0.05]] as const).map(([key, label, min, max, step]) => (
-                        <Field key={key} label={`${label}: ${globalDefaults[key].toFixed(2)}`}>
-                          <Slider min={min} max={max} step={step} value={globalDefaults[key]} onChange={(_e, d) => {
-                            setGlobalDefaults(p => ({ ...p, [key]: d.value }));
-                            setTimeline(prev => prev.map(t => !(t.overrides?.includes(key)) ? { ...t, [key]: d.value } : t));
-                          }} />
-                        </Field>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="ios-prop-group">
-                    <Text weight="bold" style={{ color: '#C084FC', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 色彩默认值</Text>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {([['temp', '色温', -100, 100, 1], ['tint', '色调', -100, 100, 1]] as const).map(([key, label, min, max, step]) => (
-                        <Field key={key} label={`${label}: ${globalDefaults[key]}`}>
-                          <Slider min={min} max={max} step={step} value={globalDefaults[key]} onChange={(_e, d) => {
-                            setGlobalDefaults(p => ({ ...p, [key]: d.value }));
-                            setTimeline(prev => prev.map(t => !(t.overrides?.includes(key)) ? { ...t, [key]: d.value } : t));
-                          }} />
-                        </Field>
-                      ))}
+                      {([
+                        ['exposure', '曝光', 0.0, 3.0, 0.01], 
+                        ['brilliance', '鲜明度', 0.0, 3.0, 0.01],
+                        ['highlights', '高光', 0.0, 3.0, 0.01],
+                        ['shadows', '阴影', 0.0, 3.0, 0.01],
+                        ['whites', '白色色阶', 0.0, 3.0, 0.01],
+                        ['blacks', '黑色色阶', 0.0, 3.0, 0.01],
+                        ['contrast', '对比度', 0.0, 3.0, 0.01], 
+                        ['saturation', '饱和度', 0.0, 3.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #EF4444)'],
+                        ['vibrance', '自然饱和度', 0.0, 3.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #818CF8, #F472B6)'],
+                        ['temp', '色温', -100, 100, 1, 'linear-gradient(90deg, #60A5FA, #E5E7EB, #FBBF24)'], 
+                        ['tint', '色调', -100, 100, 1, 'linear-gradient(90deg, #34D399, #E5E7EB, #C084FC)'],
+                        ['sharpness', '清晰度', -3.0, 3.0, 0.01],
+                        ['fade', '褪色', 0.0, 1.0, 0.01],
+                        ['vignette', '暗角', -1.0, 1.0, 0.01],
+                        ['grain', '颗粒', 0.0, 1.0, 0.01]
+                      ] as any).map(([key, label, min, max, step, gradient]: any) => {
+                        const isCentered = (key === 'temp' || key === 'tint' || key === 'sharpness' || key === 'vignette');
+                        const defaultVal = globalDefaults[key as keyof GlobalDefaults] as number;
+                        return (
+                          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>{label}</span>
+                              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+                                {isCentered ? defaultVal : defaultVal.toFixed(2)}
+                              </span>
+                            </div>
+                            <div style={{ width: '100%', minWidth: 0, display: 'flex', alignItems: 'center' }}>
+                              <ProSlider gradient={gradient} isCentered={isCentered} style={{ width: '100%', maxWidth: '100%' }} min={min} max={max} step={step} value={defaultVal} onChange={d => {
+                                setGlobalDefaults(p => ({ ...p, [key]: d }));
+                                setTimeline(prev => prev.map(t => !(t.overrides?.includes(key)) ? { ...t, [key]: d } : t));
+                              }} />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   <Button appearance="subtle" style={{ marginTop: 8, borderRadius: 10, height: 36, fontSize: 12, color: '#FF3B30', border: '1px solid rgba(255,59,48,0.2)' }} onClick={() => {
@@ -3368,7 +3435,7 @@ function App() {
                           }>
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                               <div style={{ flex: 1, minWidth: 0 }} onMouseUp={() => { if (localDuration !== null) { commitSnapshotNow(); updateSelectedProperty('duration', localDuration); setLocalDuration(null); } }}>
-                                <Slider min={0.1} max={10} step={0.1} value={localDuration !== null ? localDuration : (selectedItem?.duration || 3)} onChange={(_e, d) => setLocalDuration(Math.round(d.value * 10) / 10)} style={{ width: '100%', maxWidth: '100%' }} />
+                                <ProSlider min={0.1} max={10} step={0.1} value={localDuration !== null ? localDuration : (selectedItem?.duration || 3)} onChange={d => setLocalDuration(Math.round(d * 10) / 10)} style={{ width: '100%', maxWidth: '100%' }} />
                               </div>
                               <div
                                 title="为所有照片的时长随机波动上下20%"
@@ -3396,18 +3463,66 @@ function App() {
                               >🎲</div>
                             </div>
                           </Field>
-                          {([['exposure', '曝光', 0.5, 2.0, 0.05], ['brilliance', '鲜明度', 0.5, 2.0, 0.05], ['contrast', '对比度', 0.5, 2.0, 0.05], ['saturation', '饱和度', 0.0, 2.0, 0.05], ['temp', '色温', -100, 100, 1], ['tint', '色调', -100, 100, 1]] as [keyof GlobalDefaults, string, number, number, number][]).map(([key, label, min, max, step]) => (
-                            <Field key={key} label={
-                              <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty(key, key === 'temp' || key === 'tint' ? 0 : (GLOBAL_DEFAULTS_INIT as any)[key]); }} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }} title="双击重置">
-                                <span>{`${label}: ${key === 'temp' || key === 'tint' ? ((selectedItem as any)?.[key] || 0) : ((selectedItem as any)?.[key]?.toFixed(2) || (GLOBAL_DEFAULTS_INIT as any)[key].toFixed(2))}`}</span>
-                                {selectedItem && <span onClick={(e) => { e.stopPropagation(); if (isOverridden(selectedItem, key)) restoreInheritance(selectedItem.id, key); }} style={{ cursor: isOverridden(selectedItem, key) ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, key) ? '点击恢复继承' : '继承全局默认'}>{isOverridden(selectedItem, key) ? '✏️' : '🔗'}</span>}
-                              </span>
-                            }>
-                              <div style={{ width: '100%', minWidth: 0 }} onMouseUp={finalizeSliderUndo}>
-                                <Slider style={{ width: '100%', maxWidth: '100%' }} min={min} max={max} step={step} value={key === 'temp' || key === 'tint' ? ((selectedItem as any)?.[key] || 0) : ((selectedItem as any)?.[key] || (GLOBAL_DEFAULTS_INIT as any)[key])} onChange={(_e, d) => updatePropertyWithUndo(key, d.value)} />
+                          {([
+                            ['exposure', '曝光', 0.0, 2.0, 0.01], 
+                            ['brilliance', '鲜明度', 0.0, 2.0, 0.01],
+                            ['highlights', '高光', 0.0, 2.0, 0.01],
+                            ['shadows', '阴影', 0.0, 2.0, 0.01],
+                            ['whites', '白色色阶', 0.0, 2.0, 0.01],
+                            ['blacks', '黑色色阶', 0.0, 2.0, 0.01],
+                            ['contrast', '对比度', 0.0, 2.0, 0.01], 
+                            ['saturation', '饱和度', 0.0, 2.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #EF4444)'],
+                            ['vibrance', '自然饱和度', 0.0, 2.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #818CF8, #F472B6)'],
+                            ['temp', '色温', -100, 100, 1, 'linear-gradient(90deg, #60A5FA, #E5E7EB, #FBBF24)'], 
+                            ['tint', '色调', -100, 100, 1, 'linear-gradient(90deg, #34D399, #E5E7EB, #C084FC)'],
+                            ['sharpness', '清晰度', -3.0, 3.0, 0.01],
+                            ['fade', '褪色', 0.0, 1.0, 0.01],
+                            ['vignette', '暗角', -1.0, 1.0, 0.01],
+                            ['grain', '颗粒', 0.0, 1.0, 0.01]
+                          ] as any).map(([key, label, min, max, step, gradient]: any) => {
+                            const isCentered = !['fade', 'grain'].includes(key);
+                            const centerValue = ['temp', 'tint', 'sharpness', 'vignette'].includes(key) ? 0 : 1.0;
+                            return (
+                              <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty(key, centerValue); }} style={{ cursor: 'pointer', fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }} title="双击重置">
+                                    {label}
+                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+                                      {isCentered && centerValue === 0 ? ((selectedItem as any)?.[key] || 0) : ((selectedItem as any)?.[key] as number)?.toFixed(2) || ((GLOBAL_DEFAULTS_INIT as any)[key] as number).toFixed(2)}
+                                    </span>
+                                    {selectedItem && isOverridden(selectedItem, key) && (
+                                      <span onClick={(e) => { e.stopPropagation(); restoreInheritance(selectedItem.id, key); }} style={{ cursor: 'pointer', fontSize: 12, opacity: 0.9, color: '#10B981', userSelect: 'none', marginLeft: 2 }} title='恢复继承全局默认'>•</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div style={{ width: '100%', minWidth: 0, display: 'flex', alignItems: 'center' }}>
+                                  <ProSlider gradient={gradient} isCentered={isCentered} centerValue={centerValue} style={{ width: '100%', maxWidth: '100%' }} min={min} max={max} step={step} value={isCentered && centerValue === 0 ? ((selectedItem as any)?.[key] || 0) : ((selectedItem as any)?.[key] || (GLOBAL_DEFAULTS_INIT as any)[key])} onChange={d => updatePropertyWithUndo(key, d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
                               </div>
-                            </Field>
-                          ))}
+                            );
+                          })}
+                          <Button appearance="subtle" style={{ width: '100%', marginTop: 12, borderRadius: 8, height: 36, color: 'rgba(255,255,255,0.7)', border: '1px dashed rgba(255,255,255,0.15)', transition: 'all 0.15s' }} onClick={() => {
+                            commitSnapshotNow();
+                            setTimeline(prev => prev.map(t => {
+                              if (!selectedIds.has(t.id)) return t;
+                              const overrides = (t.overrides || []).filter(o => !['exposure','brilliance','highlights','shadows','whites','blacks','contrast','saturation','vibrance','temp','tint','sharpness','fade','vignette','grain'].includes(o));
+                              return {
+                                ...t, overrides,
+                                exposure: GLOBAL_DEFAULTS_INIT.exposure, brilliance: GLOBAL_DEFAULTS_INIT.brilliance,
+                                highlights: GLOBAL_DEFAULTS_INIT.highlights, shadows: GLOBAL_DEFAULTS_INIT.shadows,
+                                whites: GLOBAL_DEFAULTS_INIT.whites, blacks: GLOBAL_DEFAULTS_INIT.blacks,
+                                contrast: GLOBAL_DEFAULTS_INIT.contrast, saturation: GLOBAL_DEFAULTS_INIT.saturation,
+                                vibrance: GLOBAL_DEFAULTS_INIT.vibrance, temp: GLOBAL_DEFAULTS_INIT.temp,
+                                tint: GLOBAL_DEFAULTS_INIT.tint, sharpness: GLOBAL_DEFAULTS_INIT.sharpness,
+                                fade: GLOBAL_DEFAULTS_INIT.fade, vignette: GLOBAL_DEFAULTS_INIT.vignette, grain: GLOBAL_DEFAULTS_INIT.grain
+                              };
+                            }));
+                            setStatusMsg('✨ 已全部重置为全局默认参数'); setTimeout(() => setStatusMsg(''), 1500);
+                          }}>
+                            ↺ 一键重置全部色彩参数
+                          </Button>
                         </div>
                       </div>
 
@@ -3644,7 +3759,10 @@ function App() {
                                ]}
                              />
                           </Field>
-                          <Field label={`缩放: ${selectedItem?.zoom?.toFixed(2) || '1.0'}`}><Slider min={1.0} max={3.0} step={0.1} value={selectedItem?.zoom || 1.0} onChange={(_e, d) => updateSelectedProperty('zoom', d.value)} /></Field>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>缩放: {selectedItem?.zoom?.toFixed(2) || '1.0'}</span>
+                            <ProSlider min={1.0} max={3.0} step={0.1} value={selectedItem?.zoom || 1.0} onChange={d => updateSelectedProperty('zoom', d)} />
+                          </div>
                           <Field label={
                             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span>转场方式</span>
@@ -3709,22 +3827,19 @@ function App() {
                         )}
                       </Text>
                       <div className="ios-prop-group" style={{ padding: '16px', borderRadius: 16, background: 'rgba(139,92,246,0.05)', border: '1px solid rgba(139,92,246,0.1)', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-                        <Field label={`播放音量: ${Math.round((audioItems.find(a => selectedAudioIds.has(a.id))?.volume || 1) * 100)}%`}>
-                          <div style={{ width: '100%', minWidth: 0 }}>
-                            <Slider style={{ width: '100%', maxWidth: '100%' }} min={0} max={2} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.volume || 1} onChange={(_e, d) => selectedAudioIds.forEach(id => updateAudioItem(id, { volume: d.value }))} />
-                          </div>
-                        </Field>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>播放音量: {Math.round((audioItems.find(a => selectedAudioIds.has(a.id))?.volume || 1) * 100)}%</span>
+                          <ProSlider min={0} max={2} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.volume || 1} onChange={d => selectedAudioIds.forEach(id => updateAudioItem(id, { volume: d }))} />
+                        </div>
                         {/* 淡入淡出控制 (任务7) */}
-                        <Field label={`淡入: ${(audioItems.find(a => selectedAudioIds.has(a.id))?.fadeIn || 0).toFixed(1)}s`}>
-                          <div style={{ width: '100%', minWidth: 0 }}>
-                            <Slider style={{ width: '100%', maxWidth: '100%' }} min={0} max={5} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.fadeIn || 0} onChange={(_e, d) => selectedAudioIds.forEach(id => updateAudioItem(id, { fadeIn: d.value }))} />
-                          </div>
-                        </Field>
-                        <Field label={`淡出: ${(audioItems.find(a => selectedAudioIds.has(a.id))?.fadeOut || 0).toFixed(1)}s`}>
-                          <div style={{ width: '100%', minWidth: 0 }}>
-                            <Slider style={{ width: '100%', maxWidth: '100%' }} min={0} max={5} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.fadeOut || 0} onChange={(_e, d) => selectedAudioIds.forEach(id => updateAudioItem(id, { fadeOut: d.value }))} />
-                          </div>
-                        </Field>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>淡入: {(audioItems.find(a => selectedAudioIds.has(a.id))?.fadeIn || 0).toFixed(1)}s</span>
+                          <ProSlider min={0} max={5} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.fadeIn || 0} onChange={d => selectedAudioIds.forEach(id => updateAudioItem(id, { fadeIn: d }))} />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>淡出: {(audioItems.find(a => selectedAudioIds.has(a.id))?.fadeOut || 0).toFixed(1)}s</span>
+                          <ProSlider min={0} max={5} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.fadeOut || 0} onChange={d => selectedAudioIds.forEach(id => updateAudioItem(id, { fadeOut: d }))} />
+                        </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
                           <Button
                             appearance={isEditingAudio ? "primary" : "outline"}

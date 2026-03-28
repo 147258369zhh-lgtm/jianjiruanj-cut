@@ -27,15 +27,22 @@ export interface TimelineItem {
   saturation: number;
   exposure: number;    // 曝光 (1.0)
   brilliance: number;  // 鲜明度 (1.0)
+  highlights: number;  // 高光 (1.0)
+  shadows: number;     // 阴影 (1.0)
+  whites: number;      // 白色色阶 (1.0)
+  blacks: number;      // 黑色色阶 (1.0)
   temp: number;        // 色温 (0)
   tint: number;        // 色调 (0)
+  vibrance: number;    // 自然饱和度 (1.0)
+  sharpness: number;   // 锐度/清晰度 (0.0)
+  grain: number;       // 颗粒 (0.0)
   zoom: number;
   opacity?: number;      // 不透明度 (1.0)
   blendMode?: string;    // 混合模式 (normal, multiply, screen, overlay)
   flipX?: boolean;       // 水平镜像翻转
   flipY?: boolean;       // 垂直镜像翻转
-  vignette?: number;     // 暗角 (0)
-  fade?: number;         // 褪色 (0)
+  vignette: number;      // 暗角 (0)
+  fade: number;          // 褪色 (0)
   posX?: number;         // X轴坐标偏移 (-100 ~ 100)
   posY?: number;         // Y轴坐标偏移 (-100 ~ 100)
   overlayText?: string;
@@ -65,10 +72,17 @@ export interface GlobalDefaults {
   transition: string;
   exposure: number;
   brilliance: number;
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
   contrast: number;
   saturation: number;
+  vibrance: number;
   temp: number;
   tint: number;
+  sharpness: number;
+  grain: number;
   zoom: number;
   rotation: number;
   animation: string;
@@ -85,6 +99,8 @@ export interface GlobalDefaults {
 export const GLOBAL_DEFAULTS_INIT: GlobalDefaults = {
   duration: 3, transition: 'fade',
   exposure: 1.0, brilliance: 1.0, contrast: 1.0, saturation: 1.0,
+  highlights: 1.0, shadows: 1.0, whites: 1.0, blacks: 1.0, vibrance: 1.0,
+  sharpness: 0, grain: 0,
   temp: 0, tint: 0, zoom: 1.0, rotation: 0, animation: 'none',
   opacity: 1.0, blendMode: 'normal', flipX: false, flipY: false,
   vignette: 0, fade: 0, posX: 0, posY: 0
