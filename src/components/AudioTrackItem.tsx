@@ -1,8 +1,11 @@
-import React, { memo, useState, useRef, useMemo } from 'react';
+import React, { memo, useRef, useState, useMemo } from 'react';
 import { AudioTimelineItem } from '../types';
-import { AudioWaveform, AUDIO_PALETTES } from './AudioWaveform';
+import { AUDIO_PALETTES } from '../utils/constants';
+import { AudioWaveform } from './AudioWaveform';
 
-export type AudioTrackItemProps = {
+
+// ─── 子组件: 剪辑点音频轨道项 (剪辑点系统) ──────────────────────────────────────
+type AudioTrackItemProps = {
   item: AudioTimelineItem;
   resource: any;
   isSelected: boolean;
@@ -220,22 +223,6 @@ export const AudioTrackItem = memo(({ item, resource, isSelected, onSelect, pps,
             background: 'rgba(139,92,246,0.85)', borderRadius: 4, padding: '1px 5px',
             fontSize: 9, color: '#fff', pointerEvents: 'none',
           }}>✂ 剪辑</div>
-        )}
-
-        {/* 底部淡出特效标识 */}
-        {item.fadeOut && item.fadeOut > 0 && (
-          <div style={{
-            position: 'absolute', right: 0, top: 0, bottom: 0, 
-            width: item.fadeOut * pps,
-            background: 'linear-gradient(to right, transparent, rgba(0,0,0,0.8))',
-            zIndex: 15, pointerEvents: 'none',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-end',
-            paddingRight: 6, paddingBottom: 2
-          }}>
-            <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.9)', pointerEvents: 'none' }}>
-               ↘ {item.fadeOut}s
-            </span>
-          </div>
         )}
       </div>
 
