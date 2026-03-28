@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
 import { useProjectHistory } from './hooks/useProjectHistory';
-import { createPortal } from "react-dom";
+
 import {
   FluentProvider,
   webDarkTheme,
@@ -26,6 +26,9 @@ import ProSliderMod from './components/ProSlider';
 import { computeFilter as computeFilterMod, computeTextStyles as computeTextStylesMod } from './features/filter-engine/useFilter';
 import { FILTER_PRESETS as FILTER_PRESETS_MOD } from './features/filter-engine/filterPresets';
 import { formatTime as formatTimeMod } from './utils/formatTime';
+import ColorPicker from './features/text-workshop/ColorPicker';
+import ProFontSelectComp from './features/text-workshop/FontSelector';
+const ProFontSelect = ProFontSelectComp;
 
 // ProSlider 已迁移到 components/ProSlider.tsx
 const ProSlider = ProSliderMod;
@@ -183,96 +186,10 @@ const AudioWaveform = memo(({ isPlaying, palette }: { isPlaying: boolean; palett
   return <canvas ref={canvasRef} width={500} height={60} style={{ width: '100%', height: '100%', display: 'block', opacity: 0.9 }} />;
 });
 
-// ─── 子组件: 沉浸式玻璃态自定义下拉框 (解决原生 select 无法美化弹窗的问题) ───
-const IosSelect = ({ value, options, onChange, style, favSet, onToggleFav }: { value: string; options: {value: string, label: string}[]; onChange: (v: string) => void; style?: React.CSSProperties; favSet?: string[]; onToggleFav?: (v: string) => void; }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  
-  useEffect(() => {
-    if (!isOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
-    };
-    window.addEventListener('mousedown', onClick, true); // mousedown captures better than click
-    return () => window.removeEventListener('mousedown', onClick, true);
-  }, [isOpen]);
+// IosSelect 已迁移到 components/IosSelect.tsx
+import IosSelect from './components/IosSelect';
 
-  const selectedOpt = options.find(o => o.value === value) || { label: value };
 
-  return (
-    <div ref={ref} style={{ position: 'relative', width: '100%', ...style }}>
-      <div 
-        onClick={() => setIsOpen(!isOpen)}
-        style={{ width: '100%', height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(20, 20, 25, 0.8)', color: '#fff', border: isOpen ? '1px solid var(--ios-indigo)' : '1px solid rgba(255, 255, 255, 0.1)', borderRadius: 12, padding: '0 12px', fontSize: 13, cursor: 'pointer', transition: 'all 0.2s', boxShadow: isOpen ? '0 0 0 2px var(--ios-indigo-glow)' : 'none' }}
-        onMouseEnter={e => { if (!isOpen) { e.currentTarget.style.background = 'rgba(30,30,35,0.9)'; e.currentTarget.style.borderColor = 'var(--ios-indigo)'; } }}
-        onMouseLeave={e => { if (!isOpen) { e.currentTarget.style.background = 'rgba(20,20,25,0.8)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; } }}
-      >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedOpt?.label}</span>
-        <span style={{ fontSize: 9, opacity: 0.5, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s cubic-bezier(0.23, 1, 0.32, 1)', flexShrink: 0 }}>▼</span>
-      </div>
-      {isOpen && createPortal(
-        <div style={{
-          position: 'absolute',
-          top: ref.current ? ref.current.getBoundingClientRect().bottom + 6 : 0,
-          left: ref.current ? ref.current.getBoundingClientRect().left : 0,
-          width: ref.current ? ref.current.getBoundingClientRect().width : 'auto',
-          background: 'rgba(30, 30, 38, 0.95)',
-          backdropFilter: 'blur(40px) saturate(200%)',
-          WebkitBackdropFilter: 'blur(40px) saturate(200%)',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          borderRadius: 12,
-          padding: 6,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)',
-          zIndex: 999999,
-          maxHeight: 280,
-          overflowY: 'auto'
-        }}>
-          {options.map(opt => {
-            const isFav = favSet ? favSet.includes(opt.value) : false;
-            return (
-              <div
-                key={opt.value}
-                style={{
-                  padding: '8px 12px',
-                  fontSize: 13,
-                  color: opt.value === value ? '#fff' : 'rgba(255,255,255,0.7)',
-                  background: opt.value === value ? 'rgba(99, 102, 241, 0.3)' : 'transparent',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  marginBottom: 2,
-                  transition: 'all 0.15s'
-                }}
-                onMouseEnter={e => { if (opt.value !== value) { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff'; } }}
-                onMouseLeave={e => { if (opt.value !== value) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.7)'; } }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(opt.value);
-                  setIsOpen(false);
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>{opt.label}</span>
-                  {onToggleFav && opt.value !== 'none' && (
-                    <span 
-                      onClick={(e) => { e.stopPropagation(); onToggleFav(opt.value); }}
-                      style={{ color: isFav ? '#ffd700' : 'rgba(255,255,255,0.2)', paddingLeft: 8 }}
-                      title={isFav ? "取消收藏" : "加入收藏"}
-                    >★</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-};
-
-// ProFontSelect 已迁移到 features/text-workshop/FontSelector.tsx (通过 import ProFontSelect 引入)
-import ProFontSelectComp from './features/text-workshop/FontSelector';
-const ProFontSelect = ProFontSelectComp;
 
 
 // 缩略图引擎已迁移到 utils/thumbnail.ts
@@ -2338,26 +2255,10 @@ function App() {
   const computeFilter = computeFilterMod;
   const computeTextStyles = computeTextStylesMod;
 
-  // 莫兰迪影视级色盘封装组件
-  const renderPremiumColorPicker = (propKey: string, currentVal: string, defVal: string) => {
-    // 莫兰迪 + 经典色系 - 单行紧凑
-    const palette = [
-      '#FFFFFF', '#F5F5F5', '#1A1A1A', '#D9B8B5', '#C4A882', '#9BB4C4', '#BBCDBA', '#ABA3B2',
-      '#FF6B6B', '#E85D75', '#FF9F43', '#FECA57', '#48DBFB', '#0ABDE3', '#6C5CE7', '#A29BFE',
-      '#1DD1A1', '#10AC84', '#FF6348', '#2ED573', '#FFA502', '#3742FA'
-    ];
-    return (
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '2px 0' }}>
-        {palette.map(c => (
-          <div key={c} onClick={() => updateSelectedProperty(propKey as keyof TimelineItem, c)} title={c} style={{ width: 18, height: 18, borderRadius: '50%', background: c, cursor: 'pointer', border: currentVal === c ? '2px solid #6366F1' : '1px solid rgba(255,255,255,0.2)', boxShadow: currentVal === c ? '0 0 8px rgba(99,102,241,0.6)' : '0 1px 3px rgba(0,0,0,0.3)', transition: 'all 0.15s', transform: currentVal === c ? 'scale(1.1)' : 'scale(1)' }} />
-        ))}
-        {/* 彩虹兜底自由拾色器 */}
-        <div style={{ position: 'relative', width: 22, height: 22, borderRadius: '50%', overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.5)', background: 'conic-gradient(red, yellow, lime, aqua, blue, magenta, red)', cursor: 'pointer', marginLeft: 4 }} title="自由取色">
-          <input type="color" value={currentVal || defVal} onChange={e => updateSelectedProperty(propKey as keyof TimelineItem, e.target.value)} style={{ position: 'absolute', top: -10, left: -10, width: 44, height: 44, cursor: 'pointer', opacity: 0 }} />
-        </div>
-      </div>
-    );
-  };
+  // 影视级色盘已迁移
+  const renderPremiumColorPicker = (propKey: string, currentVal: string, defVal: string) => (
+    <ColorPicker currentVal={currentVal} defVal={defVal} onChange={c => updateSelectedProperty(propKey as keyof TimelineItem, c)} />
+  );
 
   return (
     <FluentProvider theme={webDarkTheme} style={{ height: '100vh', width: '100vw', background: 'transparent' }}>

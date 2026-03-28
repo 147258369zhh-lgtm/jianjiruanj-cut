@@ -1,4 +1,3 @@
-// Phase 2: Remove getMediaDuration + thumbnailEngine from App.tsx
 const fs = require('fs');
 const path = require('path');
 
@@ -7,20 +6,20 @@ const content = fs.readFileSync(filePath, 'utf-8');
 const lines = content.split(/\r?\n/);
 
 const replacements = [
-  // 1) Remove getMediaDuration (line 33-76, includes comment on line 33)
-  [33, 76, [
-    "// getMediaDuration 已迁移到 utils/mediaUtils.ts",
-    "import { getMediaDuration } from './utils/mediaUtils';",
+  // Remove renderPremiumColorPicker inline (line 2257-2276)
+  [2257, 2276, [
+    "  // 影视级色盘已迁移",
+    "  const renderPremiumColorPicker = (propKey: string, currentVal: string, defVal: string) => (",
+    "    <ColorPicker currentVal={currentVal} defVal={defVal} onChange={c => updateSelectedProperty(propKey as keyof TimelineItem, c)} />",
+    "  );"
   ]],
-  
-  // 2) Remove thumbnail engine (line 320-376)
-  [320, 376, [
-    "// 缩略图引擎已迁移到 utils/thumbnail.ts",
-    "import { generateThumbnail, thumbCache, THUMB_WIDTH } from './utils/thumbnail';",
-  ]],
+  // Add import near existing imported components (around line 273/274)
+  [273, 273, [
+    "import ColorPicker from './features/text-workshop/ColorPicker';",
+    "// ProFontSelect 已迁移到 features/text-workshop/FontSelector.tsx (通过 import ProFontSelect 引入)",
+  ]]
 ];
 
-// Apply replacements from bottom to top
 replacements.sort((a, b) => b[0] - a[0]);
 
 for (const [start, end, newLines] of replacements) {
