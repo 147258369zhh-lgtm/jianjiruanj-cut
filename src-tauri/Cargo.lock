@@ -3007,6 +3007,7 @@ dependencies = [
  "image",
  "kamadak-exif",
  "rawloader",
+ "rayon",
  "serde",
  "serde_json",
  "tauri",

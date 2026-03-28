@@ -1,9 +1,25 @@
 use exif::{In, Reader, Tag};
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
-use std::process::Command;
-use tauri::Manager;
+use std::io::{BufReader, BufRead, Read, Seek, SeekFrom};
+use std::process::{Command, Stdio};
+use tauri::{Manager, Emitter};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[tauri::command]
+fn write_temp_file(data: Vec<u8>, ext: String) -> Result<String, String> {
+    let mut temp_file = std::env::temp_dir();
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_nanos();
+    let filename = format!("tmp_asset_{}.{}", ts, ext);
+    temp_file.push(filename);
+    std::fs::write(&temp_file, data).map_err(|e| e.to_string())?;
+    Ok(temp_file.to_string_lossy().into_owned())
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ProgressPayload {
+    pub progress: f64,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TimelineItem {
@@ -17,6 +33,8 @@ pub struct TimelineItem {
     saturation: Option<f32>,
     #[serde(rename = "cropPos")]
     crop_pos: Option<CropPos>,
+    #[serde(rename = "fillMode")]
+    fill_mode: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -47,6 +65,8 @@ pub struct VideoPayload {
     resource_paths: Vec<ResourcePath>,
     #[serde(rename = "audioClips")]
     audio_clips: Vec<AudioTimelineItem>,
+    #[serde(rename = "voiceoverClips", default)]
+    voiceover_clips: Vec<VoiceoverExportClip>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -58,6 +78,20 @@ pub struct AudioTimelineItem {
     timeline_start: f32,
     #[serde(rename = "startOffset")]
     start_offset: f32,
+    duration: f32,
+    volume: f32,
+    #[serde(rename = "fadeIn")]
+    fade_in: Option<f32>,
+    #[serde(rename = "fadeOut")]
+    fade_out: Option<f32>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct VoiceoverExportClip {
+    #[serde(rename = "filePath")]
+    file_path: String,
+    #[serde(rename = "timelineStart")]
+    timeline_start: f32,
     duration: f32,
     volume: f32,
 }
@@ -102,6 +136,33 @@ fn resolve_ffmpeg_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     }
 
     std::path::PathBuf::from("ffmpeg")
+}
+
+// GPU 硬件编码器自动探测 (NVENC / AMF / CPU 三级降级)
+fn detect_best_encoder(ffmpeg_path: &std::path::Path, want_h265: bool) -> (String, String) {
+    // 返回 (encoder_name, encoder_family): family = "nvenc" | "amf" | "cpu"
+    let nvenc = if want_h265 { "hevc_nvenc" } else { "h264_nvenc" };
+    let amf   = if want_h265 { "hevc_amf"  } else { "h264_amf"  };
+    let cpu   = if want_h265 { "libx265"   } else { "libx264"   };
+
+    // 实际探测硬件: 尝试编码 1 帧空数据，成功则说明显卡驱动可用
+    let probe = |enc: &str| -> bool {
+        Command::new(ffmpeg_path)
+            .args(["-hide_banner", "-loglevel", "error",
+                   "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.04:r=30",
+                   "-pix_fmt", "nv12", "-c:v", enc, "-frames:v", "1", "-f", "null", "-"])
+            .stdout(Stdio::null()).stderr(Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    };
+
+    // 优先 NVENC (通常性能更好)
+    if probe(nvenc) { return (nvenc.to_string(), "nvenc".to_string()); }
+    // 其次 AMF (AMD 显卡)
+    if probe(amf) { return (amf.to_string(), "amf".to_string()); }
+    // 兜底 CPU
+    (cpu.to_string(), "cpu".to_string())
 }
 
 use image::{DynamicImage, Rgb, RgbImage};
@@ -315,16 +376,19 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
     } else {
         res.as_str()
     };
+    let res_parts: Vec<&str> = resolution.split(':').collect();
+    let res_w = res_parts[0];
+    let res_h = res_parts[1];
     let ffmpeg_path = resolve_ffmpeg_path(&app);
 
     let mut script = String::new();
     for (i, item) in items.iter().enumerate() {
+        // 关键优化: 先处理像素操作(仅1帧)，再 loop 复制已处理帧
+        // 旧顺序: loop→fps→trim→scale (每帧都缩放 = 198次/图)
+        // 新顺序: scale→loop→fps→trim (仅缩放1次/图 = 提速 ~200倍)
         let mut vf_chain = vec![];
-        vf_chain.push("loop=loop=-1:size=1:start=0".to_string());
-        vf_chain.push(format!("fps={}", fps));
-        vf_chain.push(format!("trim=duration={}", item.duration));
-        vf_chain.push("setpts=PTS-STARTPTS".to_string());
 
+        // === 第一阶段: 像素级处理 (仅处理1帧原图) ===
         match item.rotation.unwrap_or(0) {
             90 => vf_chain.push("transpose=1".to_string()),
             180 => vf_chain.push("hflip,vflip".to_string()),
@@ -355,7 +419,18 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
             ));
         }
 
-        vf_chain.push(format!("format=yuv420p,setsar=1,scale={}:force_original_aspect_ratio=decrease,pad={}:-1:-1:color=black", resolution, resolution));
+        if item.fill_mode.as_deref() == Some("cover") {
+            vf_chain.push(format!("scale={}:{}:force_original_aspect_ratio=increase,crop={}:{}:(iw-ow)/2:(ih-oh)/2,format=yuv420p,setsar=1", res_w, res_h, res_w, res_h));
+        } else {
+            vf_chain.push(format!("scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p,setsar=1", res_w, res_h, res_w, res_h));
+        }
+
+        // === 第二阶段: 时间轴生成 (复制已处理帧，几乎零开销) ===
+        vf_chain.push("loop=loop=-1:size=1:start=0".to_string());
+        vf_chain.push(format!("fps={}", fps));
+        vf_chain.push(format!("trim=duration={}", item.duration));
+        vf_chain.push("setpts=PTS-STARTPTS".to_string());
+
         script.push_str(&format!("[{}:v]{}[v{}];\n", i, vf_chain.join(","), i));
     }
 
@@ -364,14 +439,123 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
         concat_inputs.push_str(&format!("[v{}]", i));
     }
     script.push_str(&format!(
-        "{}concat=n={}:v=1:a=0[outv]\n",
+        "{}concat=n={}:v=1:a=0[outv];\n",
         concat_inputs,
         items.len()
     ));
+    let mut precalc_audio_count = 0;
+    for clip in &payload.audio_clips {
+        if payload.resource_paths.iter().any(|r| r.id == clip.resource_id) {
+            let mut filters = Vec::new();
+            if (clip.volume - 1.0).abs() > 0.01 {
+                filters.push(format!("volume={}", clip.volume));
+            }
+            if let Some(fi) = clip.fade_in {
+                if fi > 0.0 {
+                    filters.push(format!("afade=t=in:st=0:d={:.2}", fi));
+                }
+            }
+            if let Some(fo) = clip.fade_out {
+                if fo > 0.0 {
+                    let out_start = (clip.duration - fo).max(0.0);
+                    filters.push(format!("afade=t=out:st={:.2}:d={:.2}", out_start, fo));
+                }
+            }
+            
+            let input_lbl = format!("{}:a", items.len() + precalc_audio_count);
+            let output_lbl = format!("a{}", precalc_audio_count);
+            
+            if filters.is_empty() {
+                script.push_str(&format!("[{}]anull[{}];\n", input_lbl, output_lbl));
+            } else {
+                script.push_str(&format!("[{}]{}[{}];\n", input_lbl, filters.join(","), output_lbl));
+            }
+            precalc_audio_count += 1;
+        }
+    }
+
+    if precalc_audio_count > 0 {
+        if precalc_audio_count == 1 {
+            script.push_str("[a0]anull[outa];\n");
+        } else {
+            let mut amix_str = String::new();
+            for i in 0..precalc_audio_count {
+                amix_str.push_str(&format!("[a{}]", i));
+            }
+            amix_str.push_str(&format!(
+                "amix=inputs={}:duration=longest[outa];\n",
+                precalc_audio_count
+            ));
+            script.push_str(&amix_str);
+        }
+    }
+
+    // 配音音频流处理 (adelay 定位 + volume 控制)
+    let mut vo_audio_count = 0;
+    let vo_input_base = items.len() + precalc_audio_count; // 配音输入的起始索引
+    for (vi, vo) in payload.voiceover_clips.iter().enumerate() {
+        let delay_ms = (vo.timeline_start * 1000.0) as u64;
+        let mut filters = Vec::new();
+        if delay_ms > 0 {
+            filters.push(format!("adelay={}|{}", delay_ms, delay_ms));
+        }
+        if (vo.volume - 1.0).abs() > 0.01 {
+            filters.push(format!("volume={}", vo.volume));
+        }
+        let input_lbl = format!("{}:a", vo_input_base + vi);
+        let output_lbl = format!("vo{}", vi);
+        if filters.is_empty() {
+            script.push_str(&format!("[{}]anull[{}];\n", input_lbl, output_lbl));
+        } else {
+            script.push_str(&format!("[{}]{}[{}];\n", input_lbl, filters.join(","), output_lbl));
+        }
+        vo_audio_count += 1;
+    }
+
+    // 如果有配音但没有音乐 outa，需要单独处理最终混音
+    let total_audio_streams = precalc_audio_count + vo_audio_count;
+    if total_audio_streams > 0 && (precalc_audio_count == 0 || vo_audio_count > 0) {
+        // 需要重新混合所有音频流
+        if total_audio_streams == 1 && precalc_audio_count == 1 {
+            // 只有音乐，outa 已经生成，不需要改
+        } else if total_audio_streams == 1 && vo_audio_count == 1 {
+            // 只有配音
+            script.push_str("[vo0]anull[outa];\n");
+        } else if precalc_audio_count > 0 && vo_audio_count > 0 {
+            // 有音乐+配音，需要重新混合
+            // 先把已有的 [outa] 改名为 [music_mix]
+            let old = if precalc_audio_count == 1 {
+                "[a0]anull[outa];\n".to_string()
+            } else {
+                let mut s = String::new();
+                for i in 0..precalc_audio_count { s.push_str(&format!("[a{}]", i)); }
+                s.push_str(&format!("amix=inputs={}:duration=longest[outa];\n", precalc_audio_count));
+                s
+            };
+            let new = old.replace("[outa]", "[music_mix]");
+            script = script.replace(&old, &new);
+            // 混合 music_mix + 所有 vo
+            let mut final_mix = "[music_mix]".to_string();
+            for i in 0..vo_audio_count { final_mix.push_str(&format!("[vo{}]", i)); }
+            final_mix.push_str(&format!("amix=inputs={}:duration=longest[outa];\n", 1 + vo_audio_count));
+            script.push_str(&final_mix);
+        } else if vo_audio_count > 1 {
+            // 多段配音无音乐
+            let mut mix = String::new();
+            for i in 0..vo_audio_count { mix.push_str(&format!("[vo{}]", i)); }
+            mix.push_str(&format!("amix=inputs={}:duration=longest[outa];\n", vo_audio_count));
+            script.push_str(&mix);
+        }
+    }
     std::fs::write(&filter_script_path, script).map_err(|e| format!("写入滤镜脚本失败: {}", e))?;
 
-    let mut cmd = Command::new(&ffmpeg_path);
-    cmd.arg("-y");
+    // ==========================================
+    // 并行分段编码架构 (Parallel Segment Encoding)
+    // 将 N 张图片分成多个分段，同时编码，最后无损拼接
+    // ==========================================
+    let cpu_count = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let want_h265 = codec == "h265";
+    let (encoder_name, encoder_family) = detect_best_encoder(&ffmpeg_path, want_h265);
 
     let final_output = app
         .path()
@@ -382,9 +566,11 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
             chrono::Local::now().format("%Y%m%d_%H%M%S")
         ));
 
-    for item in &items {
+    // 预处理所有图片路径 (DNG 转换 - 启用 Rayon 并行风暴)
+    use rayon::prelude::*;
+    let resolved_paths: Vec<String> = items.par_iter().map(|item| {
         let is_dng = item.path.to_lowercase().ends_with(".dng");
-        let path = if is_dng {
+        if is_dng {
             use std::collections::hash_map::DefaultHasher;
             use std::hash::{Hash, Hasher};
             let mut hasher = DefaultHasher::new();
@@ -395,93 +581,355 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
                 .unwrap_or_else(|_| item.path.clone())
         } else {
             item.path.clone()
-        };
-        cmd.arg("-i").arg(path.replace("\\", "/"));
-    }
-
-    let mut audio_inputs_count = 0;
-    for clip in &payload.audio_clips {
-        if let Some(res) = payload
-            .resource_paths
-            .iter()
-            .find(|r| r.id == clip.resource_id)
-        {
-            cmd.arg("-ss")
-                .arg(clip.start_offset.to_string())
-                .arg("-t")
-                .arg(clip.duration.to_string())
-                .arg("-i")
-                .arg(res.path.replace("\\", "/"));
-            audio_inputs_count += 1;
         }
-    }
+    }).collect();
 
-    cmd.arg("-filter_complex_script")
-        .arg(&filter_script_path)
-        .arg("-map")
-        .arg("[outv]");
+    // 决定并行分段数 (防止线程风暴与显卡Session并发溢出)
+    // 硬件编码器 (NVENC/AMF) 只能忍受极少的并发，大量并发会导致 GPU 0% 且 CPU 100% 锁死。
+    let max_segments = if encoder_family == "cpu" { (cpu_count / 4).max(1).min(4) } else { 1 };
+    let num_segments = if items.len() <= 6 { 1 } else { (items.len() / 8).min(max_segments).max(1) };
+    let total_duration: f32 = items.iter().map(|item| item.duration).sum();
 
-    if audio_inputs_count > 0 {
-        if audio_inputs_count == 1 {
-            cmd.arg("-map").arg(format!("{}:a", items.len()));
-        } else {
-            let mut amix_str = String::new();
-            for i in 0..audio_inputs_count {
-                amix_str.push_str(&format!("[{}:a]", items.len() + i));
+    if num_segments <= 1 {
+        // === 单进程模式 (图片太少，不值得并行) ===
+        let mut cmd = Command::new(&ffmpeg_path);
+        cmd.arg("-y")
+            .arg("-threads").arg(cpu_count.to_string())
+            .arg("-filter_threads").arg(cpu_count.to_string())
+            .arg("-sws_flags").arg("fast_bilinear");
+
+        for path in &resolved_paths {
+            let p_str: &str = path;
+            cmd.arg("-i").arg(p_str.replace("\\", "/"));
+        }
+
+        // 音频输入
+        let mut audio_inputs_count = 0;
+        for clip in &payload.audio_clips {
+            if let Some(res) = payload.resource_paths.iter().find(|r| r.id == clip.resource_id) {
+                let audio_path = if res.path.starts_with("/audio/") {
+                    app.path()
+                        .resolve(format!("public{}", res.path), tauri::path::BaseDirectory::Resource)
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or_else(|_| res.path.clone())
+                } else { res.path.clone() };
+                cmd.arg("-ss").arg(clip.start_offset.to_string())
+                    .arg("-t").arg(clip.duration.to_string())
+                    .arg("-i").arg(audio_path.replace("\\", "/"));
+                audio_inputs_count += 1;
             }
-            amix_str.push_str(&format!(
-                "amix=inputs={}:duration=longest[outa]",
-                audio_inputs_count
-            ));
-            cmd.arg("-filter_complex")
-                .arg(amix_str)
-                .arg("-map")
-                .arg("[outa]");
+        }
+
+        // 配音输入
+        let mut voiceover_input_count = 0;
+        for vo in &payload.voiceover_clips {
+            cmd.arg("-i").arg(vo.file_path.replace("\\", "/"));
+            voiceover_input_count += 1;
+        }
+
+        // 决定音频映射
+        let total_audio = audio_inputs_count + voiceover_input_count;
+        cmd.arg("-filter_complex_script").arg(&filter_script_path)
+            .arg("-map").arg("[outv]");
+        if total_audio > 0 { cmd.arg("-map").arg("[outa]"); }
+
+        cmd.arg("-c:v").arg(&encoder_name);
+        if want_h265 && hdr {
+            cmd.arg("-pix_fmt").arg("yuv420p10le")
+                .arg("-color_primaries").arg("bt2020")
+                .arg("-color_trc").arg("smpte2084")
+                .arg("-colorspace").arg("bt2020nc");
+            if encoder_family == "cpu" {
+                cmd.arg("-x265-params").arg("hdr10=1:repeat-headers=1:color-range=pc");
+            }
+        }
+        match encoder_family.as_str() {
+            "nvenc" => {
+                let cq = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
+                let preset = if quality == "lossless" { "p7" } else if quality == "high" { "p4" } else { "p2" };
+                cmd.arg("-preset").arg(preset).arg("-rc").arg("vbr").arg("-cq").arg(cq).arg("-b:v").arg("0");
+            }
+            "amf" => {
+                let qp = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
+                let spd = if quality == "lossless" { "quality" } else if quality == "high" { "balanced" } else { "speed" };
+                cmd.arg("-quality").arg(spd).arg("-rc").arg("cqp").arg("-qp_i").arg(qp).arg("-qp_p").arg(qp);
+            }
+            _ => {
+                let (crf, preset) = if quality == "lossless" { ("15", "faster") } else if quality == "high" { ("18", "faster") } else { ("24", "superfast") };
+                cmd.arg("-crf").arg(crf).arg("-preset").arg(preset);
+            }
+        }
+        if total_audio > 0 { cmd.arg("-c:a").arg("aac").arg("-shortest"); }
+        cmd.arg(&final_output);
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+        let mut child = cmd.spawn().map_err(|e| format!("唤醒 FFmpeg 引擎失败: {}", e))?;
+        let mut full_stderr = String::new();
+        if let Some(stderr) = child.stderr.take() {
+            let reader = BufReader::new(stderr);
+            for line_res in reader.lines() {
+                if let Ok(line) = line_res {
+                    full_stderr.push_str(&line); full_stderr.push('\n');
+                    if let Some(idx) = line.find("time=") {
+                        let time_str = &line[idx + 5..];
+                        if let Some(t_str) = time_str.split_whitespace().next() {
+                            let parts: Vec<&str> = t_str.split(':').collect();
+                            if parts.len() == 3 {
+                                let cur = parts[0].parse::<f32>().unwrap_or(0.0) * 3600.0
+                                    + parts[1].parse::<f32>().unwrap_or(0.0) * 60.0
+                                    + parts[2].parse::<f32>().unwrap_or(0.0);
+                                let pct = ((cur / total_duration) * 100.0).min(99.0);
+                                let _ = app.emit("export-progress", ProgressPayload { progress: pct as f64 });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let status = child.wait().map_err(|e| format!("等待 FFmpeg 失败: {}", e))?;
+        if !status.success() {
+            let log_path = std::path::PathBuf::from("h:\\project\\CLIP JIANJI\\src-tauri\\ffmpeg_error.log");
+            let _ = std::fs::write(&log_path, &full_stderr);
+            let tail = if full_stderr.len() > 300 { &full_stderr[full_stderr.len()-300..] } else { &full_stderr };
+            return Err(format!("视频合成失败: {}\n...{}", status, tail));
+        }
+    } else {
+        // === 并行分段编码模式 ===
+        let _ = app.emit("export-progress", ProgressPayload { progress: 2.0 });
+
+        // 将图片分段
+        let chunk_size = (items.len() + num_segments - 1) / num_segments;
+        let segments: Vec<(usize, usize)> = (0..items.len())
+            .step_by(chunk_size)
+            .map(|start| (start, (start + chunk_size).min(items.len())))
+            .collect();
+
+        let temp_dir = app_data_dir.join("segments");
+        if temp_dir.exists() { let _ = std::fs::remove_dir_all(&temp_dir); }
+        let _ = std::fs::create_dir_all(&temp_dir);
+
+        // 为每个分段生成 filter script 并启动 FFmpeg 进程
+        let mut children: Vec<(std::process::Child, std::path::PathBuf, f32)> = Vec::new();
+
+        for (seg_idx, &(start, end)) in segments.iter().enumerate() {
+            let seg_items = &items[start..end];
+            let seg_paths = &resolved_paths[start..end];
+
+            // 生成分段 filter script
+            let mut seg_script = String::new();
+            for (local_i, item) in seg_items.iter().enumerate() {
+                let mut vf = vec![];
+                match item.rotation.unwrap_or(0) {
+                    90 => vf.push("transpose=1".to_string()),
+                    180 => vf.push("hflip,vflip".to_string()),
+                    270 => vf.push("transpose=2".to_string()),
+                    _ => {}
+                }
+                let c = item.contrast.unwrap_or(1.0);
+                let s = item.saturation.unwrap_or(1.0);
+                if c != 1.0 || s != 1.0 { vf.push(format!("eq=contrast={}:saturation={}", c, s)); }
+                if let Some(text) = &item.overlay_text {
+                    if !text.trim().is_empty() {
+                        let safe = text.replace(":", "\\:").replace("'", "\\'");
+                        vf.push(format!("drawtext=fontfile='C\\:/Windows/Fonts/msyh.ttc':text='{}':fontcolor=white:fontsize=80:x=(w-text_w)/2:y=h-th-100:borderw=4:bordercolor=black", safe));
+                    }
+                }
+                if let Some(cp) = &item.crop_pos {
+                    vf.push(format!("crop=iw*{}/100:ih*{}/100:iw*{}/100:ih*{}/100", cp.width, cp.height, cp.x, cp.y));
+                }
+                
+                if item.fill_mode.as_deref() == Some("cover") {
+                    vf.push(format!("scale={}:{}:force_original_aspect_ratio=increase,crop={}:{}:(iw-ow)/2:(ih-oh)/2,format=yuv420p,setsar=1", res_w, res_h, res_w, res_h));
+                } else {
+                    vf.push(format!("scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p,setsar=1", res_w, res_h, res_w, res_h));
+                }
+                vf.push("loop=loop=-1:size=1:start=0".to_string());
+                vf.push(format!("fps={}", fps));
+                vf.push(format!("trim=duration={}", item.duration));
+                vf.push("setpts=PTS-STARTPTS".to_string());
+                seg_script.push_str(&format!("[{}:v]{}[v{}];\n", local_i, vf.join(","), local_i));
+            }
+            let mut concat_in = String::new();
+            for i in 0..seg_items.len() { concat_in.push_str(&format!("[v{}]", i)); }
+            seg_script.push_str(&format!("{}concat=n={}:v=1:a=0[outv];\n", concat_in, seg_items.len()));
+
+            let seg_filter = temp_dir.join(format!("filter_{}.txt", seg_idx));
+            std::fs::write(&seg_filter, &seg_script).map_err(|e| format!("写入分段滤镜失败: {}", e))?;
+
+            let seg_output = temp_dir.join(format!("seg_{}.mp4", seg_idx));
+            let seg_dur: f32 = seg_items.iter().map(|it| it.duration).sum();
+
+            let threads_per_proc = (cpu_count / num_segments).max(2);
+            let mut cmd = Command::new(&ffmpeg_path);
+            cmd.arg("-y")
+                .arg("-threads").arg(threads_per_proc.to_string())
+                .arg("-filter_threads").arg(threads_per_proc.to_string())
+                .arg("-sws_flags").arg("fast_bilinear");
+            for p_str in seg_paths { let p: &str = &p_str; cmd.arg("-i").arg(p.replace("\\", "/")); }
+            cmd.arg("-filter_complex_script").arg(&seg_filter)
+                .arg("-map").arg("[outv]")
+                .arg("-c:v").arg(&encoder_name)
+                .arg("-an"); // 分段无音频
+
+            if want_h265 && hdr {
+                cmd.arg("-pix_fmt").arg("yuv420p10le")
+                    .arg("-color_primaries").arg("bt2020")
+                    .arg("-color_trc").arg("smpte2084")
+                    .arg("-colorspace").arg("bt2020nc");
+                if encoder_family == "cpu" { cmd.arg("-x265-params").arg("hdr10=1:repeat-headers=1:color-range=pc"); }
+            }
+            match encoder_family.as_str() {
+                "nvenc" => {
+                    let cq = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
+                    let preset = if quality == "lossless" { "p7" } else if quality == "high" { "p4" } else { "p2" };
+                    cmd.arg("-preset").arg(preset).arg("-rc").arg("vbr").arg("-cq").arg(cq).arg("-b:v").arg("0");
+                }
+                "amf" => {
+                    let qp = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
+                    let spd = if quality == "lossless" { "quality" } else if quality == "high" { "balanced" } else { "speed" };
+                    cmd.arg("-quality").arg(spd).arg("-rc").arg("cqp").arg("-qp_i").arg(qp).arg("-qp_p").arg(qp);
+                }
+                _ => {
+                    let (crf, preset) = if quality == "lossless" { ("15", "faster") } else if quality == "high" { ("18", "faster") } else { ("24", "superfast") };
+                    cmd.arg("-crf").arg(crf).arg("-preset").arg(preset);
+                }
+            }
+            cmd.arg(&seg_output);
+            cmd.stdout(Stdio::null()).stderr(Stdio::piped());
+
+            let child = cmd.spawn().map_err(|e| format!("启动分段 {} 失败: {}", seg_idx, e))?;
+            children.push((child, seg_output, seg_dur));
+        }
+
+        // 等待所有分段编码完成，收集进度
+        let mut completed_dur = 0.0f32;
+        let mut full_stderr = String::new();
+        for (seg_idx, (mut child, _seg_path, seg_dur)) in children.into_iter().enumerate() {
+            if let Some(stderr) = child.stderr.take() {
+                let reader = BufReader::new(stderr);
+                for line_res in reader.lines() {
+                    if let Ok(line) = line_res {
+                        full_stderr.push_str(&line); full_stderr.push('\n');
+                        if let Some(idx) = line.find("time=") {
+                            let ts = &line[idx + 5..];
+                            if let Some(t) = ts.split_whitespace().next() {
+                                let p: Vec<&str> = t.split(':').collect();
+                                if p.len() == 3 {
+                                    let cur = p[0].parse::<f32>().unwrap_or(0.0) * 3600.0
+                                        + p[1].parse::<f32>().unwrap_or(0.0) * 60.0
+                                        + p[2].parse::<f32>().unwrap_or(0.0);
+                                    let pct = ((completed_dur + cur) / total_duration * 85.0 + 2.0).min(87.0);
+                                    let _ = app.emit("export-progress", ProgressPayload { progress: pct as f64 });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let status = child.wait().map_err(|e| format!("分段 {} 等待失败: {}", seg_idx, e))?;
+            if !status.success() {
+                let log_path = std::path::PathBuf::from("h:\\project\\CLIP JIANJI\\src-tauri\\ffmpeg_error.log");
+                let _ = std::fs::write(&log_path, &full_stderr);
+                let tail = if full_stderr.len() > 300 { &full_stderr[full_stderr.len()-300..] } else { &full_stderr };
+                let _ = std::fs::remove_dir_all(&temp_dir);
+                return Err(format!("分段 {} 编码失败: {}\n...{}", seg_idx, status, tail));
+            }
+            completed_dur += seg_dur;
+        }
+
+        // 生成 concat 列表
+        let _ = app.emit("export-progress", ProgressPayload { progress: 88.0 });
+        let concat_list_path = temp_dir.join("concat_list.txt");
+        let mut concat_list = String::new();
+        for seg_idx in 0..segments.len() {
+            let seg_file = temp_dir.join(format!("seg_{}.mp4", seg_idx));
+            concat_list.push_str(&format!("file '{}'\n", seg_file.to_string_lossy().replace("\\", "/")));
+        }
+        std::fs::write(&concat_list_path, &concat_list).map_err(|e| format!("写入 concat 列表失败: {}", e))?;
+
+        // 最终拼接 + 音频混合
+        let mut final_cmd = Command::new(&ffmpeg_path);
+        final_cmd.arg("-y").arg("-f").arg("concat").arg("-safe").arg("0")
+            .arg("-i").arg(&concat_list_path);
+
+        // 添加音频输入
+        let mut audio_inputs_count = 0;
+        for clip in &payload.audio_clips {
+            if let Some(res) = payload.resource_paths.iter().find(|r| r.id == clip.resource_id) {
+                let audio_path = if res.path.starts_with("/audio/") {
+                    app.path()
+                        .resolve(format!("public{}", res.path), tauri::path::BaseDirectory::Resource)
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or_else(|_| res.path.clone())
+                } else { res.path.clone() };
+                final_cmd.arg("-ss").arg(clip.start_offset.to_string())
+                    .arg("-t").arg(clip.duration.to_string())
+                    .arg("-i").arg(audio_path.replace("\\", "/"));
+                audio_inputs_count += 1;
+            }
+        }
+
+        // 视频直接 copy (已经编码好了), 音频编码
+        final_cmd.arg("-c:v").arg("copy");
+        if audio_inputs_count > 0 {
+            // 音频滤镜
+            let mut afilt = String::new();
+            for ai in 0..audio_inputs_count {
+                let clip = payload.audio_clips.iter()
+                    .filter(|c| payload.resource_paths.iter().any(|r| r.id == c.resource_id))
+                    .nth(ai);
+                if let Some(clip) = clip {
+                    let mut filters = Vec::new();
+                    if (clip.volume - 1.0).abs() > 0.01 { filters.push(format!("volume={}", clip.volume)); }
+                    if let Some(fi) = clip.fade_in { if fi > 0.0 { filters.push(format!("afade=t=in:st=0:d={:.2}", fi)); } }
+                    if let Some(fo) = clip.fade_out { if fo > 0.0 { let os = (clip.duration - fo).max(0.0); filters.push(format!("afade=t=out:st={:.2}:d={:.2}", os, fo)); } }
+                    let lbl_in = format!("{}:a", ai + 1);
+                    let lbl_out = format!("a{}", ai);
+                    if filters.is_empty() {
+                        afilt.push_str(&format!("[{}]anull[{}];", lbl_in, lbl_out));
+                    } else {
+                        afilt.push_str(&format!("[{}]{}[{}];", lbl_in, filters.join(","), lbl_out));
+                    }
+                }
+            }
+            if audio_inputs_count == 1 {
+                afilt.push_str("[a0]anull[outa];");
+            } else {
+                for ai in 0..audio_inputs_count { afilt.push_str(&format!("[a{}]", ai)); }
+                afilt.push_str(&format!("amix=inputs={}:duration=longest[outa];", audio_inputs_count));
+            }
+            final_cmd.arg("-filter_complex").arg(&afilt)
+                .arg("-map").arg("0:v").arg("-map").arg("[outa]")
+                .arg("-c:a").arg("aac").arg("-shortest");
+        }
+        final_cmd.arg(&final_output);
+        final_cmd.stdout(Stdio::null()).stderr(Stdio::piped());
+
+        let _ = app.emit("export-progress", ProgressPayload { progress: 92.0 });
+        let mut final_child = final_cmd.spawn().map_err(|e| format!("最终拼接启动失败: {}", e))?;
+        let mut final_stderr = String::new();
+        if let Some(stderr) = final_child.stderr.take() {
+            let reader = BufReader::new(stderr);
+            for line_res in reader.lines() { if let Ok(line) = line_res { final_stderr.push_str(&line); final_stderr.push('\n'); } }
+        }
+        let final_status = final_child.wait().map_err(|e| format!("最终拼接等待失败: {}", e))?;
+
+        // 清理临时文件
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        if !final_status.success() {
+            let log_path = std::path::PathBuf::from("h:\\project\\CLIP JIANJI\\src-tauri\\ffmpeg_error.log");
+            let _ = std::fs::write(&log_path, &final_stderr);
+            let tail = if final_stderr.len() > 300 { &final_stderr[final_stderr.len()-300..] } else { &final_stderr };
+            return Err(format!("最终拼接失败: {}\n...{}", final_status, tail));
         }
     }
 
-    if codec == "h265" {
-        cmd.arg("-c:v").arg("libx265");
-        if hdr {
-            cmd.arg("-pix_fmt")
-                .arg("yuv420p10le")
-                .arg("-color_primaries")
-                .arg("bt2020")
-                .arg("-color_trc")
-                .arg("smpte2084")
-                .arg("-colorspace")
-                .arg("bt2020nc")
-                .arg("-x265-params")
-                .arg("hdr10=1:repeat-headers=1:color-range=pc");
-        }
-    } else {
-        cmd.arg("-c:v").arg("libx264");
+    let _ = app.emit("export-progress", ProgressPayload { progress: 100.0 });
+    if payload.auto_open {
+        let _ = tauri_plugin_opener::open_path(final_output.clone(), None::<String>);
     }
-
-    if quality == "lossless" {
-        cmd.arg("-crf").arg("10").arg("-preset").arg("slow");
-    } else if quality == "high" {
-        cmd.arg("-crf").arg("15").arg("-preset").arg("slow");
-    } else {
-        cmd.arg("-crf").arg("23");
-    }
-
-    if audio_inputs_count > 0 {
-        cmd.arg("-c:a").arg("aac").arg("-shortest");
-    }
-    cmd.arg(&final_output);
-
-    let status = cmd
-        .status()
-        .map_err(|e| format!("唤醒 FFmpeg 引擎失败: {}. 路径: {:?}", e, ffmpeg_path))?;
-    if status.success() {
-        if payload.auto_open {
-            let _ = tauri_plugin_opener::open_path(final_output.clone(), None::<String>);
-        }
-        Ok(final_output.to_string_lossy().to_string())
-    } else {
-        Err(format!("视频合成失败: {}", status))
-    }
+    Ok(final_output.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -532,6 +980,95 @@ async fn normalize_image(app: tauri::AppHandle, path: String) -> Result<String, 
         .map_err(|e| format!("DNG 格式标准化失败: {}", e))
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TtsRequest {
+    text: String,
+    voice: String,     // e.g. "zh-CN-XiaoxiaoNeural"
+    rate: String,      // e.g. "+0%", "+20%", "-10%"
+    #[serde(default)]
+    style: Option<String>,  // e.g. "documentary-narration", "narration-professional"
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TtsVoice {
+    name: String,
+    short_name: String,
+    gender: String,
+    locale: String,
+}
+
+#[tauri::command]
+async fn generate_tts(app: tauri::AppHandle, req: TtsRequest) -> Result<String, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let tts_dir = app_data_dir.join("tts");
+    if !tts_dir.exists() {
+        let _ = std::fs::create_dir_all(&tts_dir);
+    }
+
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis();
+    let output_file = tts_dir.join(format!("tts_{}.mp3", ts));
+
+    // edge-tts 不支持 SSML，统一使用 --text + --voice + --rate
+    // 选对音色（如 YunzeNeural）本身就有很好的自然语感
+    let mut cmd = Command::new("python");
+    cmd.arg("-m").arg("edge_tts")
+        .arg("--text").arg(&req.text)
+        .arg("--voice").arg(&req.voice)
+        .arg("--rate").arg(&req.rate)
+        .arg("--write-media").arg(&output_file);
+    
+    // Windows: 隐藏控制台窗口
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let output = cmd.spawn()
+        .map_err(|e| format!("启动 edge-tts 失败: {}. 请确认已安装 Python 和 edge-tts (pip install edge-tts)", e))?
+        .wait_with_output()
+        .map_err(|e| format!("等待 edge-tts 完成失败: {}", e))?;
+
+    if output_file.exists() && std::fs::metadata(&output_file).map(|m| m.len() > 0).unwrap_or(false) {
+        Ok(output_file.to_string_lossy().into_owned())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Err(format!("TTS 生成失败 (exit={}): stderr={}, stdout={}", output.status, stderr, stdout))
+    }
+}
+
+#[tauri::command]
+async fn list_tts_voices() -> Result<Vec<TtsVoice>, String> {
+    let output = Command::new("python")
+        .arg("-m")
+        .arg("edge_tts")
+        .arg("--list-voices")
+        .output()
+        .map_err(|e| format!("获取音色列表失败: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut voices = Vec::new();
+
+    for line in stdout.lines() {
+        let line = line.trim();
+        if line.starts_with("zh-CN") || line.starts_with("zh-TW") {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                voices.push(TtsVoice {
+                    name: parts[0].to_string(),
+                    short_name: parts[0].to_string(),
+                    gender: parts[1].to_string(),
+                    locale: if parts[0].starts_with("zh-CN") { "中文".to_string() } else { "台湾".to_string() },
+                });
+            }
+        }
+    }
+    Ok(voices)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -541,7 +1078,10 @@ pub fn run() {
             generate_video,
             get_preview_url,
             normalize_image,
-            reveal_in_explorer
+            reveal_in_explorer,
+            write_temp_file,
+            generate_tts,
+            list_tts_voices
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
