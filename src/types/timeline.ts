@@ -1,0 +1,94 @@
+import { Crop } from 'react-image-crop';
+
+// ─── 多图层文字覆盖 ────────────────────────────────────────────────────────
+export interface TextOverlay {
+  id: string;
+  text: string;
+  fontFamily?: string;
+  fontColor?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  textAlign?: 'left' | 'center' | 'right';
+  textOpacity?: number;
+  textLetterSpacing?: number;
+  textLineHeight?: number;
+  textRotation?: number;
+  textX?: number;
+  textY?: number;
+  textBg?: string;
+  textBgPadding?: number;
+  textBgRadius?: number;
+  textShadowColor?: string;
+  textShadowBlur?: number;
+  textShadowOffsetX?: number;
+  textShadowOffsetY?: number;
+  textStrokeColor?: string;
+  textStrokeWidth?: number;
+  textGlow?: boolean;
+  textGlowColor?: string;
+  textGlowRadius?: number;
+  textAnimation?: string;
+  textAnimDuration?: number;
+}
+
+// ─── 时间轴项目 ────────────────────────────────────────────────────────
+export interface TimelineItem {
+  id: string;
+  resourceId: string;
+  duration: number;
+  transition: string;
+  rotation: number;
+  contrast: number;
+  saturation: number;
+  exposure: number;
+  brilliance: number;
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
+  temp: number;
+  tint: number;
+  vibrance: number;
+  sharpness: number;
+  grain: number;
+  zoom: number;
+  opacity?: number;
+  blendMode?: string;
+  flipX?: boolean;
+  flipY?: boolean;
+  vignette: number;
+  fade: number;
+  posX?: number;
+  posY?: number;
+  overlayText?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  fontColor?: string;
+  fontFamily?: string;
+  textAlign?: 'left' | 'center' | 'right';
+  textBg?: string;
+  textBgPadding?: number;
+  textBgRadius?: number;
+  textShadowColor?: string;
+  textShadowBlur?: number;
+  textShadowOffsetX?: number;
+  textShadowOffsetY?: number;
+  textStrokeColor?: string;
+  textStrokeWidth?: number;
+  textGlow?: boolean;
+  textGlowColor?: string;
+  textGlowRadius?: number;
+  textLetterSpacing?: number;
+  textLineHeight?: number;
+  textOpacity?: number;
+  textRotation?: number;
+  textX?: number;
+  textY?: number;
+  cropPos?: Crop;
+  textAnimation?: string;
+  textAnimDuration?: number;
+  textOverlays?: TextOverlay[];
+  animation?: string;
+  fillMode?: 'contain' | 'cover';
+  overrides?: string[];
+}

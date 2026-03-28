@@ -1,0 +1,53 @@
+/* ─── 设计系统变量 (暗色未来主义主题) ─── */
+:root {
+  /* 品牌色 */
+  --ios-indigo: #5E5CE6;
+  --ios-indigo-glow: rgba(94, 92, 230, 0.35);
+  --ios-bg-deep: #0A0A0F;
+  --ios-bg-card: rgba(255, 255, 255, 0.03);
+  --ios-bg-card-hover: rgba(255, 255, 255, 0.05);
+  --ios-border: rgba(255, 255, 255, 0.06);
+  --ios-border-hover: rgba(255, 255, 255, 0.12);
+  
+  /* 文本 */
+  --text-primary: #F3F4F6;
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --text-muted: rgba(255, 255, 255, 0.4);
+  --text-label: rgba(255, 255, 255, 0.45);
+  
+  /* 功能色 */
+  --color-success: #10B981;
+  --color-danger: #FF453A;
+  --color-warning: #FFD700;
+  --color-info: #4FC3F7;
+  
+  /* 间距 */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  
+  /* 过渡 */
+  --ease-spring: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  
+  /* 阴影 */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 15px var(--ios-indigo-glow);
+  
+  /* 毛玻璃 */
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(20px);
+}
