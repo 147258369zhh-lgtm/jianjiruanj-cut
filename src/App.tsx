@@ -30,50 +30,8 @@ import { formatTime as formatTimeMod } from './utils/formatTime';
 // ProSlider 已迁移到 components/ProSlider.tsx
 const ProSlider = ProSliderMod;
 
-// ─── 媒体特征无损高速探测引擎 ───────────────────────────────────────────────────
-const getMediaDuration = (path: string): Promise<number> => {
-  return new Promise((resolve) => {
-    const isHttp = path.startsWith('http');
-    const isWebRelative = path.startsWith('/');
-    const url = (isHttp || isWebRelative) ? path : convertFileSrc(path);
-    const media = new Audio();
-    // 仅对外部 URL 设置 crossOrigin
-    if (isHttp && !url.includes('asset.localhost')) {
-      media.crossOrigin = 'anonymous';
-    }
-    media.preload = 'metadata';
-
-    const timeout = setTimeout(() => {
-      media.src = '';
-      resolve(10);
-    }, 5000);
-
-    media.onloadedmetadata = () => {
-      clearTimeout(timeout);
-      const dur = media.duration;
-      // 安全上限：Infinity 或超 1 小时视为解析失败
-      resolve(!dur || !isFinite(dur) || dur > 3600 ? 10 : dur);
-    };
-    media.onerror = () => {
-      clearTimeout(timeout);
-      // 终极回退：CORS 拒绝时尝试 Fetch 转 BlobURL (针对严苛的 CDN)
-      if (isHttp) {
-        fetch(url, { mode: 'cors' })
-          .then(res => res.blob())
-          .then(blob => {
-            const blobUrl = URL.createObjectURL(blob);
-            const fallbackMedia = new Audio(blobUrl);
-            fallbackMedia.onloadedmetadata = () => resolve(fallbackMedia.duration || 10);
-            fallbackMedia.onerror = () => resolve(10);
-          })
-          .catch(() => resolve(10));
-      } else {
-        resolve(10);
-      }
-    };
-    media.src = url;
-  });
-};
+// getMediaDuration 已迁移到 utils/mediaUtils.ts
+import { getMediaDuration } from './utils/mediaUtils';
 
 // ─── 莫兰迪绚烂色谱定义 ──────────────────────────────────────────
 const AUDIO_PALETTES = [
@@ -317,63 +275,8 @@ import ProFontSelectComp from './features/text-workshop/FontSelector';
 const ProFontSelect = ProFontSelectComp;
 
 
-// ─── 性能优化：缩略图生成引擎（并发限流 max=4）──────────────────────
-const THUMB_WIDTH = 180; // 略微减小宽度以提升速度
-const thumbCache = new Map<string, string>(); // path -> blobUrl
-// 已入队但还未有结果的 Promise，防止同一 URL 重复入队
-const thumbPending = new Map<string, Promise<string>>();
-
-const thumbQueue: Array<() => Promise<void>> = [];
-let thumbRunning = 0;
-const THUMB_CONCURRENCY = 4;
-
-const runThumbQueue = () => {
-  while (thumbRunning < THUMB_CONCURRENCY && thumbQueue.length > 0) {
-    const task = thumbQueue.shift()!;
-    thumbRunning++;
-    task().finally(() => { thumbRunning--; runThumbQueue(); });
-  }
-};
-
-const generateThumbnail = (srcUrl: string): Promise<string> => {
-  if (thumbCache.has(srcUrl)) return Promise.resolve(thumbCache.get(srcUrl)!);
-  if (thumbPending.has(srcUrl)) return thumbPending.get(srcUrl)!;
-
-  const p = new Promise<string>((resolve) => {
-    const doWork = () => new Promise<void>((done) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const scale = Math.min(1, THUMB_WIDTH / img.naturalWidth);
-        const w = Math.round(img.naturalWidth * scale);
-        const h = Math.round(img.naturalHeight * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, w, h);
-        canvas.toBlob((blob) => {
-          const url = blob ? URL.createObjectURL(blob) : srcUrl;
-          thumbCache.set(srcUrl, url);
-          thumbPending.delete(srcUrl);
-          resolve(url);
-          canvas.width = 0; canvas.height = 0; // 释放 GPU 资源
-          done();
-        }, 'image/webp', 0.65);
-      };
-      img.onerror = () => {
-        thumbCache.set(srcUrl, srcUrl);
-        thumbPending.delete(srcUrl);
-        resolve(srcUrl);
-        done();
-      };
-      img.src = srcUrl;
-    });
-    thumbQueue.push(doWork);
-    runThumbQueue();
-  });
-  thumbPending.set(srcUrl, p);
-  return p;
-};
+// 缩略图引擎已迁移到 utils/thumbnail.ts
+import { generateThumbnail, thumbCache } from './utils/thumbnail';
 
 // ─── 子组件: 极简图片卡片 ──────────────────────────────────────────
 const SortableImageCard = memo(function SortableImageCard({
