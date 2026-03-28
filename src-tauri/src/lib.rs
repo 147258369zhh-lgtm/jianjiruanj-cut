@@ -143,24 +143,35 @@ fn detect_best_encoder(ffmpeg_path: &std::path::Path, want_h265: bool) -> (Strin
     // 返回 (encoder_name, encoder_family): family = "nvenc" | "amf" | "cpu"
     let nvenc = if want_h265 { "hevc_nvenc" } else { "h264_nvenc" };
     let amf   = if want_h265 { "hevc_amf"  } else { "h264_amf"  };
+    let qsv   = if want_h265 { "hevc_qsv"  } else { "h264_qsv"  };
     let cpu   = if want_h265 { "libx265"   } else { "libx264"   };
 
     // 实际探测硬件: 尝试编码 1 帧空数据，成功则说明显卡驱动可用
     let probe = |enc: &str| -> bool {
-        Command::new(ffmpeg_path)
+        let output = Command::new(ffmpeg_path)
             .args(["-hide_banner", "-loglevel", "error",
                    "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.04:r=30",
-                   "-pix_fmt", "nv12", "-c:v", enc, "-frames:v", "1", "-f", "null", "-"])
-            .stdout(Stdio::null()).stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+                   "-pix_fmt", "yuv420p", "-c:v", enc, "-b:v", "1M", "-frames:v", "1", "-f", "null", "-"])
+            .output();
+            
+        match output {
+            Ok(out) => {
+                let success = out.status.success();
+                if !success && !out.stderr.is_empty() {
+                    println!("FFmpeg Encoder {} probe failed: {}", enc, String::from_utf8_lossy(&out.stderr));
+                }
+                success
+            },
+            Err(_) => false
+        }
     };
 
     // 优先 NVENC (通常性能更好)
     if probe(nvenc) { return (nvenc.to_string(), "nvenc".to_string()); }
     // 其次 AMF (AMD 显卡)
     if probe(amf) { return (amf.to_string(), "amf".to_string()); }
+    // 然后 QSV (Intel 核心显卡)
+    if probe(qsv) { return (qsv.to_string(), "qsv".to_string()); }
     // 兜底 CPU
     (cpu.to_string(), "cpu".to_string())
 }
@@ -647,12 +658,22 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
             "nvenc" => {
                 let cq = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
                 let preset = if quality == "lossless" { "p7" } else if quality == "high" { "p4" } else { "p2" };
-                cmd.arg("-preset").arg(preset).arg("-rc").arg("vbr").arg("-cq").arg(cq).arg("-b:v").arg("0");
+                cmd.arg("-preset").arg(preset)
+                   .arg("-rc").arg("vbr")
+                   .arg("-cq").arg(cq)
+                   .arg("-b:v").arg("0")
+                   .arg("-spatial-aq").arg("1")
+                   .arg("-temporal-aq").arg("1");
             }
             "amf" => {
                 let qp = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
                 let spd = if quality == "lossless" { "quality" } else if quality == "high" { "balanced" } else { "speed" };
                 cmd.arg("-quality").arg(spd).arg("-rc").arg("cqp").arg("-qp_i").arg(qp).arg("-qp_p").arg(qp);
+            }
+            "qsv" => {
+                let qp = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
+                let preset = if quality == "lossless" { "veryslow" } else if quality == "high" { "medium" } else { "fast" };
+                cmd.arg("-preset").arg(preset).arg("-look_ahead").arg("1").arg("-q").arg(qp);
             }
             _ => {
                 let (crf, preset) = if quality == "lossless" { ("15", "faster") } else if quality == "high" { ("18", "faster") } else { ("24", "superfast") };
