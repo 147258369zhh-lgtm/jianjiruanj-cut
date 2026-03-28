@@ -1139,7 +1139,7 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
   const [activeTab, setActiveTab] = useState<'effects' | 'export'>('effects');
-  const [propertyTab, setPropertyTab] = useState<'presets' | 'color' | 'transform'>('presets');
+  const [propertyTab, setPropertyTab] = useState<'presets' | 'color' | 'text' | 'transform'>('presets');
   const [libTab, setLibTab] = useState<'image' | 'audio' | 'video'>('image');
 
   // AI 配音相关状态
@@ -3228,6 +3228,7 @@ function App() {
                         {[
                           { id: 'presets', label: '一键滤镜' },
                           { id: 'color', label: '影像色彩' },
+                          { id: 'text', label: '文字工坊' },
                           { id: 'transform', label: '位置形变' }
                         ].map(t => (
                           <div 
@@ -3413,7 +3414,7 @@ function App() {
                       </div>
 
                       {/* GROUP 2: 文字工坊 */}
-                      <div className="ios-prop-group" style={{ display: propertyTab === 'color' ? 'block' : 'none' }}>
+                      <div className="ios-prop-group" style={{ display: propertyTab === 'text' ? 'block' : 'none' }}>
                         <Text weight="bold" style={{ color: '#34D399', fontSize: 11, marginBottom: 2, display: 'block' }}>⌨️ 文字工坊</Text>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
                           <Input value={selectedItem?.overlayText || ''} onChange={(_e, data) => updateSelectedProperty('overlayText', data.value)} placeholder="输入文字..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '3px 6px', width: '100%', fontSize: 11 }} />
