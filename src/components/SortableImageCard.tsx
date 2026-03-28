@@ -1,97 +1,10 @@
-import React, { memo, useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { generateThumbnail } from '../utils/thumbnail';
 import { TimelineItem, Resource } from '../types';
 
-// ─── 性能优化：缩略图生成引擎（并发限流 max=4）──────────────────────
-const THUMB_WIDTH = 180; // 略微减小宽度以提升速度
-const thumbCache = new Map<string, string>(); // path -> blobUrl
-// 已入队但还未有结果的 Promise，防止同一 URL 重复入队
-const thumbPending = new Map<string, Promise<string>>();
-
-const thumbQueue: Array<() => Promise<void>> = [];
-let thumbRunning = 0;
-const THUMB_CONCURRENCY = 4;
-
-const runThumbQueue = () => {
-  while (thumbRunning < THUMB_CONCURRENCY && thumbQueue.length > 0) {
-    const task = thumbQueue.shift()!;
-    thumbRunning++;
-    task().finally(() => { thumbRunning--; runThumbQueue(); });
-  }
-};
-
-const generateThumbnail = (srcUrl: string): Promise<string> => {
-  if (thumbCache.has(srcUrl)) return Promise.resolve(thumbCache.get(srcUrl)!);
-  if (thumbPending.has(srcUrl)) return thumbPending.get(srcUrl)!;
-
-  const p = new Promise<string>((resolve) => {
-    const doWork = () => new Promise<void>(async (done) => {
-      try {
-        // 先 Fetch 成 Blob 绕过 Tauri 的 CORS 跨域污染画布问题
-        const res = await fetch(srcUrl);
-        const fileBlob = await res.blob();
-        const objUrl = URL.createObjectURL(fileBlob);
-
-        const img = new Image();
-        img.onload = () => {
-          const scale = Math.min(1, THUMB_WIDTH / img.naturalWidth);
-          const w = Math.round(img.naturalWidth * scale);
-          const h = Math.round(img.naturalHeight * scale);
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, w, h);
-            try {
-              canvas.toBlob((blob) => {
-                const url = blob ? URL.createObjectURL(blob) : srcUrl;
-                thumbCache.set(srcUrl, url);
-                thumbPending.delete(srcUrl);
-                resolve(url);
-                canvas.width = 0; canvas.height = 0;
-                URL.revokeObjectURL(objUrl);
-                done();
-              }, 'image/webp', 0.65);
-            } catch (err) {
-              // 处理可能的安全异常
-              thumbCache.set(srcUrl, srcUrl);
-              thumbPending.delete(srcUrl);
-              resolve(srcUrl);
-              URL.revokeObjectURL(objUrl);
-              done();
-            }
-          } else {
-             resolve(srcUrl);
-             URL.revokeObjectURL(objUrl);
-             done();
-          }
-        };
-        img.onerror = () => {
-          thumbCache.set(srcUrl, srcUrl);
-          thumbPending.delete(srcUrl);
-          resolve(srcUrl);
-          URL.revokeObjectURL(objUrl);
-          done();
-        };
-        img.src = objUrl;
-      } catch (err) {
-        thumbCache.set(srcUrl, srcUrl);
-        thumbPending.delete(srcUrl);
-        resolve(srcUrl);
-        done();
-      }
-    });
-    thumbQueue.push(doWork);
-    runThumbQueue();
-  });
-
-  thumbPending.set(srcUrl, p);
-  return p;
-};
-
-// ─── 子组件: 极简图片卡片 ──────────────────────────────────────────
 export const SortableImageCard = memo(function SortableImageCard({
   item, resource, isSelected, onSelect, onRemove, pps, previewUrl, onContextMenu, onTrimDuration, onDoubleClickCard, multiSelectIndex, isMultiSelected
 }: {
@@ -128,9 +41,8 @@ export const SortableImageCard = memo(function SortableImageCard({
   }, [resource?.path, previewUrl, isVideo]);
 
   const thumbStyle: React.CSSProperties = {
-    width: '100%', height: '100%', objectFit: 'cover',
-    transform: `rotate(${item.rotation || 0}deg) scale(${item.zoom || 1})`,
-    clipPath: item.cropPos ? `inset(${item.cropPos.y}% ${100 - (item.cropPos.x + item.cropPos.width)}% ${100 - (item.cropPos.y + item.cropPos.height)}% ${item.cropPos.x}%)` : undefined,
+    width: '100%', height: '100%', objectFit: item.fillMode === 'contain' ? 'contain' : 'cover',
+    transform: `rotate(${item.rotation}deg) scale(${item.zoom || 1})`,
     filter: `
       brightness(${item.exposure ?? 1.0}) 
       contrast(${(item.contrast ?? 1.0) + ((item.brilliance ?? 1.0) - 1.0) * 0.2}) 
@@ -138,6 +50,7 @@ export const SortableImageCard = memo(function SortableImageCard({
       sepia(${(item.temp ?? 0) > 0 ? (item.temp ?? 0) / 100 : 0})
       hue-rotate(${(item.tint ?? 0)}deg)
     `,
+    clipPath: item.cropPos ? `inset(${item.cropPos.y}% ${100 - item.cropPos.x - item.cropPos.width}% ${100 - item.cropPos.y - item.cropPos.height}% ${item.cropPos.x}%)` : 'none',
     transition: 'transform 0.3s cubic-bezier(0.23, 1, 0.32, 1), filter 0.3s',
   };
 
@@ -253,25 +166,22 @@ export const SortableImageCard = memo(function SortableImageCard({
         </>
       ) : null}
 
-      {/* 顶部居中删除按钮 (hover 时显示) */}
+      {/* 右上角删除按钮 (hover 时显示) */}
       {isHovered && (
         <div
           onClick={(e) => { e.stopPropagation(); onRemove(item.id); }}
           onPointerDown={(e) => e.stopPropagation()}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translateX(-50%) scale(1.15)'; e.currentTarget.style.background = 'rgba(255, 59, 48, 0.95)'; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'translateX(-50%) scale(1)'; e.currentTarget.style.background = 'rgba(255, 59, 48, 0.75)'; }}
           style={{
-            position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%) scale(1)', zIndex: 20,
-            width: 32, height: 32, borderRadius: 10,
-            background: 'rgba(255, 59, 48, 0.75)',
-            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+            position: 'absolute', top: 4, right: 4, zIndex: 20,
+            width: 18, height: 18, borderRadius: 5,
+            background: 'rgba(255, 59, 48, 0.85)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', fontSize: 16, color: '#fff',
-            boxShadow: '0 4px 15px rgba(255, 59, 48, 0.5), inset 0 0 8px rgba(255,255,255,0.3)',
-            transition: 'all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+            cursor: 'pointer', fontSize: 10, color: '#fff',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
+            transition: 'transform 0.15s',
           }}
-          title="彻底移除"
-        >🗑️</div>
+          title="从轨道移除"
+        >🗑</div>
       )}
 
       {/* 多选序号角标 */}
