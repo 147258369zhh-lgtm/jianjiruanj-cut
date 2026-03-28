@@ -1071,3 +1071,115 @@ body::before {
   background: #10B981;
   border-color: #ffffff;
 }
+
+/* ─── FluentUI to Custom CSS mapping ─── */
+.ios-button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.ios-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.ios-button:active {
+  transform: scale(0.97);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ios-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ios-button-primary {
+  background: var(--ios-indigo, #0A84FF);
+  color: #fff;
+  border: none;
+  box-shadow: 0 2px 6px rgba(10, 132, 255, 0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.ios-button-primary:hover {
+  background: #007AFF;
+  box-shadow: 0 4px 10px rgba(10, 132, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.ios-button-primary:active {
+  background: #0066D6;
+}
+
+.ios-button-subtle, .ios-button-transparent {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+.ios-button-subtle:hover, .ios-button-transparent:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ios-button-small {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 4px;
+}
+
+.ios-button-circular {
+  border-radius: 50%;
+  padding: 8px;
+}
+
+.ios-input {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ios-input:focus {
+  outline: none;
+  border-color: var(--ios-indigo, #0A84FF);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.25);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.ios-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.ios-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.3px;
+}
+
+.ios-text {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+}

@@ -1,0 +1,28 @@
+﻿src/App.tsx(2163,47): error TS2322: Type '{ children: string; className: string; weight: string; style: { color: "#10B981"; fontSize: number; marginBottom: number; display: "block"; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'weight' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(2224,47): error TS2322: Type '{ children: string; className: string; weight: string; style: { color: "var(--ios-indigo)"; fontSize: number; marginBottom: number; display: "block"; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'weight' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(2315,51): error TS2322: Type '{ children: string; className: string; weight: string; style: { color: "#10B981"; fontSize: number; marginBottom: number; display: "block"; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'weight' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(2343,51): error TS2322: Type '{ children: (string | false | Element)[]; className: string; weight: string; style: { color: "var(--ios-indigo)"; fontSize: number; marginBottom: number; display: "block"; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'weight' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(2347,54): error TS2322: Type '{ children: Element; className: string; label: Element; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'label' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(2400,54): error TS2322: Type '{ children: Element; className: string; label: Element; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'label' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(2835,51): error TS2322: Type '{ children: string; className: string; weight: string; style: { color: "#F87171"; fontSize: number; marginBottom: number; display: "block"; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'weight' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(2840,31): error TS2322: Type '{ children: string; className: string; appearance: string; style: { flex: number; }; onClick: () => void; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'appearance' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/App.tsx(2866,54): error TS2322: Type '{ children: Element; className: string; label: Element; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'label' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(2923,49): error TS2322: Type '{ children: (false | Element)[]; className: string; weight: string; style: { color: "#C084FC"; fontSize: number; display: "flex"; justifyContent: "space-between"; alignItems: "center"; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'weight' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(2945,29): error TS2322: Type '{ children: string; className: string; appearance: string; style: { height: number; borderRadius: number; fontSize: number; }; onClick: () => void; disabled: boolean; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'appearance' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/App.tsx(2999,47): error TS2322: Type '{ children: string; className: string; weight: string; style: { color: "#10B981"; fontSize: number; marginBottom: number; display: "block"; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'weight' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(3025,47): error TS2322: Type '{ children: string; className: string; weight: string; style: { color: "var(--ios-indigo)"; fontSize: number; marginBottom: number; display: "block"; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'weight' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/App.tsx(3063,47): error TS2322: Type '{ children: string; className: string; weight: string; style: { color: "#F59E0B"; fontSize: number; marginBottom: number; display: "block"; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'weight' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.

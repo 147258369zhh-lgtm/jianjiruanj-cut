@@ -1,14 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useProjectHistory } from './hooks/useProjectHistory';
 
-import {
-  FluentProvider,
-  webDarkTheme,
-  Button,
-  Text,
-  Field,
-  Input,
-} from "@fluentui/react-components";
+
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -1459,7 +1452,7 @@ function App() {
   );
 
   return (
-    <FluentProvider theme={webDarkTheme} style={{ height: '100vh', width: '100vw', background: 'transparent' }}>
+    <div className="app-root-container">
       <div className={`ios-layout ${theme === 'win11' ? 'theme-win11' : ''}`} onClick={() => { setContextMenu(null); setShowShortcuts(false); setShowSortMenu(false); setShowMoreMenu(false); }}>
 
 
@@ -1526,14 +1519,14 @@ function App() {
         }}>
 
           {/* 左侧：主流程按钮组 */}
-          <Button size="small" appearance="primary" style={{ borderRadius: 6, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, padding: '0 14px', height: 30, border: 'none' }} onClick={() => handleImport(leftTab === 'music' ? 'audio' : leftTab === 'video' ? 'video' : 'image')}>
+          <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 6, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, padding: '0 14px', height: 30, border: 'none' }} onClick={() => handleImport(leftTab === 'music' ? 'audio' : leftTab === 'video' ? 'video' : 'image')}>
             📥 导入
-          </Button>
+          </button>
           {/* 排序下拉菜单 (任务5) */}
           <div style={{ position: 'relative' }}>
-            <Button size="small" appearance="subtle" style={{ borderRadius: 6, fontSize: 12, padding: '0 10px', height: 30, color: 'rgba(255,255,255,0.7)' }} onClick={(e) => { e.stopPropagation(); setShowSortMenu(!showSortMenu); }}>
+            <button className="ios-button-small ios-button ios-button-subtle" style={{ borderRadius: 6, fontSize: 12, padding: '0 10px', height: 30, color: 'rgba(255,255,255,0.7)' }} onClick={(e) => { e.stopPropagation(); setShowSortMenu(!showSortMenu); }}>
               {sortMode === 'manual' ? '📂 排序' : `📂 ${sortMode === 'time' ? '时间序' : '名称序'}${sortDirection === 'desc' ? '↓' : '↑'}`}
-            </Button>
+            </button>
             {showSortMenu && (
               <div className="sort-dropdown" style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'rgba(30,30,46,0.96)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 6, zIndex: 999, minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
                 {[
@@ -1674,9 +1667,9 @@ function App() {
               </div>
             )}
           </div>
-          <Button size="small" appearance="primary" style={{ borderRadius: 6, background: '#10B981', fontWeight: 600, fontSize: 12, padding: '0 16px', height: 30, border: 'none' }} onClick={() => { setShowExportPanel(!showExportPanel); setShowGlobalDefaults(false); }}>
+          <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 6, background: '#10B981', fontWeight: 600, fontSize: 12, padding: '0 16px', height: 30, border: 'none' }} onClick={() => { setShowExportPanel(!showExportPanel); setShowGlobalDefaults(false); }}>
             🚀 导出
-          </Button>
+          </button>
         </div>
 
         {/* ═══ 主内容区 ═══ */}
@@ -1704,9 +1697,9 @@ function App() {
             {leftTab === 'video' ? (
               /* 视频素材库 */
               <div style={{ flex: 1, padding: '12px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
-                <Button size="small" appearance="primary" style={{ borderRadius: 8, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, height: 36, border: 'none', width: '100%' }} onClick={() => handleImport('video')}>
+                <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 8, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, height: 36, border: 'none', width: '100%' }} onClick={() => handleImport('video')}>
                   🎬 导入视频文件
-                </Button>
+                </button>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>支持 MP4 / MOV / AVI / MKV / WebM</div>
                 {resources.filter(r => r.type === 'video').length === 0 ? (
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>暂无视频，点击上方导入</div>
@@ -1855,14 +1848,14 @@ function App() {
                   <>
                     <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {leftTab === 'photo' && (
-                        <Button size="small" appearance="primary" style={{ borderRadius: 7, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 11, height: 32, border: 'none', width: '100%' }} onClick={() => handleImport('image')}>📸 导入照片文件</Button>
+                        <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 7, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 11, height: 32, border: 'none', width: '100%' }} onClick={() => handleImport('image')}>📸 导入照片文件</button>
                       )}
-                      <Input value={searchQuery} onChange={(_e, data) => setSearchQuery(data.value)} placeholder="🔍 搜索..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6, fontSize: 11 }} />
+                      <input className="ios-input" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 搜索..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6, fontSize: 11 }} />
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        <Button size="small" appearance="subtle" style={{ borderRadius: 6, fontSize: 11, padding: '0 6px', color: 'rgba(255,255,255,0.7)' }} onClick={() => { const allIds = filteredResources.map(r => r.id); if (selectedResourceIds.size === allIds.length && allIds.length > 0) setSelectedResourceIds(new Set()); else setSelectedResourceIds(new Set(allIds)); }}>
+                        <button className="ios-button-small ios-button ios-button-subtle" style={{ borderRadius: 6, fontSize: 11, padding: '0 6px', color: 'rgba(255,255,255,0.7)' }} onClick={() => { const allIds = filteredResources.map(r => r.id); if (selectedResourceIds.size === allIds.length && allIds.length > 0) setSelectedResourceIds(new Set()); else setSelectedResourceIds(new Set(allIds)); }}>
                           {filteredResources.length > 0 && selectedResourceIds.size === filteredResources.length ? '反选' : '全选'}
-                        </Button>
-                        <Button appearance="primary" size="small" disabled={selectedResourceIds.size === 0} style={{ flex: 1, borderRadius: 6, background: selectedResourceIds.size > 0 ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.04)', color: selectedResourceIds.size > 0 ? '#fff' : 'rgba(255,255,255,0.3)', fontWeight: 600, fontSize: 11, border: 'none' }} onClick={async () => {
+                        </button>
+                        <button className="ios-button-small ios-button ios-button-primary" disabled={selectedResourceIds.size === 0} style={{ flex: 1, borderRadius: 6, background: selectedResourceIds.size > 0 ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.04)', color: selectedResourceIds.size > 0 ? '#fff' : 'rgba(255,255,255,0.3)', fontWeight: 600, fontSize: 11, border: 'none' }} onClick={async () => {
                           const selectedList = resources.filter(r => r.type === libTab && selectedResourceIds.has(r.id));
                           for (const r of selectedList) {
                             if (r.type === 'image') {
@@ -1875,8 +1868,8 @@ function App() {
                           setSelectedResourceIds(new Set());
                         }}>
                           {selectedResourceIds.size > 0 ? `+ 编入 ${selectedResourceIds.size}项` : '+ 编入轨道'}
-                        </Button>
-                        <Button size="small" appearance="subtle" disabled={selectedResourceIds.size === 0} style={{ borderRadius: 6, minWidth: 28, padding: 0, fontSize: 12, color: selectedResourceIds.size > 0 ? '#FF3B30' : 'rgba(255,255,255,0.1)' }} onClick={() => removeFromLibrary(selectedResourceIds)}>🗑</Button>
+                        </button>
+                        <button className="ios-button-small ios-button ios-button-subtle" disabled={selectedResourceIds.size === 0} style={{ borderRadius: 6, minWidth: 28, padding: 0, fontSize: 12, color: selectedResourceIds.size > 0 ? '#FF3B30' : 'rgba(255,255,255,0.1)' }} onClick={() => removeFromLibrary(selectedResourceIds)}>🗑</button>
                       </div>
                     </div>
                     <div ref={libScrollRef} onScroll={(e) => setLibScrollTop(e.currentTarget.scrollTop)} style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
@@ -2157,7 +2150,7 @@ function App() {
                   '💡 项目信息'
                 )}
               </span>
-              {(showGlobalDefaults || showExportPanel) && <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 6px', borderRadius: 4, color: 'rgba(255,255,255,0.5)' }} onClick={() => { setShowGlobalDefaults(false); setShowExportPanel(false); setActiveTab('effects'); }}>← 返回</Button>}
+              {(showGlobalDefaults || showExportPanel) && <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 6px', borderRadius: 4, color: 'rgba(255,255,255,0.5)' }} onClick={() => { setShowGlobalDefaults(false); setShowExportPanel(false); setActiveTab('effects'); }}>← 返回</button>}
             </div>
             <div style={{ flex: 1, padding: '12px', overflowY: 'auto', scrollBehavior: 'smooth' }}>
               {/* ═══ 全局默认设置面板 (任务6) ═══ */}
@@ -2167,7 +2160,7 @@ function App() {
                     修改全局默认值将自动应用到所有<strong style={{ color: 'rgba(255,255,255,0.65)' }}>未手动覆盖</strong>的图片。单独修改过的图片参数旁会显示 ✏️ 标记。
                   </div>
                   <div className="ios-prop-group">
-                    <Text weight="bold" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⏱ 基础参数</Text>
+                    <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⏱ 基础参数</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>默认时长: {globalDefaults.duration}s</span>
@@ -2177,7 +2170,7 @@ function App() {
                           setTimeline(prev => prev.map(t => !(t.overrides?.includes('duration')) ? { ...t, duration: v } : t));
                         }} />
                       </div>
-                      <Field label="默认片段转场">
+                      <div className="ios-field" ><label className="ios-field-label">默认片段转场</label>
                         <IosSelect
                           value={globalDefaults.transition}
                           onChange={v => {
@@ -2194,8 +2187,8 @@ function App() {
                             { value: 'zoom', label: '专业缩放 (Zoom)' }
                           ]}
                         />
-                      </Field>
-                      <Field label="默认照片动效 (入场)">
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">默认照片动效 (入场)</label>
                         <IosSelect
                           value={globalDefaults.animation || 'none'}
                           onChange={v => {
@@ -2224,11 +2217,11 @@ function App() {
                           favSet={favAnims}
                           onToggleFav={toggleFavAnim}
                         />
-                      </Field>
+                      </div>
                     </div>
                   </div>
                   <div className="ios-prop-group">
-                    <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 8, display: 'block' }}>🌓 影像参数默认值</Text>
+                    <div className="ios-text" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 8, display: 'block' }}>🌓 影像参数默认值</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                       {([
                         ['exposure', '曝光', 0.0, 3.0, 0.01], 
@@ -2268,7 +2261,7 @@ function App() {
                       })}
                     </div>
                   </div>
-                  <Button appearance="subtle" style={{ marginTop: 8, borderRadius: 10, height: 36, fontSize: 12, color: '#FF3B30', border: '1px solid rgba(255,59,48,0.2)' }} onClick={() => {
+                  <button className="ios-button ios-button-subtle" style={{ marginTop: 8, borderRadius: 10, height: 36, fontSize: 12, color: '#FF3B30', border: '1px solid rgba(255,59,48,0.2)' }} onClick={() => {
                     commitSnapshotNow();
                     setGlobalDefaults(GLOBAL_DEFAULTS_INIT);
                     setTimeline(prev => prev.map(t => {
@@ -2281,7 +2274,7 @@ function App() {
                     setStatusMsg('🔄 已重置所有全局参数为默认值'); setTimeout(() => setStatusMsg(''), 1500);
                   }}>
                     🔄 重置全部为默认
-                  </Button>
+                  </button>
                 </div>
               ) :
               activeTab === 'effects' ? (
@@ -2319,7 +2312,7 @@ function App() {
 
                       {/* 滤镜预设 */}
                       <div className="ios-prop-group" style={{ display: propertyTab === 'presets' ? 'block' : 'none' }}>
-                        <Text weight="bold" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 一键滤镜预设</Text>
+                        <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 一键滤镜预设</div>
                         <div className="filter-preset-scroll" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, maxHeight: 'none', paddingRight: 14, marginLeft: -4 }}>
                           {FILTER_PRESETS.map((preset) => (
                             <div
@@ -2347,16 +2340,15 @@ function App() {
 
                       {/* GROUP 1: 影像与色彩 (合并) */}
                       <div className="ios-prop-group" style={{ display: propertyTab === 'color' ? 'block' : 'none' }}>
-                        <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 11, marginBottom: 2, display: 'block' }}>🎨 影像与色彩 {selectedIds.size > 1 && <span style={{ fontSize: 9, opacity: 0.5, fontWeight: 400 }}>({selectedIds.size} 项)</span>}</Text>
+                        <div className="ios-text" style={{ color: 'var(--ios-indigo)', fontSize: 11, marginBottom: 2, display: 'block' }}>🎨 影像与色彩 {selectedIds.size > 1 && <span style={{ fontSize: 9, opacity: 0.5, fontWeight: 400 }}>({selectedIds.size} 项)</span>}</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
                           
                           {/* 动效/入场 */}
-                          <Field label={
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <div className="ios-field" >
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><label className="ios-field-label">画面填充 (Fill Mode)</label>
                               <span>照片动效/入场</span>
                               {selectedItem && <span onClick={() => selectedItem && (isOverridden(selectedItem, 'animation') ? restoreInheritance(selectedItem.id, 'animation') : null)} style={{ cursor: isOverridden(selectedItem, 'animation') ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, 'animation') ? '点击恢复继承全局默认' : '正在继承全局默认'}>{isOverridden(selectedItem, 'animation') ? '✏️' : '🔗'}</span>}
                             </span>
-                          }>
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                               <IosSelect
                                 value={(selectedItem as any)?.animation || 'none'}
@@ -2402,14 +2394,13 @@ function App() {
                                 }}
                               >🎲</div>
                             </div>
-                          </Field>
+                          </div>
 
-                          <Field label={
+                          <div className="ios-field" >
                             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span>{`时长: ${localDuration !== null ? localDuration : (selectedItem?.duration || 3)}s`}</span>
                               {selectedItem && <span onClick={() => selectedItem && (isOverridden(selectedItem, 'duration') ? restoreInheritance(selectedItem.id, 'duration') : null)} style={{ cursor: isOverridden(selectedItem, 'duration') ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, 'duration') ? '点击恢复继承全局默认' : '正在继承全局默认'}>{isOverridden(selectedItem, 'duration') ? '✏️' : '🔗'}</span>}
                             </span>
-                          }>
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                               <div style={{ flex: 1, minWidth: 0 }} onMouseUp={() => { if (localDuration !== null) { commitSnapshotNow(); updateSelectedProperty('duration', localDuration); setLocalDuration(null); } }}>
                                 <ProSlider min={0.1} max={10} step={0.1} value={localDuration !== null ? localDuration : (selectedItem?.duration || 3)} onChange={d => setLocalDuration(Math.round(d * 10) / 10)} style={{ width: '100%', maxWidth: '100%' }} />
@@ -2439,7 +2430,7 @@ function App() {
                                 }}
                               >🎲</div>
                             </div>
-                          </Field>
+                          </div>
                           {([
                             ['exposure', '曝光', 0.0, 2.0, 0.01], 
                             ['brilliance', '鲜明度', 0.0, 2.0, 0.01],
@@ -2480,7 +2471,7 @@ function App() {
                               </div>
                             );
                           })}
-                          <Button appearance="subtle" style={{ width: '100%', marginTop: 12, borderRadius: 8, height: 36, color: 'rgba(255,255,255,0.7)', border: '1px dashed rgba(255,255,255,0.15)', transition: 'all 0.15s' }} onClick={() => {
+                          <button className="ios-button ios-button-subtle" style={{ width: '100%', marginTop: 12, borderRadius: 8, height: 36, color: 'rgba(255,255,255,0.7)', border: '1px dashed rgba(255,255,255,0.15)', transition: 'all 0.15s' }} onClick={() => {
                             commitSnapshotNow();
                             setTimeline(prev => prev.map(t => {
                               if (!selectedIds.has(t.id)) return t;
@@ -2499,16 +2490,16 @@ function App() {
                             setStatusMsg('✨ 已全部重置为全局默认参数'); setTimeout(() => setStatusMsg(''), 1500);
                           }}>
                             ↺ 一键重置全部色彩参数
-                          </Button>
+                          </button>
                         </div>
                       </div>
 
                       {/* 批量操作按钮组 */}
                       <div style={{ display: propertyTab === 'presets' ? 'flex' : 'none', flexDirection: 'row', gap: 8, marginTop: 'auto' }}>
-                        <Button appearance="primary" style={{ flex: 1, borderRadius: 10, background: 'var(--ios-indigo)', height: 38, fontWeight: 600, fontSize: 11, padding: '0 4px' }} onClick={applyAllToTimeline}>
+                        <button className="ios-button ios-button-primary" style={{ flex: 1, borderRadius: 10, background: 'var(--ios-indigo)', height: 38, fontWeight: 600, fontSize: 11, padding: '0 4px' }} onClick={applyAllToTimeline}>
                           ✨ 一键分发至全轨
-                        </Button>
-                        <Button appearance="subtle" style={{ flex: 1, borderRadius: 10, height: 38, fontWeight: 500, fontSize: 11, padding: '0 4px', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => {
+                        </button>
+                        <button className="ios-button ios-button-subtle" style={{ flex: 1, borderRadius: 10, height: 38, fontWeight: 500, fontSize: 11, padding: '0 4px', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => {
                               commitSnapshotNow();
                               const validFilters = FILTER_PRESETS.slice(1);
                               setTimeline(prev => prev.map(t => {
@@ -2522,9 +2513,9 @@ function App() {
                               setStatusMsg(`🎨 已为全轨照片根据权重随机分配滤镜`); setTimeout(() => setStatusMsg(''), 2000);
                         }}>
                           🎨 智能化随机全轨滤镜
-                        </Button>
+                        </button>
                         {audioItems.length > 0 && timeline.length > 0 && (
-                          <Button appearance="subtle" style={{ borderRadius: 10, height: 34, fontWeight: 500, fontSize: 12, border: '1px solid rgba(255,255,255,0.1)' }}
+                          <button className="ios-button ios-button-subtle" style={{ borderRadius: 10, height: 34, fontWeight: 500, fontSize: 12, border: '1px solid rgba(255,255,255,0.1)' }}
                             onClick={() => {
                               const totalAudioDur = Math.max(...audioItems.map(a => a.timelineStart + a.duration));
                               if (totalAudioDur <= 0 || timeline.length === 0) return;
@@ -2535,7 +2526,7 @@ function App() {
                               setTimeout(() => setStatusMsg(''), 2000);
                             }}>
                             🎵 自动适配音乐时长
-                          </Button>
+                          </button>
                         )}
                       </div>
 
@@ -2839,21 +2830,19 @@ function App() {
 
                       {/* GROUP 4: 几何与时间 */}
                       <div className="ios-prop-group" style={{ display: propertyTab === 'transform' ? 'block' : 'none' }}>
-                        <Text weight="bold" style={{ color: '#F87171', fontSize: 13, marginBottom: 8, display: 'block' }}>📐 几何、时间与转场</Text>
+                        <div className="ios-text" style={{ color: '#F87171', fontSize: 13, marginBottom: 8, display: 'block' }}>📐 几何、时间与转场</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                           <div style={{ display: 'flex', gap: 8 }}>
-                            <Button size="small" style={{ flex: 1 }} onClick={() => updateSelectedProperty('rotation', (selectedItem!.rotation + 90) % 360)}>↺ 旋转 90°</Button>
-                            <Button
-                              size="small"
-                              appearance={isCropping ? 'primary' : 'outline'}
+                            <button className="ios-button-small ios-button" style={{ flex: 1 }} onClick={() => updateSelectedProperty('rotation', (selectedItem!.rotation + 90) % 360)}>↺ 旋转 90°</button>
+                            <button className={`ios-button ios-button-small ${isCropping ? 'ios-button-primary' : 'ios-button-outline'}`}
                               style={{ flex: 1 }}
                               onClick={() => {
                                 if (isCropping) { updateSelectedProperty('cropPos', crop); setIsCropping(false); }
                                 else { setCrop({ unit: '%', width: 50, height: 50, x: 25, y: 25 }); setIsCropping(true); }
                               }}
-                            >{isCropping ? '确认裁剪' : '自由裁剪'}</Button>
+                            >{isCropping ? '确认裁剪' : '自由裁剪'}</button>
                           </div>
-                          <Field label="画面填充 (Fill Mode)">
+                          <div className="ios-field" >
                              <IosSelect
                                value={selectedItem?.fillMode || 'cover'}
                                onChange={val => {
@@ -2866,17 +2855,16 @@ function App() {
                                  { value: 'contain', label: '适应比例 (Contain)' },
                                ]}
                              />
-                          </Field>
+                          </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>缩放: {selectedItem?.zoom?.toFixed(2) || '1.0'}</span>
                             <ProSlider min={1.0} max={3.0} step={0.1} value={selectedItem?.zoom || 1.0} onChange={d => updateSelectedProperty('zoom', d)} />
                           </div>
-                          <Field label={
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <div className="ios-field" >
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><label className="ios-field-label">封装格式</label>
                               <span>转场方式</span>
                               {selectedItem && <span onClick={() => selectedItem && (isOverridden(selectedItem, 'transition') ? restoreInheritance(selectedItem.id, 'transition') : null)} style={{ cursor: isOverridden(selectedItem, 'transition') ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, 'transition') ? '点击恢复继承' : '继承全局默认'}>{isOverridden(selectedItem, 'transition') ? '✏️' : '🔗'}</span>}
                             </span>
-                          }>
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                               <IosSelect
                                 value={selectedItem?.transition || 'none'}
@@ -2922,18 +2910,18 @@ function App() {
                                  }}
                                >🎲</div>
                             </div>
-                          </Field>
+                          </div>
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                      <Text weight="bold" style={{ color: '#C084FC', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="ios-text" style={{ color: '#C084FC', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span>🎵 音频实验室</span>
                         {selectedAudioIds.size > 1 && (
                           <span style={{ fontSize: 11, background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 12, cursor: 'pointer', boxShadow: '0 2px 8px rgba(16,185,129,0.3)', transition: 'all 0.2s' }} className="ios-hover-scale" onClick={stitchSelectedAudioGaps}>🧲 缝合所选残片</span>
                         )}
-                      </Text>
+                      </div>
                       <div className="ios-prop-group" style={{ padding: '16px', borderRadius: 16, background: 'rgba(139,92,246,0.05)', border: '1px solid rgba(139,92,246,0.1)', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>播放音量: {Math.round((audioItems.find(a => selectedAudioIds.has(a.id))?.volume || 1) * 100)}%</span>
@@ -2949,18 +2937,16 @@ function App() {
                           <ProSlider min={0} max={5} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.fadeOut || 0} onChange={d => selectedAudioIds.forEach(id => updateAudioItem(id, { fadeOut: d }))} />
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-                          <Button
-                            appearance={isEditingAudio ? "primary" : "outline"}
-                            size="small"
+                          <button className={`ios-button ios-button-small ${isEditingAudio ? "ios-button-primary" : "ios-button-outline"}`}
                             style={{ height: 34, borderRadius: 8, fontSize: 12 }}
                             onClick={() => setIsEditingAudio(!isEditingAudio)}
                             disabled={selectedAudioIds.size > 1}
                           >
                             {isEditingAudio ? "✅ 正在剪辑" : "✂️ 剪辑模式"}
-                          </Button>
+                          </button>
                           {(isEditingAudio && selectedAudioIds.size === 1) && (
                             <div style={{ display: 'flex', gap: 6 }}>
-                              <Button size="small" style={{ flex: 1 }} onClick={() => {
+                              <button className="ios-button-small ios-button" style={{ flex: 1 }} onClick={() => {
                                 const id = Array.from(selectedAudioIds)[0];
                                 const item = audioItems.find(a => a.id === id);
                                 if (item) {
@@ -2969,13 +2955,13 @@ function App() {
                                   const selected = new Set(item.selectedRegions || []);
                                   updateAudioItem(id, { selectedRegions: allIndices.filter(i => !selected.has(i)) });
                                 }
-                              }}>反选</Button>
-                              <Button size="small" appearance="subtle" style={{ flex: 1 }} onClick={() => executeAudioCut(Array.from(selectedAudioIds)[0])}>确认剪除</Button>
+                              }}>反选</button>
+                              <button className="ios-button-small ios-button ios-button-subtle" style={{ flex: 1 }} onClick={() => executeAudioCut(Array.from(selectedAudioIds)[0])}>确认剪除</button>
                             </div>
                           )}
                         </div>
                       </div>
-                      <Button appearance="primary" style={{ marginTop: 20, background: 'rgba(255,59,48,0.15)', color: '#FF453A', border: '1px solid rgba(255,59,48,0.3)', borderRadius: 10, height: 44, fontWeight: 600, transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(255,59,48,0.1)' }} onClick={() => { setAudioItems(p => p.filter(a => !selectedAudioIds.has(a.id))); setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set()); setIsEditingAudio(false); }}>🗑️ 从项目彻底移除选定音频</Button>
+                      <button className="ios-button ios-button-primary" style={{ marginTop: 20, background: 'rgba(255,59,48,0.15)', color: '#FF453A', border: '1px solid rgba(255,59,48,0.3)', borderRadius: 10, height: 44, fontWeight: 600, transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(255,59,48,0.1)' }} onClick={() => { setAudioItems(p => p.filter(a => !selectedAudioIds.has(a.id))); setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set()); setIsEditingAudio(false); }}>🗑️ 从项目彻底移除选定音频</button>
                     </div>
                   )
                 ) : (
@@ -3005,7 +2991,7 @@ function App() {
 
                   {/* 一键导出预设 */}
                   <div className="ios-prop-group">
-                    <Text weight="bold" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⚡ 快捷导出预设</Text>
+                    <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⚡ 快捷导出预设</div>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {[
                         { name: '📱 抖音/快手', fmt: 'mp4', res: '1080p', fps: '60', codec: 'h264', quality: 'high' as const },
@@ -3031,21 +3017,21 @@ function App() {
                   </div>
 
                   <div className="ios-prop-group" style={{ marginTop: 0 }}>
-                    <Text weight="bold" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 12, display: 'block' }}>🎬 输出格式与帧率</Text>
+                    <div className="ios-text" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 12, display: 'block' }}>🎬 输出格式与帧率</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <Field label="封装格式">
+                      <div className="ios-field" >
                         <select className="ios-dark-select" value={exportFormat} onChange={e => setExportFormat(e.target.value as any)}>
                           <option value="mp4">MP4 (通用媒体容器)</option>
                           <option value="mov">MOV (Apple 专业容器)</option>
                         </select>
-                      </Field>
-                      <Field label="编码标准 (Codec)">
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">编码标准 (Codec)</label>
                         <select className="ios-dark-select" value={exportCodec} onChange={e => setExportCodec(e.target.value as any)}>
                           <option value="h264">H.264 / AVC (最强兼容性)</option>
                           <option value="h265">H.265 / HEVC (极致压缩 & 4K 推荐)</option>
                         </select>
-                      </Field>
-                      <Field label="HDR 10-bit & 杜比色彩空间 (只支持 H.265)">
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">HDR 10-bit & 杜比色彩空间 (只支持 H.265)</label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
                           <input
                             type="checkbox"
@@ -3054,43 +3040,41 @@ function App() {
                             onChange={e => setExportHdr(e.target.checked)}
                             style={{ width: 18, height: 18, accentColor: 'var(--ios-indigo)', cursor: exportCodec === 'h265' ? 'pointer' : 'not-allowed' }}
                           />
-                          <Text style={{ fontSize: 13, opacity: exportCodec === 'h265' ? 0.8 : 0.3 }}>
+                          <div className="ios-text" style={{ fontSize: 13, opacity: exportCodec === 'h265' ? 0.8 : 0.3 }}>
                             开启高动态范围 (BT.2020 PQ) {exportCodec !== 'h265' && "(请先切换编码为 H.265)"}
-                          </Text>
+                          </div>
                         </div>
-                      </Field>
-                      <Field label="帧速率 (FPS)">
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">帧速率 (FPS)</label>
                         <select className="ios-dark-select" value={exportFps} onChange={e => setExportFps(e.target.value as any)}>
                           <option value="30">30 FPS (标准电影感)</option>
                           <option value="60">60 FPS (丝滑高刷无拖影)</option>
                         </select>
-                      </Field>
+                      </div>
                     </div>
                   </div>
 
                   <div className="ios-prop-group">
-                    <Text weight="bold" style={{ color: '#F59E0B', fontSize: 13, marginBottom: 12, display: 'block' }}>👁️‍🗨️ 画质极限控制</Text>
+                    <div className="ios-text" style={{ color: '#F59E0B', fontSize: 13, marginBottom: 12, display: 'block' }}>👁️‍🗨️ 画质极限控制</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <Field label="输出分辨率">
+                      <div className="ios-field" ><label className="ios-field-label">输出分辨率</label>
                         <select className="ios-dark-select" value={exportResolution} onChange={e => setExportResolution(e.target.value as any)}>
                           <option value="original">🔰 原尺寸装配 (100% 不缩放超清)</option>
                           <option value="4k">4K 标准 (3840x2160)</option>
                           <option value="1080p">1080P 全高清 (1920x1080)</option>
                         </select>
-                      </Field>
-                      <Field label="渲染画质 (CRF Engine)">
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">渲染画质 (CRF Engine)</label>
                         <select className="ios-dark-select" value={exportQuality} onChange={e => setExportQuality(e.target.value as any)}>
                           <option value="lossless">💎 无损直出 (-crf 10, 体积大极清晰)</option>
                           <option value="high">✨ 专业高画质 (-crf 15, 清晰度优先)</option>
                           <option value="medium">📱 互联网传播 (-crf 23, 体积最优)</option>
                         </select>
-                      </Field>
+                      </div>
                     </div>
                   </div>
 
-                  <Button
-                    appearance="primary"
-                    size="large"
+                  <button className="ios-button ios-button-primary ios-hover-scale"
                     style={{
                       marginTop: 16, height: 48, borderRadius: 12,
                       background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
@@ -3098,12 +3082,11 @@ function App() {
                       fontWeight: 600, fontSize: 13, border: 'none',
                       transition: 'all 0.3s ease'
                     }}
-                    className="ios-hover-scale"
                     onClick={handleGenerate}
                     disabled={isGenerating}
                   >
                     {isGenerating ? '正在拼尽全力导出...' : '开始执行极速渲染'}
-                  </Button>
+                  </button>
 
                 </div>
               )}
@@ -3124,9 +3107,9 @@ function App() {
               {playTime.toFixed(2)}s / {maxPlayTime.toFixed(2)}s
             </span>
             <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); setPlayTime(0); setIsPlaying(false); setIsJumping(true); setTimeout(() => setIsJumping(false), 350); setStatusMsg('⏮ 已回到起点'); setTimeout(() => setStatusMsg(''), 1200); }} title="回到起点">⏮</Button>
+              <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); setPlayTime(0); setIsPlaying(false); setIsJumping(true); setTimeout(() => setIsJumping(false), 350); setStatusMsg('⏮ 已回到起点'); setTimeout(() => setStatusMsg(''), 1200); }} title="回到起点">⏮</button>
               <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
-              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); splitAtPlayhead(); }} title="Ctrl+B 分割">✂️</Button>
+              <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); splitAtPlayhead(); }} title="Ctrl+B 分割">✂️</button>
               <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
               <div className="zoom-control" onClick={e => e.stopPropagation()}>
                 <span>🔍</span>
@@ -3134,7 +3117,7 @@ function App() {
                 <span>{Math.round(pps / 24 * 100)}%</span>
               </div>
               <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
-              <Button size="small" appearance="subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); commitSnapshotNow(); setTimeline([]); setAudioItems([]); }}>清空</Button>
+              <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); commitSnapshotNow(); setTimeline([]); setAudioItems([]); }}>清空</button>
             </div>
           </div>
 
@@ -3439,7 +3422,7 @@ function App() {
         </div>
 
       </div>
-    </FluentProvider >
+    </div>
   );
 }
 
