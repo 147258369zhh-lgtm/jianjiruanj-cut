@@ -2,6 +2,7 @@ import React, { memo, useRef, useState, useMemo } from 'react';
 import { AudioTimelineItem } from '../types';
 import { AUDIO_PALETTES } from '../utils/constants';
 import { AudioWaveform } from './AudioWaveform';
+import { TimelineLayout, timeToX, xToTime as xToLogicalTime } from '../utils/timelineLayout';
 
 
 // ─── 子组件: 剪辑点音频轨道项 (剪辑点系统) ──────────────────────────────────────
@@ -14,9 +15,10 @@ type AudioTrackItemProps = {
   isPlaying: boolean;
   editingMode: boolean;
   onUpdateItem: (id: string, patch: Partial<AudioTimelineItem>, isDragging?: boolean) => void;
+  layout: TimelineLayout;
 };
 
-export const AudioTrackItem = memo(({ item, resource, isSelected, onSelect, pps, isPlaying, editingMode, onUpdateItem }: AudioTrackItemProps) => {
+export const AudioTrackItem = memo(({ item, resource, isSelected, onSelect, pps, isPlaying, editingMode, onUpdateItem, layout }: AudioTrackItemProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingCutIdx, setDraggingCutIdx] = useState<number | null>(null);
 
@@ -95,11 +97,13 @@ export const AudioTrackItem = memo(({ item, resource, isSelected, onSelect, pps,
     onSelect(item.id, e.ctrlKey || e.metaKey);
 
     const startX = e.clientX;
-    const startT = item.timelineStart;
+    const startVisualX = timeToX(item.timelineStart, layout, pps, 0);
 
     const onMove = (me: MouseEvent) => {
-      const deltaT = (me.clientX - startX) / pps;
-      onUpdateItem(item.id, { timelineStart: startT + deltaT }, true);
+      const deltaX = me.clientX - startX;
+      const newVisualX = startVisualX + deltaX;
+      const newTime = xToLogicalTime(newVisualX, layout, pps, 0);
+      onUpdateItem(item.id, { timelineStart: newTime }, true);
     };
 
     const onUp = () => {
@@ -111,12 +115,15 @@ export const AudioTrackItem = memo(({ item, resource, isSelected, onSelect, pps,
     window.addEventListener('mouseup', onUp);
   };
 
-  const blockWidth = item.duration * pps;
+  // 音频轨的父容器已在 60px 标签之后，所以 offset=0
+  const visualLeft = timeToX(item.timelineStart, layout, pps, 0);
+  const visualRight = timeToX(item.timelineStart + item.duration, layout, pps, 0);
+  const visualWidth = visualRight - visualLeft;
 
   return (
     <div
       className={`timeline-block ${isSelected ? 'selected-item' : ''}`}
-      style={{ position: 'absolute', left: item.timelineStart * pps, top: 2, bottom: 2, width: blockWidth, display: 'flex', flexDirection: 'column', minWidth: 20 }}
+      style={{ position: 'absolute', left: visualLeft, top: 2, bottom: 2, width: visualWidth, display: 'flex', flexDirection: 'column', minWidth: 20 }}
     >
       <div
         ref={containerRef}

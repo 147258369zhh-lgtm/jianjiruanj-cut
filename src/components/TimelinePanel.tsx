@@ -1,5 +1,6 @@
 import { useAppContext } from '../hooks/useAppContext';
 import React from 'react';
+import { timeToX, xToTime as xToLogicalTime } from '../utils/timelineLayout';
 
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, horizontalListSortingStrategy } from '@dnd-kit/sortable';
@@ -21,7 +22,7 @@ export const TimelinePanel: React.FC = () => {
     resourceMap, previewCache, sortMode, setSortMode, handleTimelineSelect,
     handleTimelineRemove, handleTimelineContextMenu, handleTimelineTrim,
     handleTimelineDoubleClick, isEditingAudio, updateAudioItem, handleAudioSelect,
-    voiceoverClips, setVoiceoverClips, handleTripleClickZone
+    voiceoverClips, setVoiceoverClips, handleTripleClickZone, layout
   } = useAppContext();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -98,9 +99,7 @@ export const TimelinePanel: React.FC = () => {
         >
           {/* 渲染刻度线 - 自适应密度 */}
           {(() => {
-            // 基于轨道总宽度计算全范围刻度（而非 maxPlayTime，避免空轨道时无刻度）
-            const totalSeconds = Math.max(timelineWidth / pps, 10);
-            // 根据 pps 动态选择主刻度间距
+            const totalSeconds = Math.max(maxPlayTime, 30);
             let majorStep = 5;
             let minorStep = 1;
             if (pps < 10) { majorStep = 30; minorStep = 10; }
@@ -109,9 +108,10 @@ export const TimelinePanel: React.FC = () => {
             else if (pps > 80) { majorStep = 2; minorStep = 0.5; }
 
             const ticks: React.ReactNode[] = [];
+            // 由于是非线性，我们需要遍历每一秒（或步长）并计算其 X
             for (let t = 0; t <= totalSeconds; t += minorStep) {
-              const x = 60 + t * pps;
-              const isMajor = t % majorStep === 0;
+              const x = timeToX(t, layout, pps);
+              const isMajor = Math.abs(t % majorStep) < 0.001;
               ticks.push(
                 <React.Fragment key={t}>
                   <div
@@ -120,7 +120,7 @@ export const TimelinePanel: React.FC = () => {
                   />
                   {isMajor && (
                     <div className="ruler-label" style={{ left: x }}>
-                      {t >= 60 ? `${Math.floor(t / 60)}:${(t % 60).toString().padStart(2, '0')}` : `${t}s`}
+                      {t >= 60 ? `${Math.floor(t / 60)}:${Math.floor(t % 60).toString().padStart(2, '0')}` : `${Math.floor(t)}s`}
                     </div>
                   )}
                 </React.Fragment>
@@ -240,7 +240,29 @@ export const TimelinePanel: React.FC = () => {
             />
           )}
           <div style={{ display: 'flex', alignItems: 'center', height: 210, marginBottom: 8 }}>
-            <div style={{ width: 60, flexShrink: 0, textAlign: 'center', fontSize: 11, fontWeight: 900, opacity: 0.5 }}>图片</div>
+            {/* 🔴 高级感“图片轨道”表头：全覆盖区块 + 顶级参数级对齐 */}
+            <div style={{ width: 60, flexShrink: 0, height: '100%', padding: '2px 4px 2px 2px', boxSizing: 'border-box' }}>
+              <div style={{
+                width: '100%', height: '100%',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
+                borderRadius: 6, cursor: 'pointer',
+                background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(12px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (timeline.length > 0 && selectedIds.size === timeline.length) {
+                  setSelectedIds(new Set());
+                } else {
+                  setSelectedIds(new Set(timeline.map((t: any) => t.id)));
+                }
+                setSelectedAudioIds(new Set());
+                setSelectedVoiceoverIds(new Set());
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 8px #6366f1', opacity: 0.9 }}></div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#e2e8f0', letterSpacing: 1, opacity: 0.9 }}>图片</div>
+              </div>
+            </div>
             {timeline.length === 0 && (
               <div style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'rgba(255,255,255,0.18)', fontSize: 12, border: '1.5px dashed rgba(255,255,255,0.07)', borderRadius: 12, margin: '0 4px', userSelect: 'none' }}>
                 <span style={{ fontSize: 24, opacity: 0.5 }}>📷</span>
@@ -260,20 +282,18 @@ export const TimelinePanel: React.FC = () => {
                 <SortableContext items={timeline.map(t => t.id)} strategy={horizontalListSortingStrategy}>
                   {timeline.map((item, _idx) => {
                     const isMulti = selectedIds.size > 1 && selectedIds.has(item.id);
-                    // 计算多选序号（在选中集合中的出现顺序）
-                    const multiIdx = isMulti ? Array.from(selectedIds).indexOf(item.id) : undefined;
                     return (
                       <SortableImageCard
                         key={item.id} item={item} resource={resourceMap.get(item.resourceId)}
                         isSelected={selectedIds.has(item.id)}
                         isMultiSelected={isMulti}
-                        multiSelectIndex={multiIdx}
                         onSelect={handleTimelineSelect}
                         onRemove={handleTimelineRemove}
                         pps={pps} previewUrl={previewCache[resourceMap.get(item.resourceId)?.path || '']}
                         onContextMenu={handleTimelineContextMenu}
                         onTrimDuration={handleTimelineTrim}
                         onDoubleClickCard={handleTimelineDoubleClick}
+                        layout={layout}
                       />
                     );
                   })}
@@ -283,7 +303,29 @@ export const TimelinePanel: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', height: 50, marginTop: 0 }}>
-            <div style={{ width: 60, flexShrink: 0, textAlign: 'center', fontSize: 11, fontWeight: 900, opacity: 0.5 }}>音频</div>
+            {/* 🔴 高级感“音频轨道”表头：全覆盖区块 + 顶级参数级对齐 */}
+            <div style={{ width: 60, flexShrink: 0, height: '100%', padding: '2px 4px 2px 2px', boxSizing: 'border-box' }}>
+              <div style={{
+                width: '100%', height: '100%',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+                borderRadius: 6, cursor: 'pointer',
+                background: 'rgba(255, 255, 255, 0.04)', border: '1px solid rgba(255,255,255,0.06)',
+                backdropFilter: 'blur(12px)', boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (audioItems.length > 0 && selectedAudioIds.size === audioItems.length) {
+                  setSelectedAudioIds(new Set());
+                } else {
+                  setSelectedAudioIds(new Set(audioItems.map((a: any) => a.id)));
+                }
+                setSelectedIds(new Set());
+                setSelectedVoiceoverIds(new Set());
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#a855f7', boxShadow: '0 0 8px #a855f7', opacity: 0.9 }}></div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#e2e8f0', letterSpacing: 1 }}>音频</div>
+              </div>
+            </div>
             <div style={{ position: 'relative', flex: 1, height: 50, overflow: 'visible' }}>
               {audioItems.map(item => {
                 const isItPlaying = isPlaying && playTime >= item.timelineStart && playTime < (item.timelineStart + item.duration);
@@ -298,6 +340,7 @@ export const TimelinePanel: React.FC = () => {
                     isPlaying={isItPlaying}
                     editingMode={isEditingAudio && selectedAudioIds.has(item.id)}
                     onUpdateItem={updateAudioItem}
+                    layout={layout}
                   />
                 );
               })}
@@ -306,19 +349,54 @@ export const TimelinePanel: React.FC = () => {
 
           {/* 配音轨 (绿色主题) */}
           <div style={{ display: 'flex', alignItems: 'center', height: 50, marginTop: 0 }}>
-            <div style={{ width: 60, flexShrink: 0, textAlign: 'center', fontSize: 11, fontWeight: 900, opacity: 0.5, color: '#10B981' }}>配音</div>
+            {/* 🔴 高级感“配音轨道”表头：全覆盖区块 + 顶级参数级对齐 */}
+            <div style={{ width: 60, flexShrink: 0, height: '100%', padding: '2px 4px 2px 2px', boxSizing: 'border-box' }}>
+              <div style={{
+                width: '100%', height: '100%',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
+                borderRadius: 6, cursor: 'pointer',
+                background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.15)',
+                backdropFilter: 'blur(12px)', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (voiceoverClips.length > 0 && selectedVoiceoverIds.size === voiceoverClips.length) {
+                  setSelectedVoiceoverIds(new Set());
+                } else {
+                  setSelectedVoiceoverIds(new Set(voiceoverClips.map((v: any) => v.id)));
+                }
+                setSelectedIds(new Set());
+                setSelectedAudioIds(new Set());
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981', opacity: 1 }}></div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#10b981', letterSpacing: 1 }}>配音</div>
+              </div>
+            </div>
             <div style={{ position: 'relative', flex: 1, height: 50, overflow: 'visible' }}>
               {voiceoverClips.map((clip: any) => {
-                const left = clip.timelineStart * pps;
-                const width = clip.duration * pps;
+                const left = timeToX(clip.timelineStart, layout, pps, 0);
+                const right = timeToX(clip.timelineStart + clip.duration, layout, pps, 0);
+                const width = right - left;
                 const isActive = isPlaying && playTime >= clip.timelineStart && playTime < (clip.timelineStart + clip.duration);
                 return (
                   <div key={clip.id}
-                    onClick={(e) => {
+                    onMouseDown={(e) => {
+                      if (e.target instanceof HTMLDivElement && e.target.innerText === '✕') return; // Cancel if closing
                       e.stopPropagation();
                       setSelectedVoiceoverIds(new Set([clip.id]));
                       setSelectedIds(new Set());
                       setSelectedAudioIds(new Set());
+                      const startX = e.clientX;
+                      const startVisualX = timeToX(clip.timelineStart, layout, pps, 0);
+                      const onMove = (me: MouseEvent) => {
+                        const deltaX = me.clientX - startX;
+                        const newVisualX = startVisualX + deltaX;
+                        const newTime = xToLogicalTime(newVisualX, layout, pps, 0);
+                        setVoiceoverClips((prev: any[]) => prev.map((v: any) => v.id === clip.id ? { ...v, timelineStart: Math.max(0, newTime) } : v));
+                      };
+                      const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+                      window.addEventListener('mousemove', onMove);
+                      window.addEventListener('mouseup', onUp);
                     }}
                     style={{
                       position: 'absolute', left, width, height: 40, top: 5, boxSizing: 'border-box',
@@ -327,7 +405,7 @@ export const TimelinePanel: React.FC = () => {
                       borderRadius: 8,
                       boxShadow: selectedVoiceoverIds.has(clip.id) ? '0 0 12px rgba(52,211,153,0.5)' : 'none',
                       display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
-                      cursor: 'pointer', transition: 'all 0.2s', overflow: 'hidden',
+                      cursor: 'grab', transition: 'all 0.2s', overflow: 'hidden',
                       zIndex: selectedVoiceoverIds.has(clip.id) ? 10 : 1,
                     }}>
                     <span style={{ fontSize: 12 }}>🎙️</span>

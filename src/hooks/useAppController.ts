@@ -14,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { Resource, AudioTimelineItem, TimelineItem, GlobalDefaults, GLOBAL_DEFAULTS_INIT, TextOverlay } from '../types';
+import { calculateTimelineLayout } from '../utils/timelineLayout';
 
 export function useAppController() {
   const [pps, setPps] = useState(24);
@@ -168,6 +169,8 @@ export function useAppController() {
   selectedAudioIdsRef.current = selectedAudioIds;
   const selectedVoiceoverIdsRef = useRef(selectedVoiceoverIds);
   selectedVoiceoverIdsRef.current = selectedVoiceoverIds;
+  const voiceoverClipsRef = useRef(voiceoverClips);
+  voiceoverClipsRef.current = voiceoverClips;
   const resourcesRef = useRef(resources);
   resourcesRef.current = resources;
   const ppsRef = useRef(pps);
@@ -226,21 +229,20 @@ export function useAppController() {
   const playTimeRef = useRef(playTime);
   playTimeRef.current = playTime;
 
+  const layout = useMemo(() => calculateTimelineLayout(timeline, pps), [timeline, pps]);
+
   // ─── 播放引擎 (已提取到 hooks/usePlaybackEngine.ts) ──────────────
-  const {
-    maxPlayTime,
-    playLineLeft,
-    handleTripleClickZone,
-    togglePlay
-  } = usePlaybackEngine({
-    isPlaying, playbackSpeed, playTime, timeline, audioItems, pps,
+  const { maxPlayTime, playLineLeft, handleTripleClickZone, togglePlay } = usePlaybackEngine({
+    isPlaying, playbackSpeed, playTime, timeline, audioItems, voiceoverClips, pps,
     setPlayTime, setIsPlaying, setStatusMsg,
-    refs: {
+    layout, refs: {
       timelineRef, audioItemsRef, ppsRef,
       playheadRef, timelineScrollRef, timeTextRef,
-      playTimeRef, lastSyncTimeRef, clickTimesRef
+      playTimeRef, lastSyncTimeRef, clickTimesRef,
+      voiceoverClipsRef
     }
   });
+
 
   // ─── 播放头位置分割片段 (ref-based, 零依赖) ──────────────────
   const splitAtPlayhead = useCallback(() => {
@@ -366,7 +368,7 @@ export function useAppController() {
   useKeyboardShortcuts({
     setIsPlaying, setPlayTime,
     selectedIdsRef, selectedAudioIdsRef, selectedVoiceoverIdsRef, timelineRef,
-    commitSnapshotNow, setTimeline, setAudioItems,
+    commitSnapshotNow, setTimeline, setAudioItems, setVoiceoverClips,
     setSelectedIds, setSelectedAudioIds, setSelectedVoiceoverIds,
     undo, redo, saveProject, loadProject, splitAtPlayhead,
     setShowShortcuts
@@ -399,7 +401,7 @@ export function useAppController() {
     isDraggingHead, setIsDraggingHead,
     selectionBox, setSelectionBox,
     selectedIds, setSelectedIds, setSelectedAudioIds, setSelectedVoiceoverIds,
-    commitSnapshotNow, setContextMenu
+    commitSnapshotNow, setContextMenu, layout
   });
 
 
@@ -417,9 +419,6 @@ export function useAppController() {
     resourceMap, audioBlobs, previewCache,
     setAudioBlobs, setPreviewCache, playTimeRef
   });
-
-  // [已提取] maxPlayTime / playLineLeft / handleTripleClickZone → hooks/usePlaybackEngine.ts
-
 
   // formatTime 已迁移到 utils/formatTime.ts
   // const formatTime = formatTimeMod;
@@ -630,7 +629,7 @@ export function useAppController() {
     resourceMap, previewCache, setPreviewCache, setStatusMsg,
     setResources, setLibTab, faceWorkerRef, resourcesRef,
     setAudioBlobs, setTimeline, setAudioItems, selectedResourceIds, setSelectedResourceIds,
-    setMonitorRes, globalDefaultsRef
+    setMonitorRes, globalDefaultsRef, playTimeRef
   });
 
   // 各种时间轴元素的鼠标与交互事件均已提取至 hooks/useTimelineActions.ts
@@ -743,7 +742,7 @@ export function useAppController() {
   const maxVideoEnd = useMemo(() => timeline.reduce((acc, t) => acc + t.duration, 0), [timeline]);
   const maxAudioEnd = useMemo(() => audioItems.length > 0 ? Math.max(...audioItems.map(a => a.timelineStart + a.duration)) : 0, [audioItems]);
   const maxTime = useMemo(() => Math.max(maxVideoEnd, maxAudioEnd, playTime), [maxVideoEnd, maxAudioEnd, playTime]);
-  const timelineWidth = useMemo(() => Math.max(8000, maxTime * pps + 1000), [maxTime, pps]);
+  const timelineWidth = useMemo(() => Math.max(8000, layout.totalVisualWidth + 1000), [layout.totalVisualWidth]);
 
   // computeFilter + computeTextStyles 已迁移到 features/filter-engine/useFilter.ts
   // const computeFilter = computeFilterMod;
@@ -904,6 +903,7 @@ export function useAppController() {
     maxTime,
     timelineWidth,
     ingestQueue,
-    setIngestQueue
+    setIngestQueue,
+    layout
   };
 }

@@ -21,13 +21,14 @@ export interface UseResourceManagerArgs {
   setSelectedResourceIds: (ids: Set<string>) => void;
   setMonitorRes: (res: Resource | null) => void;
   globalDefaultsRef: MutableRefObject<GlobalDefaults>;
+  playTimeRef: MutableRefObject<number>;
 }
 
 export function useResourceManager({
   resourceMap, previewCache, setPreviewCache, setStatusMsg,
   setResources, setLibTab, faceWorkerRef, resourcesRef,
   setAudioBlobs, setTimeline, setAudioItems, selectedResourceIds, setSelectedResourceIds,
-  setMonitorRes, globalDefaultsRef
+  setMonitorRes, globalDefaultsRef, playTimeRef
 }: UseResourceManagerArgs) {
 
   const handleImport = async (type: 'image' | 'audio' | 'video') => {
@@ -139,29 +140,56 @@ export function useResourceManager({
   const handleLibSelectPreview = useCallback((r: Resource) => setMonitorRes(r), [setMonitorRes]);
 
   const handleLibAdd = useCallback(async (r: Resource) => {
-    if (r.type === 'image') {
+    const pt = playTimeRef.current;
+    
+    if (r.type === 'image' || r.type === 'video') {
+      let fileDur = 3;
+      if (r.type === 'video') {
+        fileDur = await getMediaDuration(r.path);
+      }
+      
       const gd = globalDefaultsRef.current;
       const isRandom = gd.animation === 'random';
       const anim = isRandom ? ANIMATION_PRESETS[Math.floor(Math.random() * ANIMATION_PRESETS.length)] : gd.animation;
       const overrides = isRandom ? ['animation'] : [];
-      setTimeline((p: TimelineItem[]) => [...p, {
+      
+      const newItem = {
         id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, 
-        duration: gd.duration, transition: gd.transition, 
+        duration: r.type === 'video' ? fileDur : gd.duration, transition: gd.transition, 
         rotation: gd.rotation, contrast: gd.contrast, saturation: gd.saturation, 
         exposure: gd.exposure, brilliance: gd.brilliance, temp: gd.temp, tint: gd.tint, zoom: gd.zoom,
         highlights: gd.highlights, shadows: gd.shadows, whites: gd.whites, blacks: gd.blacks, vibrance: gd.vibrance,
         sharpness: gd.sharpness, fade: gd.fade, vignette: gd.vignette, grain: gd.grain,
         animation: anim as any, overrides, fontSize: 24, fontWeight: 'normal'
-      }]);
+      };
+      
+      setTimeline((p: TimelineItem[]) => {
+        let insertIndex = p.length;
+        let sum = 0;
+        for (let i = 0; i < p.length; i++) {
+          const nextSum = sum + p[i].duration;
+          if (pt >= sum && pt <= nextSum) {
+            const distStart = pt - sum;
+            const distEnd = nextSum - pt;
+            insertIndex = distStart < distEnd ? i : i + 1;
+            break;
+          }
+          sum = nextSum;
+        }
+        if (insertIndex === p.length && pt < sum) insertIndex = p.length;
+        const newP = [...p];
+        newP.splice(insertIndex, 0, newItem);
+        return newP;
+      });
     } else {
       const dur = await getMediaDuration(r.path);
       setAudioItems((prev: AudioTimelineItem[]) => {
-        let startPos = 0;
-        if (prev.length > 0) { const last = prev[prev.length - 1]; startPos = last.timelineStart + last.duration; }
+        // 如果音频轨为空，默认从0开始；否则从播放头位置插入
+        const startPos = prev.length === 0 ? 0 : pt;
         return [...prev, { id: `au_${Date.now()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }];
       });
     }
-  }, [globalDefaultsRef, setTimeline, setAudioItems]);
+  }, [globalDefaultsRef, setTimeline, setAudioItems, playTimeRef]);
 
   return {
     handleImport,

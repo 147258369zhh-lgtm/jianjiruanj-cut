@@ -1,6 +1,7 @@
 import { useEffect, useMemo, MutableRefObject } from 'react';
 import { TimelineItem, AudioTimelineItem } from '../types';
 import { formatTime as formatTimeMod } from '../utils/formatTime';
+import { TimelineLayout, timeToX } from '../utils/timelineLayout';
 
 export interface PlaybackEngineRefs {
   timelineRef: MutableRefObject<TimelineItem[]>;
@@ -12,6 +13,7 @@ export interface PlaybackEngineRefs {
   playTimeRef: MutableRefObject<number>;
   lastSyncTimeRef: MutableRefObject<number>;
   clickTimesRef: MutableRefObject<number[]>;
+  voiceoverClipsRef: MutableRefObject<any[]>;
 }
 
 interface UsePlaybackEngineArgs {
@@ -20,17 +22,19 @@ interface UsePlaybackEngineArgs {
   playTime: number;
   timeline: TimelineItem[];
   audioItems: AudioTimelineItem[];
+  voiceoverClips: any[];
   pps: number;
   setPlayTime: (t: number) => void;
   setIsPlaying: (v: boolean) => void;
   setStatusMsg: (msg: string) => void;
+  layout: TimelineLayout;
   refs: PlaybackEngineRefs;
 }
 
 export function usePlaybackEngine({
-  isPlaying, playbackSpeed, playTime, timeline, audioItems, pps,
+  isPlaying, playbackSpeed, playTime, timeline, audioItems, voiceoverClips, pps,
   setPlayTime, setIsPlaying, setStatusMsg,
-  refs
+  layout, refs
 }: UsePlaybackEngineArgs) {
   const {
     timelineRef, audioItemsRef, ppsRef,
@@ -55,12 +59,21 @@ export function usePlaybackEngine({
       const currentT = baseTime + elapsed;
 
       const maxAudio = audioItemsRef.current.length > 0
-        ? Math.max(...audioItemsRef.current.map(a => a.timelineStart + a.duration))
+        ? Math.max(...audioItemsRef.current.map((a: AudioTimelineItem) => a.timelineStart + a.duration))
         : 0;
-      const maxT = tl.reduce((s, t) => s + t.duration, 0);
-      const maxPt = Math.max(maxT, maxAudio) + 0.01;
+      const maxVoiceover = refs.voiceoverClipsRef.current.length > 0
+        ? Math.max(...refs.voiceoverClipsRef.current.map((v: any) => v.timelineStart + v.duration))
+        : 0;
+      const maxT = tl.reduce((s: number, t: TimelineItem) => s + t.duration, 0);
+      const maxPt = Math.max(maxT, maxAudio, maxVoiceover) + 0.01;
 
-      if (currentT >= maxPt && maxPt > 0.02) {
+      if (maxPt <= 0.05) {
+        setPlayTime(0);
+        setIsPlaying(false);
+        return;
+      }
+
+      if (currentT >= maxPt) {
         setPlayTime(maxPt);
         setIsPlaying(false);
         return;
@@ -70,29 +83,11 @@ export function usePlaybackEngine({
 
       // 直接操作 DOM，绕过 React 重绘
       if (playheadRef.current) {
-        let accX = 0;
-        let accDur = 0;
-        let found = false;
-        for (let i = 0; i < tl.length; i++) {
-          const itemDur = tl[i].duration;
-          if (currentT >= accDur && currentT < accDur + itemDur) {
-            accX += (currentT - accDur) * currentPps;
-            currentActiveItemId = tl[i].id;
-            found = true;
-            break;
-          }
-          accDur += itemDur;
-          accX += (itemDur * currentPps);
-        }
-        if (!found) {
-          const overflowDur = currentT - accDur;
-          accX += (overflowDur * currentPps);
-        }
-        playheadRef.current.style.transform = `translateX(${60 + accX}px)`;
+        const headX = timeToX(currentT, layout, currentPps);
+        playheadRef.current.style.transform = `translateX(${headX}px)`;
 
         const scrollEl = timelineScrollRef.current;
         if (scrollEl) {
-          const headX = 60 + accX;
           const viewLeft = scrollEl.scrollLeft;
           const viewRight = viewLeft + scrollEl.clientWidth;
           if (headX > viewRight - 100) {
@@ -133,30 +128,14 @@ export function usePlaybackEngine({
   const maxPlayTime = useMemo(() => {
     const maxT = timeline.length > 0 ? timeline.reduce((acc, t) => acc + t.duration, 0) : 0;
     const maxA = audioItems.length > 0 ? Math.max(...audioItems.map(a => a.timelineStart + a.duration)) : 0;
-    return Math.max(maxT, maxA) + 0.01;
-  }, [timeline, audioItems]);
+    const maxV = voiceoverClips.length > 0 ? Math.max(...voiceoverClips.map(v => v.timelineStart + v.duration)) : 0;
+    return Math.max(maxT, maxA, maxV) + 0.01;
+  }, [timeline, audioItems, voiceoverClips]);
 
   // 精确计算 playLine 的左边距
   const playLineLeft = useMemo(() => {
-    let accDur = 0;
-    let accX = 0;
-
-    for (let i = 0; i < timeline.length; i++) {
-      const itemDur = timeline[i].duration;
-      if (playTime >= accDur && playTime < accDur + itemDur) {
-        const localOffset = (playTime - accDur) * pps;
-        return 60 + accX + localOffset;
-      }
-      accDur += itemDur;
-      accX += (itemDur * pps);
-    }
-
-    if (playTime >= accDur) {
-      const overflowDur = playTime - accDur;
-      return 60 + accX + (overflowDur * pps);
-    }
-    return 60;
-  }, [playTime, timeline, pps]);
+    return timeToX(playTime, layout, pps);
+  }, [playTime, layout, pps]);
 
   // 三连击检测算法
   const handleTripleClickZone = () => {

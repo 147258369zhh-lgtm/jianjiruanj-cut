@@ -4,15 +4,31 @@ import { CSS } from '@dnd-kit/utilities';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { generateThumbnail } from '../utils/thumbnail';
 import { TimelineItem, Resource } from '../types';
+import { useThumbnail } from '../hooks/useThumbnail';
+
+const VideoFrame = ({ src, timeOffset, style }: { src: string, timeOffset: number, style: React.CSSProperties }) => {
+  const thumbUrl = useThumbnail(src, timeOffset);
+  return (
+    <div style={{ ...style, position: 'relative', overflow: 'hidden' }}>
+      {thumbUrl ? (
+        <img src={thumbUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="frame" draggable={false} />
+      ) : (
+        <div style={{ width: '100%', height: '100%', background: '#222' }} />
+      )}
+    </div>
+  );
+};
 
 export const SortableImageCard = memo(function SortableImageCard({
-  item, resource, isSelected, onSelect, onRemove, pps, previewUrl, onContextMenu, onTrimDuration, onDoubleClickCard, multiSelectIndex, isMultiSelected
+  item, resource, isSelected, onSelect, onRemove, pps, previewUrl, onContextMenu, onTrimDuration, onDoubleClickCard, isMultiSelected, layout
 }: {
-  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; onRemove: (id: string) => void; pps: number; previewUrl?: string; onContextMenu?: (e: React.MouseEvent, id: string) => void; onTrimDuration?: (id: string, delta: number) => void; onDoubleClickCard?: (id: string) => void; multiSelectIndex?: number; isMultiSelected?: boolean;
+  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; onRemove: (id: string) => void; pps: number; previewUrl?: string; onContextMenu?: (e: React.MouseEvent, id: string) => void; onTrimDuration?: (id: string, delta: number) => void; onDoubleClickCard?: (id: string) => void; isMultiSelected?: boolean;
+  layout: any;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: item.id });
   const [isHovered, setIsHovered] = useState(false);
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const hoverVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const [isVisible, setIsVisible] = useState(true);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -80,9 +96,9 @@ export const SortableImageCard = memo(function SortableImageCard({
       ref={setCombinedRef}
       className={`ios-btn-hover ${isSelected ? 'ios-selected' : ''} ${isMultiSelected ? 'ios-multi-selected' : ''}`}
       style={{
-        transform: CSS.Transform.toString(transform),
-        transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-        width: `${item.duration * pps}px`,
+        transform: transform ? CSS.Transform.toString(transform) : 'none',
+        transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        width: `${layout.items.find((i: any) => i.id === item.id)?.visualWidth || (item.duration * pps)}px`,
         height: '100%',
         flexShrink: 0,
         position: 'relative',
@@ -91,21 +107,42 @@ export const SortableImageCard = memo(function SortableImageCard({
         overflow: 'hidden',
         borderRadius: '12px',
         background: isSelected ? 'rgba(94, 92, 230, 0.08)' : 'rgba(0,0,0,0.5)',
-        border: isSelected
-          ? (isMultiSelected ? '2.5px dashed rgba(94, 92, 230, 0.9)' : '3px solid rgba(94, 92, 230, 0.9)')
-          : '1px solid rgba(255,255,255,0.06)',
-        boxShadow: isSelected
-          ? '0 0 20px rgba(94,92,230,0.5), 0 10px 30px rgba(94,92,230,0.3), inset 0 0 15px rgba(94,92,230,0.1)'
-          : 'none',
+        border: '1px solid rgba(255,255,255,0.06)', // Maintain static border to avoid layout shift gaps
+        boxShadow: isSelected ? 'none' : '0 4px 6px rgba(0,0,0,0.2)',
         boxSizing: 'border-box',
+        outline: 'none', // Prevent default browser focus rings (which cause the double line artifact)
       }}
       {...attributes} {...listeners}
       onClick={(e) => { e.stopPropagation(); onSelect(item.id, e.ctrlKey || e.metaKey); }}
       onDoubleClick={(e) => { e.stopPropagation(); onDoubleClickCard?.(item.id); }}
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu?.(e, item.id); }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => {
+        setIsHovered(true);
+        // Collapsed video: start playing on hover
+        if (item.collapsed && isVideo && hoverVideoRef.current) {
+          hoverVideoRef.current.currentTime = 0;
+          hoverVideoRef.current.play().catch(() => {});
+        }
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        // Collapsed video: pause on leave
+        if (item.collapsed && isVideo && hoverVideoRef.current) {
+          hoverVideoRef.current.pause();
+        }
+      }}
     >
+      {/* 专用选中光环，覆盖在最上层，避免 Chromium 亚像素渲染导致漏气留白和双层边框 */}
+      {isSelected && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          borderRadius: 12, // Match parent
+          border: isMultiSelected ? '3px dashed #6366f1' : '3px solid #6366f1',
+          pointerEvents: 'none', zIndex: 100,
+          boxShadow: 'inset 0 0 0 1px rgba(94, 92, 230, 0.2)' // Optional inner crisp ring
+        }} />
+      )}
+
       {/* Trim 手柄 (左右边缘) */}
       <div
         className="trim-handle trim-handle-left"
@@ -154,10 +191,9 @@ export const SortableImageCard = memo(function SortableImageCard({
               </div>
             ) : isVideo ? (() => {
               if (isDragging) {
-                const frameSrc = `${imgSrc}#t=1`;
                 return (
                   <div style={{ width: 60, height: '100%', position: 'relative', overflow: 'hidden', background: '#111', borderRadius: 12 }}>
-                    <video src={frameSrc} muted style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', filter: thumbStyle.filter }} preload="metadata" />
+                    <VideoFrame src={imgSrc} timeOffset={1} style={{ width: '100%', height: '100%' }} />
                     <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <span style={{ fontSize: 16 }}>🎬</span>
                     </div>
@@ -165,24 +201,70 @@ export const SortableImageCard = memo(function SortableImageCard({
                 );
               }
 
+              // === 折叠模式：视频自身作为封面 + 悬浮播放 ===
+              if (item.collapsed) {
+                return (
+                  <div style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: '#000' }}>
+                    {/* 直接用 video 原生封面，不需要经过缩略图引擎更可靠 */}
+                    <video
+                      ref={hoverVideoRef}
+                      src={imgSrc}
+                      muted
+                      loop
+                      playsInline
+                      preload="auto"
+                      onLoadedMetadata={(e) => {
+                        // 初始跳转到 0.0s 作为封面
+                        (e.target as HTMLVideoElement).currentTime = 0;
+                      }}
+                      style={{
+                        width: '100%', height: '100%', objectFit: 'cover',
+                        position: 'absolute', inset: 0,
+                        opacity: isHovered ? 1 : 0.6, // 未悬浮时略微暗淡，更像缩略图
+                        transition: 'opacity 0.3s ease',
+                        pointerEvents: 'none',
+                        filter: isHovered ? 'none' : 'brightness(0.8)',
+                      }}
+                    />
+                    {/* 折叠图标 */}
+                    {!isHovered && (
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                        <div style={{ 
+                          background: 'rgba(0,0,0,0.6)', 
+                          borderRadius: '50%', 
+                          width: 36, height: 36, 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                          backdropFilter: 'blur(8px)',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                          border: '1px solid rgba(255,255,255,0.1)'
+                        }}>
+                          <span style={{ fontSize: 16 }}>📁</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // === 展开模式：多帧胶卷 ===
               const blockWidth = item.duration * pps;
               const frameWidth = 60; 
-              const numFrames = Math.min(60, Math.max(1, Math.ceil(blockWidth / frameWidth)));
+              const numFrames = Math.min(100, Math.max(1, Math.ceil(blockWidth / frameWidth)));
               
               return (
-                <div style={{ width: '100%', height: '100%', position: 'relative', background: '#111', display: 'flex', alignItems: 'stretch', pointerEvents: 'none', overflow: 'hidden' }}>
+                <div style={{ width: '100%', height: '100%', position: 'relative', background: 'repeating-linear-gradient(90deg, #111 0px, #111 40px, #222 40px, #222 42px)', borderTop: '2px solid #000', borderBottom: '2px solid #000', display: 'flex', alignItems: 'stretch', pointerEvents: 'none', overflow: 'hidden' }}>
                   {Array.from({ length: numFrames }).map((_, i) => {
-                     // 算时间偏移
-                     const timeOffset = item.duration > 0 ? (i / numFrames) * item.duration : 0;
-                     const frameSrc = `${imgSrc}#t=${Math.max(0.1, timeOffset)}`;
+                     const timeOffset = item.duration > 0 ? (i / numFrames) * item.duration : 0.1;
                      return (
-                       <div key={i} style={{ width: `${100 / numFrames}%`, height: '100%', position: 'relative', overflow: 'hidden' }}>
-                         <video src={frameSrc} muted style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', filter: thumbStyle.filter }} preload="metadata" />
-                       </div>
+                       <VideoFrame 
+                         key={i} 
+                         src={imgSrc} 
+                         timeOffset={timeOffset} 
+                         style={{ width: `${100 / numFrames}%`, height: '100%', borderRight: i < numFrames - 1 ? '1px solid rgba(0,0,0,0.5)' : 'none' }} 
+                       />
                      );
                   })}
-                  {/* 半透明覆盖层与影视图标 */}
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.15)', pointerEvents: 'none' }}>
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.1)', pointerEvents: 'none' }}>
                     <div style={{ background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))', backdropFilter: 'blur(4px)' }}>
                       <span style={{ fontSize: 16 }}>🎬</span>
                     </div>
@@ -220,17 +302,7 @@ export const SortableImageCard = memo(function SortableImageCard({
         >🗑</div>
       )}
 
-      {/* 多选序号角标 */}
-      {isMultiSelected && multiSelectIndex !== undefined && (
-        <div style={{
-          position: 'absolute', top: 4, left: 4, zIndex: 20,
-          width: 20, height: 20, borderRadius: '50%',
-          background: 'var(--ios-indigo)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 10, fontWeight: 800, color: '#fff',
-          boxShadow: '0 2px 8px rgba(94,92,230,0.6)',
-          pointerEvents: 'none',
-        }}>{multiSelectIndex + 1}</div>
-      )}
+      {/* Removed numerical badge as requested by user to save resources */}
 
       {/* 浮空文字预览层 */}
       {item.overlayText && (
@@ -238,8 +310,18 @@ export const SortableImageCard = memo(function SortableImageCard({
           {item.overlayText}
         </div>
       )}
+      {/* 折叠指示角标 */}
+      {item.collapsed && (
+        <div style={{
+          position: 'absolute', top: 4, right: 4, zIndex: 60,
+          background: 'rgba(99,102,241,0.9)', color: '#fff',
+          fontSize: 9, fontWeight: 700, borderRadius: 4,
+          padding: '1px 5px', pointerEvents: 'none',
+          backdropFilter: 'blur(4px)', boxShadow: '0 2px 6px rgba(0,0,0,0.4)'
+        }}>▶ {item.duration.toFixed(1)}s</div>
+      )}
       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)', padding: '4px 8px', fontSize: 9, color: '#fff', display: 'flex', justifyContent: 'space-between', pointerEvents: 'none' }}>
-        <span>{item.duration.toFixed(1)}s</span>
+        <span>{item.collapsed ? '📁' : item.duration.toFixed(1) + 's'}</span>
         <span style={{ opacity: 0.6 }}>{item.transition !== 'none' ? '✨' : ''}</span>
       </div>
     </div>

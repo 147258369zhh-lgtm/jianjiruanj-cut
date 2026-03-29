@@ -66,30 +66,35 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
-/* 时间轴横向滚动条 - 更专业的沉浸式设�?*/
+/* 时间轴横向滚动条 - 更加厚实好按且向下延伸侵占空白区 */
 .ios-timeline ::-webkit-scrollbar {
-  height: 6px;
+  height: 14px; /* 增加整体高度 */
 }
 
 .ios-timeline ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 7px;
   margin: 0 100px;
-  /* 两端留白，避开操作�?*/
+  /* 留出下边界的一点点空隙，让它上面不动，向下扩张 */
+  border-bottom: 2px solid transparent; 
+  background-clip: padding-box;
 }
 
 .ios-timeline ::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.2);
-  border-radius: 3px;
-  border: none;
+  background: rgba(99, 102, 241, 0.35); /* 默认稍亮一些更好找 */
+  border-radius: 7px;
+  border-top: 0px solid transparent; /* 上不留白，顶部对齐原位置 */
+  border-bottom: 2px solid transparent; /* 下界留出2像素保护距 */
+  background-clip: padding-box;
 }
 
 .ios-timeline ::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.6);
+  background: rgba(99, 102, 241, 0.7);
   box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+  background-clip: padding-box;
 }
 
-/* ─── 动画与触�?─── */
+/* ─── 动画与触?─── */
 .ios-btn-hover {
   transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
 }

@@ -116,3 +116,12 @@ body::before {
   color: var(--ios-text);
   opacity: 0.9;
 }
+
+/* 隐藏滚动条工具类 */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}

@@ -112,6 +112,7 @@ export interface TimelineItem {
   animation?: string; // 图片入场动效 / 镜头推进
   fillMode?: 'contain' | 'cover'; // 画面填充模式
   overrides?: string[]; // 被手动修改过的字段名列表（全局覆盖模型）
+  collapsed?: boolean; // 视频折叠：折叠后在时间轴中只显示一帧缩略图
 }
 
 // 全局默认值接口

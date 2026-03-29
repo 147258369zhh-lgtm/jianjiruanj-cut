@@ -1,6 +1,7 @@
 import React, { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { Button } from "@fluentui/react-components";
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { useThumbnail } from '../hooks/useThumbnail';
 
 const HoverMarqueeText = memo(({ text, isHovered, style }: { text: string; isHovered: boolean; style?: React.CSSProperties }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -100,28 +101,34 @@ export const ResourceCardItem = memo(({ res, isChecked, isAdded, onToggle, onSel
     return '';
   }, [res, previewUrl]);
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isIntersecting, setIsIntersecting] = useState(false);
+
+  useEffect(() => {
+    if (res.type !== 'video' || !containerRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        setIsIntersecting(entry.isIntersecting);
+      });
+    }, { root: null, threshold: 0.01 });
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [res.type]);
 
   useEffect(() => {
     if (res.type !== 'video' || !videoRef.current) return;
     const el = videoRef.current;
-    el.muted = true;
-    el.loop = true;
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          el.play().catch(() => {});
-        } else {
-          el.pause();
-          el.currentTime = 0.1;
-        }
-      });
-    }, { root: null, threshold: 0.1 });
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [res.type, displaySrc]);
+    
+    if (isHovered && isIntersecting) {
+      el.play().catch(() => {});
+    } else {
+      el.pause();
+      // 在非悬浮时，静止在 0.1s 作为封面
+      if (el.currentTime !== 0.1) el.currentTime = 0.1;
+    }
+  }, [isHovered, isIntersecting, res.type]);
 
   // 音频项：完全不同的紧凑设计
   if (res.type === 'audio') {
@@ -192,15 +199,53 @@ export const ResourceCardItem = memo(({ res, isChecked, isAdded, onToggle, onSel
         onClick={() => onSelectPreview(res)}
         onDoubleClick={() => onToggle(res.id)}
       >
-        <div style={{
-          width: 106, height: 62, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
-          background: '#000', position: 'relative',
-          border: isHovered ? `1px solid ${accentColor}50` : '1px solid rgba(255,255,255,0.06)',
-          boxShadow: isHovered ? `0 4px 12px ${accentColor}25` : 'none',
-          transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
-          transform: isHovered ? 'scale(1.04)' : 'scale(1)'
-        }}>
-          <video ref={videoRef} src={`${displaySrc}#t=0.1`} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <div 
+          ref={containerRef}
+          style={{
+            width: 106, height: 62, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
+            background: 'rgba(255,255,255,0.03)', position: 'relative',
+            border: isHovered ? `1px solid ${accentColor}50` : '1px solid rgba(255,255,255,0.08)',
+            boxShadow: isHovered ? `0 4px 12px ${accentColor}25` : 'none',
+            transition: 'all 0.15s',
+            transform: isHovered ? 'scale(1.04)' : 'scale(1)'
+          }}
+        >
+          {isIntersecting ? (
+            <video 
+              ref={videoRef} 
+              src={displaySrc} 
+              muted 
+              loop 
+              preload="metadata"
+              playsInline
+              style={{ 
+                width: '100%', height: '100%', objectFit: 'cover',
+                opacity: isHovered ? 1 : 0.65,
+                transition: 'opacity 0.4s ease'
+              }} 
+            />
+          ) : (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(90deg, #111 0%, #1a1a1a 50%, #111 100%)' }}>
+              <span style={{ fontSize: 24, opacity: 0.1 }}>🎬</span>
+            </div>
+          )}
+          
+          {/* 未悬浮时的叠加指示图标 */}
+          {!isHovered && isIntersecting && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+               <div style={{ 
+                 background: 'rgba(0,0,0,0.35)', 
+                 borderRadius: '50%', 
+                 width: 30, height: 30, 
+                 display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                 backdropFilter: 'blur(4px)',
+                 border: '1px solid rgba(255,255,255,0.1)'
+               }}>
+                  <span style={{ fontSize: 16, opacity: 0.6 }}>🎬</span>
+               </div>
+            </div>
+          )}
+
           {isAdded && <div style={{ position: 'absolute', bottom: 4, left: 4, width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981, 0 0 2px #10B981', zIndex: 10 }} title="已添至时间轴" />}
           <div style={{ position: 'absolute', bottom: 2, right: 2, fontSize: 8, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '0 3px', borderRadius: 2 }}>🎬</div>
         </div>

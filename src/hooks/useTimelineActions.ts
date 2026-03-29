@@ -1,5 +1,6 @@
 import { useCallback, useRef, MouseEvent as ReactMouseEvent, WheelEvent as ReactWheelEvent, RefObject, MutableRefObject, Dispatch, SetStateAction } from 'react';
 import { TimelineItem } from '../types';
+import { TimelineLayout, timeToX, xToTime as xToLogicalTime } from '../utils/timelineLayout';
 
 interface UseTimelineActionsArgs {
   pps: number;
@@ -30,6 +31,7 @@ interface UseTimelineActionsArgs {
   
   commitSnapshotNow: () => void;
   setContextMenu: Dispatch<SetStateAction<any>>;
+  layout: TimelineLayout;
 }
 
 export function useTimelineActions({
@@ -40,7 +42,7 @@ export function useTimelineActions({
   isDraggingHead, setIsDraggingHead,
   selectionBox, setSelectionBox,
   selectedIds, setSelectedIds, setSelectedAudioIds, setSelectedVoiceoverIds,
-  commitSnapshotNow, setContextMenu
+  commitSnapshotNow, setContextMenu, layout
 }: UseTimelineActionsArgs) {
 
   const lastScrubTimeRef = useRef<number>(0);
@@ -57,14 +59,14 @@ export function useTimelineActions({
     const el = timelineScrollRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const rawX = clientX - rect.left + el.scrollLeft - 60;
+    const rawX = clientX - rect.left + el.scrollLeft;
     
-    const targetTime = Math.max(0, rawX / ppsRef.current);
-    const maxT = timelineRef.current.reduce((s, t) => s + t.duration, 0);
+    const targetTime = xToLogicalTime(rawX, layout, ppsRef.current);
+    const maxT = timelineRef.current.reduce((s: number, t: TimelineItem) => s + t.duration, 0);
     const finalTime = Math.max(0, Math.min(targetTime, maxT + 5));
 
     if (playheadRef.current) {
-      playheadRef.current.style.transform = `translateX(${60 + finalTime * ppsRef.current}px)`;
+      playheadRef.current.style.transform = `translateX(${timeToX(finalTime, layout, ppsRef.current)}px)`;
     }
 
     const now = Date.now();
@@ -90,17 +92,15 @@ export function useTimelineActions({
     if (isDraggingHead) setIsDraggingHead(false);
     if (selectionBox) {
       const xStart = Math.min(selectionBox.x1, selectionBox.x2) - 60;
-      const xEnd = Math.max(selectionBox.x1, selectionBox.x2) - 60;
+      const xEnd = Math.max(selectionBox.x1, selectionBox.x2);
 
       const newlySelected = new Set(e.ctrlKey ? selectedIds : []);
-      let currentAcc = 0;
-      timeline.forEach(item => {
-        const itemStart = currentAcc * pps;
-        const itemEnd = (currentAcc + item.duration) * pps;
+      layout.items.forEach(itemLayout => {
+        const itemStart = timeToX(itemLayout.logicalStart, layout, pps);
+        const itemEnd = timeToX(itemLayout.logicalEnd, layout, pps);
         if (!(itemEnd < xStart || itemStart > xEnd)) {
-          newlySelected.add(item.id);
+          newlySelected.add(itemLayout.id);
         }
-        currentAcc += item.duration;
       });
       setSelectedIds(newlySelected);
       setSelectionBox(null);
@@ -130,12 +130,8 @@ export function useTimelineActions({
       
       const scrollEl = timelineScrollRef.current;
       if (scrollEl) {
-        let accX = 0;
-        for (let i = 0; i < tl.length; i++) {
-          if (tl[i].id === id) break;
-          accX += tl[i].duration * ppsRef.current;
-        }
-        scrollEl.scrollTo({ left: Math.max(0, accX - scrollEl.clientWidth / 3), behavior: 'smooth' });
+        const visualX = timeToX(startTime, layout, ppsRef.current);
+        scrollEl.scrollTo({ left: Math.max(0, (visualX - 60) - scrollEl.clientWidth / 3), behavior: 'smooth' });
       }
     }
   }, [setSelectedIds, setSelectedAudioIds, setSelectedVoiceoverIds, setIsPlaying, timelineRef, setPlayTime, setIsJumping, timelineScrollRef, ppsRef]);
@@ -167,6 +163,15 @@ export function useTimelineActions({
 
   const handleTimelineDoubleClick = useCallback((id: string) => {
     const tl = timelineRef.current;
+    const item = tl.find(t => t.id === id);
+    
+    // If collapsed, double-click expands it
+    if (item && item.collapsed) {
+      commitSnapshotNow();
+      setTimeline(p => p.map(t => t.id === id ? { ...t, collapsed: false } : t));
+      return;
+    }
+    
     let startTime = 0;
     for (const t of tl) { if (t.id === id) break; startTime += t.duration; }
     setPlayTime(startTime);
@@ -175,14 +180,10 @@ export function useTimelineActions({
     setTimeout(() => setIsJumping(false), 350);
     const scrollEl = timelineScrollRef.current;
     if (scrollEl) {
-      let accX = 0;
-      for (let i = 0; i < tl.length; i++) {
-        if (tl[i].id === id) break;
-        accX += tl[i].duration * ppsRef.current;
-      }
-      scrollEl.scrollTo({ left: Math.max(0, accX - scrollEl.clientWidth / 3), behavior: 'smooth' });
+      const visualX = timeToX(startTime, layout, ppsRef.current);
+      scrollEl.scrollTo({ left: Math.max(0, (visualX - 60) - scrollEl.clientWidth / 3), behavior: 'smooth' });
     }
-  }, [timelineRef, setPlayTime, setIsPlaying, setIsJumping, timelineScrollRef, ppsRef]);
+  }, [timelineRef, setPlayTime, setIsPlaying, setIsJumping, timelineScrollRef, ppsRef, commitSnapshotNow, setTimeline, layout]);
 
   return {
     handleTimelineWheel,

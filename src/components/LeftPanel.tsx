@@ -5,11 +5,12 @@ import { useShallow } from 'zustand/react/shallow';
 import { invoke } from '@tauri-apps/api/core';
 import { getMediaDuration } from '../utils/mediaUtils';
 import { ResourceCardItem } from './ResourceCardItem';
+import { WebMusicPanel } from './WebMusicPanel';
 import './LeftPanel.css';
 
 export const LeftPanel: React.FC = () => {
   const {
-    resources, setResources, getEffectiveSrc, globalDefaultsRef, commitSnapshotNow, setTimeline, setAudioItems, removeFromLibrary, handleLibToggle, handleLibSelectPreview, handleLibAdd, handleConvertDNG, handleRevealInExplorer, previewCache, handleImport, setVoiceoverClips, addedResourceIds
+    resources, setResources, getEffectiveSrc, globalDefaultsRef, commitSnapshotNow, setTimeline, setAudioItems, removeFromLibrary, handleLibToggle, handleLibSelectPreview, handleLibAdd, handleConvertDNG, handleRevealInExplorer, previewCache, handleImport, setVoiceoverClips, addedResourceIds, playTimeRef
   } = useAppContext();
   const {
     leftTab, setLeftTab,
@@ -23,8 +24,8 @@ export const LeftPanel: React.FC = () => {
     selectedResourceIds: state.selectedResourceIds, setSelectedResourceIds: state.setSelectedResourceIds,
   })));
 
-  // AI 配音相关状态
-  const [musicSubTab, setMusicSubTab] = useState<'audio' | 'tts'>('audio');
+  // AI 配音与网络爬虫相关状态
+  const [musicSubTab, setMusicSubTab] = useState<'audio' | 'tts' | 'web'>('audio');
   const [ttsText, setTtsText] = useState('');
   const [ttsVoice, setTtsVoice] = useState('zh-CN-YunyangNeural');
   const [ttsRate, setTtsRate] = useState('+0%');
@@ -72,7 +73,7 @@ export const LeftPanel: React.FC = () => {
           {leftTab === 'music' && (
             <div style={{ padding: '6px 10px 0' }}>
               <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: 20, padding: 3 }}>
-                {[{ id: 'audio', label: '🎵 插入音频' }, { id: 'tts', label: '🎙️ AI 配音' }].map(t => (
+                {[{ id: 'audio', label: '🎵 插入音频' }, { id: 'tts', label: '🎙️ AI 配音' }, { id: 'web', label: '🌐 网络曲库' }].map(t => (
                   <div key={t.id} onClick={() => setMusicSubTab(t.id as any)} style={{
                     flex: 1, textAlign: 'center', padding: '5px 0', fontSize: 11, borderRadius: 17, cursor: 'pointer',
                     fontWeight: musicSubTab === t.id ? 'bold' : 'normal',
@@ -149,9 +150,13 @@ export const LeftPanel: React.FC = () => {
                     commitSnapshotNow();
                     const selected = generatedVoiceovers.filter(v => v.selected);
                     setVoiceoverClips((prev: any[]) => {
-                      let sp = 0;
-                      if (prev.length > 0) { sp = prev[prev.length - 1].timelineStart + prev[prev.length - 1].duration; }
-                      return [...prev, ...selected.map((vo, i) => ({ id: `vc_${Date.now()}_${i}`, resourceId: vo.id, path: vo.path, name: vo.name, timelineStart: sp + selected.slice(0, i).reduce((s: number, v: any) => s + v.duration, 0), startOffset: 0, duration: vo.duration, volume: 1.0 }))];
+                      // 如果配音轨为空，从0开始；否则从播放头位置插入
+                      let sp = prev.length === 0 ? 0 : playTimeRef.current;
+                      return [...prev, ...selected.map((vo, i) => {
+                        const mapped = { id: `vc_${Date.now()}_${i}`, resourceId: vo.id, path: vo.path, name: vo.name, timelineStart: sp, startOffset: 0, duration: vo.duration, volume: 1.0 };
+                        sp += vo.duration;
+                        return mapped;
+                      })];
                     });
                     setGeneratedVoiceovers(prev => prev.map(v => ({ ...v, selected: false })));
                     setStatusMsg(`✅ 已插入 ${selected.length} 段配音到配音轨`);
@@ -161,6 +166,10 @@ export const LeftPanel: React.FC = () => {
                   </button>
                 )}
               </div>
+            </div>
+          ) : leftTab === 'music' && musicSubTab === 'web' ? (
+            <div style={{ flex: 1, overflow: 'hidden', minHeight: 0, marginTop: 10 }}>
+              <WebMusicPanel />
             </div>
           ) : (
             <>
@@ -197,14 +206,63 @@ export const LeftPanel: React.FC = () => {
                     </button>
                     <button className="ios-button-small ios-button ios-button-primary" disabled={selectedResourceIds.size === 0} style={{ flex: 1.2, borderRadius: 8, background: selectedResourceIds.size > 0 ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.06)', color: selectedResourceIds.size > 0 ? '#fff' : 'rgba(255,255,255,0.3)', fontWeight: 600, fontSize: 11, border: 'none', boxShadow: 'none', padding: '0 4px', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={async () => {
                       const selectedList = resources.filter(r => r.type === libTab && selectedResourceIds.has(r.id));
+                      const pt = playTimeRef.current;
+                      let audioSp = pt;
+                      
+                      const newVideoItems: any[] = [];
+                      const newAudioItems: any[] = [];
+
                       for (const r of selectedList) {
-                        if (r.type === 'image') {
-                          setTimeline(p => [...p, { id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, duration: 3, transition: 'fade' as any, rotation: 0, contrast: 1.0, saturation: 1.0, exposure: 1.0, brilliance: 1.0, temp: 0, tint: 0, zoom: 1.0, highlights: 1.0, shadows: 1.0, whites: 1.0, blacks: 1.0, vibrance: 1.0, sharpness: 0, fade: 0, vignette: 0, grain: 0, fontSize: 24, fontWeight: 'normal' }]);
-                        } else {
+                        if (r.type === 'image' || r.type === 'video') {
+                          let fileDur = 3;
+                          if (r.type === 'video') {
+                            fileDur = await getMediaDuration(r.path);
+                          }
+                          newVideoItems.push({ id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, duration: fileDur, transition: 'fade' as any, rotation: 0, contrast: 1.0, saturation: 1.0, exposure: 1.0, brilliance: 1.0, temp: 0, tint: 0, zoom: 1.0, highlights: 1.0, shadows: 1.0, whites: 1.0, blacks: 1.0, vibrance: 1.0, sharpness: 0, fade: 0, vignette: 0, grain: 0, fontSize: 24, fontWeight: 'normal' });
+                        } else if (r.type === 'audio') {
                           const dur = await getMediaDuration(r.path);
-                          setAudioItems(prev => { let startPos = 0; if (prev.length > 0) { const last = prev[prev.length - 1]; startPos = last.timelineStart + last.duration; } return [...prev, { id: `au_${Date.now()}_${Math.random()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }]; });
+                          newAudioItems.push({ id: `au_${Date.now()}_${Math.random()}`, resourceId: r.id, timelineStart: audioSp, startOffset: 0, duration: dur, volume: 1.0 });
+                          audioSp += dur;
                         }
                       }
+                      
+                      if (newVideoItems.length > 0) {
+                        setTimeline(prev => {
+                          let insertIndex = prev.length;
+                          let sum = 0;
+                          for (let i = 0; i < prev.length; i++) {
+                            const nextSum = sum + prev[i].duration;
+                            if (pt >= sum && pt <= nextSum) {
+                              const distStart = pt - sum;
+                              const distEnd = nextSum - pt;
+                              insertIndex = distStart < distEnd ? i : i + 1;
+                              break;
+                            }
+                            sum = nextSum;
+                          }
+                          if (insertIndex === prev.length && pt < sum) insertIndex = prev.length;
+                          const newTimeline = [...prev];
+                          newTimeline.splice(insertIndex, 0, ...newVideoItems);
+                          return newTimeline;
+                        });
+                      }
+                      
+                      if (newAudioItems.length > 0) {
+                        setAudioItems(prev => {
+                          // 如果音频轨为空，重新计算起始位置从0开始
+                          if (prev.length === 0) {
+                            let sp = 0;
+                            const adjusted = newAudioItems.map(a => {
+                              const item = { ...a, timelineStart: sp };
+                              sp += a.duration;
+                              return item;
+                            });
+                            return [...prev, ...adjusted];
+                          }
+                          return [...prev, ...newAudioItems];
+                        });
+                      }
+
                       setSelectedResourceIds(new Set());
                     }}>
                       {selectedResourceIds.size > 0 ? `+ 编入${selectedResourceIds.size}` : '+ 轨道'}

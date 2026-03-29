@@ -11,6 +11,7 @@ interface UseKeyboardShortcutsArgs {
   commitSnapshotNow: () => void;
   setTimeline: (fn: (prev: TimelineItem[]) => TimelineItem[]) => void;
   setAudioItems: (fn: (prev: AudioTimelineItem[]) => AudioTimelineItem[]) => void;
+  setVoiceoverClips: (fn: (prev: any[]) => any[]) => void;
   setSelectedIds: (ids: Set<string>) => void;
   setSelectedAudioIds: (ids: Set<string>) => void;
   setSelectedVoiceoverIds: (ids: Set<string>) => void;
@@ -25,7 +26,7 @@ interface UseKeyboardShortcutsArgs {
 export function useKeyboardShortcuts({
   setIsPlaying, setPlayTime,
   selectedIdsRef, selectedAudioIdsRef, selectedVoiceoverIdsRef, timelineRef,
-  commitSnapshotNow, setTimeline, setAudioItems,
+  commitSnapshotNow, setTimeline, setAudioItems, setVoiceoverClips,
   setSelectedIds, setSelectedAudioIds, setSelectedVoiceoverIds,
   undo, redo, saveProject, loadProject, splitAtPlayhead,
   setShowShortcuts
@@ -53,6 +54,10 @@ export function useKeyboardShortcuts({
           commitSnapshotNow();
           setAudioItems(p => p.filter(a => !selectedAudioIdsRef.current.has(a.id)));
           setSelectedAudioIds(new Set()); 
+        }
+        if (selectedVoiceoverIdsRef.current.size > 0) {
+          commitSnapshotNow();
+          setVoiceoverClips(p => p.filter(a => !selectedVoiceoverIdsRef.current.has(a.id)));
           setSelectedVoiceoverIds(new Set());
         }
         return;
@@ -105,7 +110,7 @@ export function useKeyboardShortcuts({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     setIsPlaying, setPlayTime, selectedIdsRef, selectedAudioIdsRef, selectedVoiceoverIdsRef,
-    timelineRef, commitSnapshotNow, setTimeline, setAudioItems, setSelectedIds,
+    timelineRef, commitSnapshotNow, setTimeline, setAudioItems, setVoiceoverClips, setSelectedIds,
     setSelectedAudioIds, setSelectedVoiceoverIds, undo, redo, saveProject, loadProject,
     splitAtPlayhead, setShowShortcuts
   ]);
