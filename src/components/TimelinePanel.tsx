@@ -383,7 +383,12 @@ export const TimelinePanel: React.FC = () => {
                     onMouseDown={(e) => {
                       if (e.target instanceof HTMLDivElement && e.target.innerText === '✕') return; // Cancel if closing
                       e.stopPropagation();
-                      setSelectedVoiceoverIds(new Set([clip.id]));
+                      // Toggle: 再次点击已选中的配音则取消选择
+                      if (selectedVoiceoverIds.size === 1 && selectedVoiceoverIds.has(clip.id)) {
+                        setSelectedVoiceoverIds(new Set());
+                      } else {
+                        setSelectedVoiceoverIds(new Set([clip.id]));
+                      }
                       setSelectedIds(new Set());
                       setSelectedAudioIds(new Set());
                       const startX = e.clientX;

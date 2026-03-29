@@ -108,15 +108,20 @@ export function useTimelineActions({
   }, [isDraggingHead, setIsDraggingHead, selectionBox, selectedIds, timeline, pps, setSelectedIds, setSelectionBox]);
 
   const handleTimelineSelect = useCallback((id: string, isCtrl: boolean) => {
+    let wasSelected = false;
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (isCtrl) { if (next.has(id)) next.delete(id); else next.add(id); }
-      else { next.clear(); next.add(id); }
+      else {
+        // Toggle: 如果只选了这一个且再次点击，则取消
+        if (next.size === 1 && next.has(id)) { next.clear(); wasSelected = true; }
+        else { next.clear(); next.add(id); }
+      }
       return next;
     });
     setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set());
     
-    if (!isCtrl) {
+    if (!isCtrl && !wasSelected) {
       setIsPlaying(false);
       const tl = timelineRef.current;
       let startTime = 0;
@@ -155,7 +160,11 @@ export function useTimelineActions({
     setSelectedAudioIds((prev: Set<string>) => {
       const next = new Set(prev);
       if (isCtrl) { if (next.has(id)) next.delete(id); else next.add(id); }
-      else { next.clear(); next.add(id); }
+      else {
+        // Toggle: 再次点击同一项则取消选择
+        if (next.size === 1 && next.has(id)) { next.clear(); }
+        else { next.clear(); next.add(id); }
+      }
       return next;
     });
     setSelectedIds(new Set());

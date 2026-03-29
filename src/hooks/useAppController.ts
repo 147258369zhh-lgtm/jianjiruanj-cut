@@ -653,14 +653,24 @@ export function useAppController() {
         }
         acc += t.duration;
       }
+      // 播放头超出图片轨所有片段 → 黑屏（无论是否在播放）
+      return null;
     }
+    // 时间轴完全为空时，fallback 到素材库点选的资源作为预览
     return monitorRes ? { ...monitorRes, currentItem: null, src: getEffectiveSrc(monitorRes.path), localTime: 0 } : null;
   }, [isPlaying, playTime, timeline, resources, monitorRes, previewCache]);
 
   // 同步视频播放与时间线
   useEffect(() => {
     const videoEl = monitorVideoRef.current;
-    if (!videoEl || !monitorSrc || monitorSrc.type !== 'video') return;
+    if (!videoEl) return;
+
+    // 当 monitorSrc 为 null 或不是视频时，暂停并重置视频元素
+    if (!monitorSrc || monitorSrc.type !== 'video') {
+      videoEl.pause();
+      return;
+    }
+
     const localTime = monitorSrc.localTime || 0;
     
     // 同步速率与音量
@@ -672,7 +682,6 @@ export function useAppController() {
     if (videoEl.volume !== vol) videoEl.volume = vol;
 
     // 同步 currentTime（仅在差异超过 0.3s 时 seek，避免频繁跳帧）
-    // 注意：如果是倍速播放，时间轴过了 localTime 时间，对应素材的原始进度应该为 localTime * itemSpeed
     const localTimeAdjusted = localTime * itemSpeed;
     if (Math.abs(videoEl.currentTime - localTimeAdjusted) > 0.3) {
       videoEl.currentTime = localTimeAdjusted;
