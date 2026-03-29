@@ -3,6 +3,7 @@ import { GlobalDefaultsPanel } from './GlobalDefaultsPanel';
 import { ImagePropertyPanel } from './ImagePropertyPanel';
 import { VideoPropertyPanel } from './VideoPropertyPanel';
 import { AudioPropertyPanel } from './AudioPropertyPanel';
+import { VoiceoverPropertyPanel } from './VoiceoverPropertyPanel';
 import { ExportPanel } from './ExportPanel';
 import { ProjectDashboard } from './ProjectDashboard';
 import './RightPanel.css';
@@ -39,6 +40,8 @@ export function RightPanel() {
     favAnims, toggleFavAnim,
     setSelectedAudioIds,
     setSelectedVoiceoverIds,
+    selectedVoiceoverIds,
+    voiceoverClips, setVoiceoverClips,
     updateAudioItem,
     isEditingAudio, setIsEditingAudio,
     executeAudioCut,
@@ -61,6 +64,7 @@ export function RightPanel() {
                 })()
               ) :
                 selectedAudioIds.size > 0 ? '🎵 音频属性' :
+                selectedVoiceoverIds.size > 0 ? '🎙️ 配音属性' :
                   '💡 项目信息'
           )}
         </span>
@@ -146,6 +150,16 @@ export function RightPanel() {
                     setIsEditingAudio={setIsEditingAudio}
                     executeAudioCut={executeAudioCut}
                     stitchSelectedAudioGaps={stitchSelectedAudioGaps}
+                  />
+                );
+              } else if (selectedVoiceoverIds.size > 0) {
+                return (
+                  <VoiceoverPropertyPanel
+                    selectedVoiceoverIds={selectedVoiceoverIds}
+                    setSelectedAudioIds={setSelectedAudioIds}
+                    setSelectedVoiceoverIds={setSelectedVoiceoverIds}
+                    voiceoverClips={voiceoverClips}
+                    setVoiceoverClips={setVoiceoverClips}
                   />
                 );
               } else {

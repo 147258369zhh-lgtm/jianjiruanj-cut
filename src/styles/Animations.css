@@ -157,6 +157,25 @@
   animation: text-rotateIn var(--text-anim-dur, 0.5s) cubic-bezier(0.34, 1.3, 0.64, 1) forwards;
 }
 
+/* ─── 文字循环与出场新动效 ─── */
+@keyframes text-loop-pulse { 0%, 100% {transform: translate(-50%, -50%) scale(1);} 50% {transform: translate(-50%, -50%) scale(1.05);} }
+@keyframes text-loop-shake { 0%, 100% {transform: translate(-50%, -50%);} 25% {transform: translate(calc(-50% - 10px), -50%);} 75% {transform: translate(calc(-50% + 10px), -50%);} }
+@keyframes text-loop-float { 0%, 100% {transform: translate(-50%, -50%);} 50% {transform: translate(-50%, calc(-50% - 10px));} }
+
+.text-anim-loop-pulse { animation: text-loop-pulse var(--text-loop-dur, 2s) ease-in-out infinite; }
+.text-anim-loop-shake { animation: text-loop-shake var(--text-loop-dur, 0.5s) ease-in-out infinite; }
+.text-anim-loop-float { animation: text-loop-float var(--text-loop-dur, 3s) ease-in-out infinite; }
+
+@keyframes text-out-fadeOut { from {opacity: 1;} to {opacity: 0;} }
+@keyframes text-out-zoomOut { from {opacity: 1; transform: translate(-50%, -50%) scale(1);} to {opacity: 0; transform: translate(-50%, -50%) scale(0.3);} }
+@keyframes text-out-slideDownOut { from {opacity: 1; transform: translate(-50%, -50%);} to {opacity: 0; transform: translate(-50%, calc(-50% + 50px));} }
+@keyframes text-out-slideRightOut { from {opacity: 1; transform: translate(-50%, -50%);} to {opacity: 0; transform: translate(calc(-50% + 80px), -50%);} }
+
+.text-anim-out-fadeOut { animation: text-out-fadeOut var(--text-out-dur, 0.5s) ease-out forwards; }
+.text-anim-out-zoomOut { animation: text-out-zoomOut var(--text-out-dur, 0.5s) ease-in forwards; }
+.text-anim-out-slideDownOut { animation: text-out-slideDownOut var(--text-out-dur, 0.5s) ease-in forwards; }
+.text-anim-out-slideRightOut { animation: text-out-slideRightOut var(--text-out-dur, 0.5s) cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards; }
+
 /* ─── 图片入场动画 (Image Animation / Ken Burns) ─── */
 @keyframes img-fadeIn {
   from {

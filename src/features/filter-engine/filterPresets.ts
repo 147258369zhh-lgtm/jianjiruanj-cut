@@ -1,4 +1,3 @@
-// ─── 滤镜预设数据 ────────────────────────────────────────────────────────
 export interface FilterPreset {
   icon: string;
   name: string;
@@ -8,6 +7,18 @@ export interface FilterPreset {
   temp: number;
   tint: number;
   brilliance: number;
+  highlights?: number;
+  shadows?: number;
+  whites?: number;
+  blacks?: number;
+  vignette?: number;
+  fade?: number;
+  grain?: number;
+  curveMaster?: {x: number, y: number}[];
+  curveRed?: {x: number, y: number}[];
+  curveGreen?: {x: number, y: number}[];
+  curveBlue?: {x: number, y: number}[];
+  isCustom?: boolean; // Flag to indicate if it's a custom preset
 }
 
 export const FILTER_PRESETS: FilterPreset[] = [

@@ -9,7 +9,7 @@ export interface ThumbnailTask {
 class ThumbnailGenerator {
   private video: HTMLVideoElement;
   private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D | null;
+
   private queue: ThumbnailTask[] = [];
   private cache: Map<string, string> = new Map();
   private processing: boolean = false;
@@ -23,7 +23,7 @@ class ThumbnailGenerator {
     // 关键：在跨域（tauri -> asset）环境下必须设置，否则 toDataURL 会报 Tainted Canvas
     this.video.crossOrigin = 'anonymous'; 
     this.canvas = document.createElement('canvas');
-    this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+    this.canvas.getContext('2d', { willReadFrequently: true });
   }
 
   public async getThumbnail(src: string, timeOffset: number): Promise<string> {

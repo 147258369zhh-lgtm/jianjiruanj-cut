@@ -97,7 +97,7 @@ export const TimelinePanel: React.FC = () => {
             setTimeout(() => setIsJumping(false), 350);
           }}
         >
-          {/* 渲染刻度线 - 自适应密度 */}
+          {/* 渲染刻度线 - 自适应密度，折叠区域自动稀疏 */}
           {(() => {
             const totalSeconds = Math.max(maxPlayTime, 30);
             let majorStep = 5;
@@ -107,11 +107,34 @@ export const TimelinePanel: React.FC = () => {
             else if (pps < 40) { majorStep = 5; minorStep = 1; }
             else if (pps > 80) { majorStep = 2; minorStep = 0.5; }
 
+            // 辅助函数：获取某时间点所在区段的有效 ppsEffective
+            const getLocalPpsE = (t: number): number => {
+              for (const item of layout.items) {
+                if (t >= item.logicalStart && t < item.logicalEnd) {
+                  return item.ppsEffective;
+                }
+              }
+              return 1; // 超出区段按原速
+            };
+
             const ticks: React.ReactNode[] = [];
-            // 由于是非线性，我们需要遍历每一秒（或步长）并计算其 X
+            let lastMajorX = -Infinity;
+            let lastMinorX = -Infinity;
+
             for (let t = 0; t <= totalSeconds; t += minorStep) {
               const x = timeToX(t, layout, pps);
               const isMajor = Math.abs(t % majorStep) < 0.001;
+              const localE = getLocalPpsE(t);
+
+              // 折叠区内自动稀疏：major标签至少间隔40px，minor刻度至少间隔8px
+              if (isMajor) {
+                if (x - lastMajorX < 40 && localE < 0.9) continue;
+                lastMajorX = x;
+              } else {
+                if (x - lastMinorX < 8 && localE < 0.9) continue;
+                lastMinorX = x;
+              }
+
               ticks.push(
                 <React.Fragment key={t}>
                   <div

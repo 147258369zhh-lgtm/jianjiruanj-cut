@@ -1090,6 +1090,161 @@ async fn list_tts_voices() -> Result<Vec<TtsVoice>, String> {
     Ok(voices)
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WebMusicItem {
+    id: u64,
+    name: String,
+    artist: String,
+    cover: String,
+    duration: u32,
+    url: String,
+    genre: String,
+}
+
+#[tauri::command]
+async fn search_web_music(keyword: String) -> Result<Vec<WebMusicItem>, String> {
+    let url = format!("https://itunes.apple.com/search?term={}&media=music&limit=100", urlencoding::encode(&keyword));
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    
+    let mut items = Vec::new();
+    if let Some(results) = json.pointer("/results").and_then(|v| v.as_array()) {
+        for s in results {
+            let id = s["trackId"].as_u64().unwrap_or(0);
+            let name = s["trackName"].as_str().unwrap_or("Unknown").to_string();
+            let artist_name = s["artistName"].as_str().unwrap_or("Unknown").to_string();
+            let cover_url = s["artworkUrl100"].as_str().unwrap_or("").to_string();
+            let url_str = s["previewUrl"].as_str().unwrap_or("").to_string();
+            let genre = s["primaryGenreName"].as_str().unwrap_or("Other").to_string();
+            
+            // preview format is usually 30-sec m4a snippet
+            let duration = 30000;
+
+            if id > 0 && !url_str.is_empty() {
+                items.push(WebMusicItem { id, name, artist: artist_name, cover: cover_url, duration, url: url_str, genre });
+            }
+        }
+    }
+
+    // --- ALGORITHMIC SORTING AND DEDUPLICATION ---
+    let kw_lower = keyword.to_lowercase();
+    
+    // Sort items by relevance (Descending)
+    items.sort_by(|a, b| {
+        let score_a = calculate_relevance(&a.name, &a.artist, &kw_lower);
+        let score_b = calculate_relevance(&b.name, &b.artist, &kw_lower);
+        score_b.cmp(&score_a) 
+    });
+
+    // Deduplication by identical name + artist to solve duplicate sources/albums
+    let mut deduped = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for item in items {
+        let key = format!("{}|{}", item.name.to_lowercase(), item.artist.to_lowercase());
+        if !seen.contains(&key) {
+            seen.insert(key);
+            deduped.push(item);
+        }
+    }
+
+    Ok(deduped)
+}
+
+fn calculate_relevance(name: &str, artist: &str, query: &str) -> i32 {
+    let mut score = 0;
+    let name_l = name.to_lowercase();
+    let artist_l = artist.to_lowercase();
+    
+    // 1. Exact Match bonuses & Word Match bonuses
+    if name_l == query { score += 50; }
+    if artist_l == query { score += 50; }
+    if query.contains(&artist_l) || artist_l.contains(query) { score += 20; }
+    if query.contains(&name_l) || name_l.contains(query) { score += 20; }
+
+    // If query has multiple words (e.g. "周杰伦 晴天"), boost if artist exactly matches one word
+    let query_wants_inst = query.contains("instrumental") || query.contains("伴奏") || query.contains("karaoke");
+    let mut word_matches_artist = false;
+    for term in query.split_whitespace() {
+        if artist_l == term {
+            score += 60; // Huge bonus for an exact word match on artist name
+            word_matches_artist = true;
+        }
+    }
+
+    // 2. Penalize Non-Originals (Covers, Live, Remixes) IF query didn't organically ask for them
+    let is_cover = name_l.contains("cover") || name_l.contains("翻唱");
+    let is_live = name_l.contains("live") || name_l.contains("演唱会");
+    let is_remix = name_l.contains("remix") || name_l.contains("dj");
+    let is_inst = name_l.contains("instrumental") || name_l.contains("伴奏") || name_l.contains("piano") || name_l.contains("karaoke");
+
+    if is_cover && !query.contains("cover") && !query.contains("翻唱") { score -= 40; }
+    if is_live && !query.contains("live") && !query.contains("演唱会") { score -= 15; }
+    if is_remix && !query.contains("remix") && !query.contains("dj") { score -= 25; }
+    
+    if query_wants_inst {
+        // User actively wants an instrumental!
+        if is_inst {
+            score += 80; // Massive bonus
+        } else {
+            score -= 50; // Heavily penalize non-instrumentals
+        }
+    } else {
+        // User didn't ask for instrumental
+        if is_inst { score -= 30; }
+    }
+
+    score
+}
+
+#[tauri::command]
+async fn download_web_music(app: tauri::AppHandle, url: String, id: u64, name: String, artist: String) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0")
+        .build()
+        .map_err(|e| e.to_string())?;
+    
+    let resp = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        return Err(format!("无法下载歌曲，HTTP {}", resp.status()));
+    }
+
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    
+    // Apple's .m4a snippets are typically 10KB to 200KB depending on format + duration
+    if bytes.len() < 5000 {
+        return Err("音乐文件异常过小".to_string());
+    }
+
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let music_dir = app_data_dir.join("music_downloads");
+    if !music_dir.exists() {
+        let _ = std::fs::create_dir_all(&music_dir);
+    }
+
+    let safe_name = name.replace(|c: char| !c.is_alphanumeric() && c != ' ' && c != '-', "_");
+    let safe_artist = artist.replace(|c: char| !c.is_alphanumeric() && c != ' ' && c != '-', "_");
+    let ext = if url.contains(".aac") || url.contains(".m4a") { "m4a" } else { "mp3" };
+    let filename = format!("{}___{}_{}.{}", safe_artist, safe_name, id, ext);
+    let out_path = music_dir.join(&filename);
+
+    std::fs::write(&out_path, bytes).map_err(|e| format!("写入文件失败: {}", e))?;
+
+    Ok(out_path.to_string_lossy().into_owned())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1102,7 +1257,9 @@ pub fn run() {
             reveal_in_explorer,
             write_temp_file,
             generate_tts,
-            list_tts_voices
+            list_tts_voices,
+            search_web_music,
+            download_web_music
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

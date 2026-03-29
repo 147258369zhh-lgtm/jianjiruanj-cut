@@ -1,0 +1,80 @@
+    Checking photo_synth_king v0.1.0 (H:\project\CLIP JIANJI\src-tauri)
+error[E0599]: no method named `form` found for struct `RequestBuilder` in the current scope
+    --> src\lib.rs:1119:10
+     |
+1117 |       let resp = client.post(url)
+     |  ________________-
+1118 | |         .header("Referer", "https://music.163.com/")
+1119 | |         .form(&params)
+     | |_________-^^^^
+     |
+help: there is a method `or` with a similar name
+     |
+1119 -         .form(&params)
+1119 +         .or(&params)
+     |
+
+error[E0282]: type annotations needed
+    --> src\lib.rs:1117:16
+     |
+1117 |       let resp = client.post(url)
+     |  ________________^
+1118 | |         .header("Referer", "https://music.163.com/")
+1119 | |         .form(&params)
+1120 | |         .send()
+1121 | |         .await
+     | |______________^ cannot infer type
+
+error[E0282]: type annotations needed
+    --> src\lib.rs:1124:35
+     |
+1124 |     let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+     |                                   ^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+    --> src\lib.rs:1124:62
+     |
+1124 |     let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+     |                                                              ^  - type must be known at this point
+     |
+help: consider giving this closure parameter an explicit type
+     |
+1124 |     let json: serde_json::Value = resp.json().await.map_err(|e: /* Type */| e.to_string())?;
+     |                                                               ++++++++++++
+
+error[E0282]: type annotations needed
+    --> src\lib.rs:1127:66
+     |
+1127 |     if let Some(songs) = json.pointer("/result/songs").and_then(|v| v.as_array()) {
+     |                                                                  ^  - type must be known at this point
+     |
+help: consider giving this closure parameter an explicit type
+     |
+1127 |     if let Some(songs) = json.pointer("/result/songs").and_then(|v: /* Type */| v.as_array()) {
+     |                                                                   ++++++++++++
+
+error[E0282]: type annotations needed
+    --> src\lib.rs:1131:60
+     |
+1131 | ...   let artist = s["artists"].as_array().and_then(|a| a.first()).and_then(|a| a["name"].as_str()).unwrap_or("Unknown").to_string();
+     |                                                      ^  - type must be known at this point
+     |
+help: consider giving this closure parameter an explicit type
+     |
+1131 |             let artist = s["artists"].as_array().and_then(|a: /* Type */| a.first()).and_then(|a| a["name"].as_str()).unwrap_or("Unknown").to_string();
+     |                                                             ++++++++++++
+
+error[E0282]: type annotations needed
+    --> src\lib.rs:1132:62
+     |
+1132 |             let cover = s.pointer("/album/picUrl").and_then(|v| v.as_str()).unwrap_or("").to_string();
+     |                                                              ^  - type must be known at this point
+     |
+help: consider giving this closure parameter an explicit type
+     |
+1132 |             let cover = s.pointer("/album/picUrl").and_then(|v: /* Type */| v.as_str()).unwrap_or("").to_string();
+     |                                                               ++++++++++++
+
+Some errors have detailed explanations: E0282, E0599.
+For more information about an error, try `rustc --explain E0282`.
+error: could not compile `photo_synth_king` (lib) due to 7 previous errors

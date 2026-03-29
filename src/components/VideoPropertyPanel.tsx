@@ -5,7 +5,10 @@ import IosSelect from './IosSelect';
 import { FILTER_PRESETS } from '../features/filter-engine/filterPresets';
 import ColorPicker from '../features/text-workshop/ColorPicker';
 import ProFontSelectComp from '../features/text-workshop/FontSelector';
+import { ColorCurvePanel } from './ColorCurvePanel';
 
+import { FilterPresetGrid } from './FilterPresetGrid';
+import { CreateFilterButton } from './CreateFilterButton';
 const ProFontSelect = ProFontSelectComp;
 
 interface Props {
@@ -92,29 +95,13 @@ export const VideoPropertyPanel: React.FC<Props> = ({
       {/* 滤镜预设 */}
       <div className="ios-prop-group" style={{ display: propertyTab === 'presets' ? 'block' : 'none' }}>
         <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 一键滤镜预设</div>
-        <div className="filter-preset-scroll" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, maxHeight: 'none', paddingRight: 14, marginLeft: -4 }}>
-          {FILTER_PRESETS.map((preset) => (
-            <div
-              key={preset.name}
-              className="filter-preset-card"
-              style={{ padding: '8px 0px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onClick={() => {
-                commitSnapshotNow();
-                setTimeline(prev => prev.map(t => selectedIds.has(t.id) ? {
-                  ...t, exposure: preset.exposure, contrast: preset.contrast, saturation: preset.saturation, temp: preset.temp, tint: preset.tint, brilliance: preset.brilliance
-                } : t));
-                setStatusMsg(`✨ 已应用${preset.name}预设`); setTimeout(() => setStatusMsg(''), 1500);
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ flexShrink: 0, fontSize: 13, marginRight: 6 }}>{preset.icon}</span>
-                <span style={{ width: 42, display: 'flex', justifyContent: 'space-between', fontSize: 11, whiteSpace: 'nowrap', fontWeight: 500 }}>
-                  {preset.name.split('').map((c, i) => <span key={i}>{c}</span>)}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+        <FilterPresetGrid
+          selectedIds={selectedIds}
+          setTimeline={setTimeline}
+          commitSnapshotNow={commitSnapshotNow}
+          setStatusMsg={setStatusMsg}
+          selectedItem={selectedItem}
+        />
       </div>
 
       {/* GROUP 0: 基础设置 (Basic) */}
@@ -136,18 +123,79 @@ export const VideoPropertyPanel: React.FC<Props> = ({
             <ProSlider min={0.1} max={5.0} step={0.1} value={selectedItem?.playbackRate || 1.0} onChange={d => updatePropertyWithUndo('playbackRate', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, #FCD34D, #F59E0B)" />
           </div>
 
-          {/* 源音量 */}
+          {/* 源音量与静音 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>素材原声音量 (Volume)</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, color: '#10B981', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>
+                <span onClick={() => updateSelectedProperty('mute', !selectedItem?.mute)} style={{ cursor: 'pointer', fontSize: 12, marginRight: 4, transition: '0.2s', filter: selectedItem?.mute ? 'drop-shadow(0 0 4px #EF4444)' : 'none' }} title="点击切换静音">
+                  {selectedItem?.mute ? '🔇' : '🔊'}
+                </span>
+                <span style={{ fontSize: 11, color: selectedItem?.mute ? '#EF4444' : '#10B981', fontVariantNumeric: 'tabular-nums', fontWeight: 600, textDecoration: selectedItem?.mute ? 'line-through' : 'none' }}>
                   {Math.round((selectedItem?.volume ?? 1.0) * 100)}%
                 </span>
                 <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty('volume', 1.0); }} style={{ cursor: 'pointer', fontSize: 11, opacity: 0.8 }} title="双击重置">↺</span>
               </div>
             </div>
-            <ProSlider min={0.0} max={2.0} step={0.05} value={selectedItem?.volume ?? 1.0} onChange={d => updatePropertyWithUndo('volume', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, #6EE7B7, #10B981)" />
+            <div style={{ opacity: selectedItem?.mute ? 0.3 : 1, pointerEvents: selectedItem?.mute ? 'none' : 'auto', transition: '0.3s' }}>
+              <ProSlider min={0.0} max={2.0} step={0.05} value={selectedItem?.volume ?? 1.0} onChange={d => updatePropertyWithUndo('volume', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, #6EE7B7, #10B981)" />
+            </div>
+          </div>
+
+          {/* 视频片段裁切 (Trim) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 4, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty('trimStart', 0); }} style={{ cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.85)' }} title="双击重置">播放起点 (Trim Start)</span>
+                <span style={{ fontSize: 11, color: '#3B82F6', fontVariantNumeric: 'tabular-nums' }}>{selectedItem?.trimStart?.toFixed(2) || '0.00'}s</span>
+              </div>
+              <ProSlider min={0.0} max={600.0} step={0.1} value={selectedItem?.trimStart || 0} onChange={d => updatePropertyWithUndo('trimStart', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, rgba(255,255,255,0.1), #3B82F6)" />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>截取长度 (Duration)</span>
+                <span style={{ fontSize: 11, color: '#8B5CF6', fontVariantNumeric: 'tabular-nums' }}>{selectedItem?.duration?.toFixed(2) || '3.00'}s</span>
+              </div>
+              <ProSlider min={0.1} max={600.0} step={0.1} value={selectedItem?.duration || 3} onChange={d => updatePropertyWithUndo('duration', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, rgba(255,255,255,0.1), #8B5CF6)" />
+            </div>
+          </div>
+
+          {/* 追加功能：不透明度与混合模式 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>不透明度 (Opacity)</span>
+                <span style={{ fontSize: 11, color: '#60A5FA' }}>{Math.round((selectedItem?.opacity ?? 1.0) * 100)}%</span>
+              </div>
+              <ProSlider min={0.0} max={1.0} step={0.01} value={selectedItem?.opacity ?? 1.0} onChange={d => updatePropertyWithUndo('opacity', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, rgba(255,255,255,0.1), #60A5FA)" />
+            </div>
+            <div className="ios-field" >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><label className="ios-field-label">图层混合选项</label>
+                <span>混合模式</span>
+              </span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <IosSelect
+                  value={(selectedItem as any)?.blendMode || 'normal'}
+                  onChange={val => {
+                    commitSnapshotNow();
+                    updateSelectedProperty('blendMode', val);
+                  }}
+                  style={{ flex: 1, height: 32 }}
+                  options={[
+                    { value: 'normal', label: '正常 (Normal)' },
+                    { value: 'multiply', label: '正片叠底 (Multiply)' },
+                    { value: 'screen', label: '滤色 (Screen)' },
+                    { value: 'overlay', label: '叠加 (Overlay)' },
+                    { value: 'darken', label: '变暗 (Darken)' },
+                    { value: 'lighten', label: '变亮 (Lighten)' },
+                    { value: 'color-dodge', label: '颜色减淡 (Color Dodge)' },
+                    { value: 'color-burn', label: '颜色加深 (Color Burn)' },
+                    { value: 'hard-light', label: '强光 (Hard Light)' }
+                  ]}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -197,11 +245,29 @@ export const VideoPropertyPanel: React.FC<Props> = ({
               </div>
             );
           })}
+          
+          <div style={{ padding: '0 8px 12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 12 }}>
+            <span className="ios-field-label" style={{ marginBottom: 12, display: 'block' }}>高级色彩曲线 (RGB Curves)</span>
+            {selectedItem && (
+              <ColorCurvePanel 
+                curveMaster={selectedItem.curveMaster}
+                curveRed={selectedItem.curveRed}
+                curveGreen={selectedItem.curveGreen}
+                curveBlue={selectedItem.curveBlue}
+                onChange={(ch, pts) => {
+                  const key = ch === 'master' ? 'curveMaster' : ch === 'red' ? 'curveRed' : ch === 'green' ? 'curveGreen' : 'curveBlue';
+                  updatePropertyWithUndo(key, pts);
+                }}
+                commitUndo={finalizeSliderUndo}
+              />
+            )}
+          </div>
+
           <button className="ios-button ios-button-subtle" style={{ width: '100%', marginTop: 12, borderRadius: 8, height: 36, color: 'rgba(255,255,255,0.7)', border: '1px dashed rgba(255,255,255,0.15)', transition: 'all 0.15s' }} onClick={() => {
             commitSnapshotNow();
             setTimeline(prev => prev.map(t => {
               if (!selectedIds.has(t.id)) return t;
-              const overrides = (t.overrides || []).filter(o => !['exposure', 'brilliance', 'highlights', 'shadows', 'whites', 'blacks', 'contrast', 'saturation', 'vibrance', 'temp', 'tint', 'sharpness', 'fade', 'vignette', 'grain'].includes(o));
+              const overrides = (t.overrides || []).filter(o => !['exposure', 'brilliance', 'highlights', 'shadows', 'whites', 'blacks', 'contrast', 'saturation', 'vibrance', 'temp', 'tint', 'sharpness', 'fade', 'vignette', 'grain', 'curveMaster', 'curveRed', 'curveGreen', 'curveBlue'].includes(o));
               return {
                 ...t, overrides,
                 exposure: GLOBAL_DEFAULTS_INIT.exposure, brilliance: GLOBAL_DEFAULTS_INIT.brilliance,
@@ -210,13 +276,16 @@ export const VideoPropertyPanel: React.FC<Props> = ({
                 contrast: GLOBAL_DEFAULTS_INIT.contrast, saturation: GLOBAL_DEFAULTS_INIT.saturation,
                 vibrance: GLOBAL_DEFAULTS_INIT.vibrance, temp: GLOBAL_DEFAULTS_INIT.temp,
                 tint: GLOBAL_DEFAULTS_INIT.tint, sharpness: GLOBAL_DEFAULTS_INIT.sharpness,
-                fade: GLOBAL_DEFAULTS_INIT.fade, vignette: GLOBAL_DEFAULTS_INIT.vignette, grain: GLOBAL_DEFAULTS_INIT.grain
+                fade: GLOBAL_DEFAULTS_INIT.fade, vignette: GLOBAL_DEFAULTS_INIT.vignette, grain: GLOBAL_DEFAULTS_INIT.grain,
+                curveMaster: undefined, curveRed: undefined, curveGreen: undefined, curveBlue: undefined
               };
             }));
             setStatusMsg('✨ 已全部重置为全局默认参数'); setTimeout(() => setStatusMsg(''), 1500);
           }}>
             ↺ 一键重置全部色彩参数
           </button>
+
+          <CreateFilterButton selectedItem={selectedItem} setStatusMsg={setStatusMsg} />
         </div>
       </div>
 
@@ -229,16 +298,16 @@ export const VideoPropertyPanel: React.FC<Props> = ({
           commitSnapshotNow();
           const validFilters = FILTER_PRESETS.slice(1);
           setTimeline(prev => prev.map(t => {
-            if (resourceMap.get(t.resourceId)?.type === 'image') {
+            if (resourceMap.get(t.resourceId)?.type === 'video') {
               const r = Math.pow(Math.random(), 1.6);
               const preset = validFilters[Math.floor(r * validFilters.length)];
               return { ...t, exposure: preset.exposure, contrast: preset.contrast, saturation: preset.saturation, temp: preset.temp, tint: preset.tint, brilliance: preset.brilliance };
             }
             return t;
           }));
-          setStatusMsg(`🎨 已为全轨照片根据权重随机分配滤镜`); setTimeout(() => setStatusMsg(''), 2000);
+          setStatusMsg(`🎨 已为全轨视频智能分配随机预设`); setTimeout(() => setStatusMsg(''), 2000);
         }}>
-          🎨 智能化随机全轨滤镜
+          🎨 智能化随机全轨预设
         </button>
         {audioItems.length > 0 && timeline.length > 0 && (
           <button className="ios-button ios-button-subtle" style={{ borderRadius: 10, height: 34, fontWeight: 500, fontSize: 12, border: '1px solid rgba(255,255,255,0.1)' }}
@@ -248,10 +317,10 @@ export const VideoPropertyPanel: React.FC<Props> = ({
               commitSnapshotNow();
               const perItemDur = totalAudioDur / timeline.length;
               setTimeline(prev => prev.map(t => ({ ...t, duration: Math.round(perItemDur * 10) / 10 })));
-              setStatusMsg(`🎵 已将 ${timeline.length} 张图片均匀分配到 ${totalAudioDur.toFixed(1)}s 音乐时长`);
+              setStatusMsg(`🎵 已将 ${timeline.length} 个视频均匀分布到 ${totalAudioDur.toFixed(1)}s 音乐时长`);
               setTimeout(() => setStatusMsg(''), 2000);
             }}>
-            🎵 自动适配音乐时长
+            🎵 自动适配片段时长
           </button>
         )}
       </div>
@@ -585,6 +654,24 @@ export const VideoPropertyPanel: React.FC<Props> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>缩放: {selectedItem?.zoom?.toFixed(2) || '1.0'}</span>
             <ProSlider min={1.0} max={3.0} step={0.1} value={selectedItem?.zoom || 1.0} onChange={d => updateSelectedProperty('zoom', d)} />
+          </div>
+
+          {/* 追加功能：X轴与Y轴自由位移 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0 8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty('posX', 0); }} style={{ cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.85)' }} title="双击重置">X轴平移 (X Offset)</span>
+                <span style={{ fontSize: 11, color: '#6EE7B7', fontVariantNumeric: 'tabular-nums' }}>{selectedItem?.posX?.toFixed(1) || '0.0'}%</span>
+              </div>
+              <ProSlider gradient="linear-gradient(90deg, #34D399, #10B981)" min={-100} max={100} step={0.5} isCentered centerValue={0} value={selectedItem?.posX || 0} onChange={d => updatePropertyWithUndo('posX', d)} onMouseUp={finalizeSliderUndo} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty('posY', 0); }} style={{ cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.85)' }} title="双击重置">Y轴平移 (Y Offset)</span>
+                <span style={{ fontSize: 11, color: '#A78BFA', fontVariantNumeric: 'tabular-nums' }}>{selectedItem?.posY?.toFixed(1) || '0.0'}%</span>
+              </div>
+              <ProSlider gradient="linear-gradient(90deg, #C084FC, #8B5CF6)" min={-100} max={100} step={0.5} isCentered centerValue={0} value={selectedItem?.posY || 0} onChange={d => updatePropertyWithUndo('posY', d)} onMouseUp={finalizeSliderUndo} />
+            </div>
           </div>
           <div className="ios-field" >
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><label className="ios-field-label">封装格式</label>

@@ -678,11 +678,17 @@ export function useAppController() {
     const targetRate = playbackSpeed * itemSpeed;
     if (videoEl.playbackRate !== targetRate) videoEl.playbackRate = targetRate;
 
-    const vol = (monitorSrc.currentItem as any)?.volume ?? 1.0;
+    const isMuted = (monitorSrc.currentItem as any)?.mute === true;
+    const vol = isMuted ? 0 : ((monitorSrc.currentItem as any)?.volume ?? 1.0);
     if (videoEl.volume !== vol) videoEl.volume = vol;
 
-    // 同步 currentTime（仅在差异超过 0.3s 时 seek，避免频繁跳帧）
-    const localTimeAdjusted = localTime * itemSpeed;
+    // 同步 currentTime（加入 trimStart 偏移量）
+    const trimStart = (monitorSrc.currentItem as any)?.trimStart || 0;
+    const localTimeAdjusted = trimStart + (localTime * itemSpeed);
+    
+    // 如果视频播放超出了设定的物理边界（比如超出资源本身的原始长度），通常不会在这个事件遇到问题，
+    // 因为外部 timeline 累加的 playTime 会自动切掉超出 duration 的片段，走到这里说明时间轴上还是合法的。 
+    
     if (Math.abs(videoEl.currentTime - localTimeAdjusted) > 0.3) {
       videoEl.currentTime = localTimeAdjusted;
     }

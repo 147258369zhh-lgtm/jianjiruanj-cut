@@ -29,6 +29,10 @@ export interface TextOverlay {
   textGlowRadius?: number;
   textAnimation?: string;
   textAnimDuration?: number;
+  textAnimOut?: string;
+  textAnimOutDuration?: number;
+  textAnimLoop?: string;
+  textAnimLoopDuration?: number;
 }
 
 // ─── 时间轴项目 ────────────────────────────────────────────────────────
@@ -52,6 +56,10 @@ export interface TimelineItem {
   sharpness: number;
   grain: number;
   zoom: number;
+  curveMaster?: {x: number, y: number}[];
+  curveRed?: {x: number, y: number}[];
+  curveGreen?: {x: number, y: number}[];
+  curveBlue?: {x: number, y: number}[];
   opacity?: number;
   blendMode?: string;
   flipX?: boolean;
@@ -87,8 +95,13 @@ export interface TimelineItem {
   cropPos?: Crop;
   textAnimation?: string;
   textAnimDuration?: number;
+  textAnimOut?: string;
+  textAnimOutDuration?: number;
+  textAnimLoop?: string;
+  textAnimLoopDuration?: number;
   textOverlays?: TextOverlay[];
   animation?: string;
   fillMode?: 'contain' | 'cover';
   overrides?: string[];
+  maskShape?: string;
 }

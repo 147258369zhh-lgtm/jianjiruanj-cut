@@ -44,6 +44,10 @@ export interface TextOverlay {
   textGlowRadius?: number;   
   textAnimation?: string; 
   textAnimDuration?: number;
+  textAnimOut?: string;
+  textAnimOutDuration?: number;
+  textAnimLoop?: string;
+  textAnimLoopDuration?: number;
 }
 
 export interface TimelineItem {
@@ -66,6 +70,10 @@ export interface TimelineItem {
   sharpness: number;   // 锐度/清晰度 (0.0)
   grain: number;       // 颗粒 (0.0)
   zoom: number;
+  curveMaster?: {x: number, y: number}[];
+  curveRed?: {x: number, y: number}[];
+  curveGreen?: {x: number, y: number}[];
+  curveBlue?: {x: number, y: number}[];
   opacity?: number;      // 不透明度 (1.0)
   blendMode?: string;    // 混合模式 (normal, multiply, screen, overlay)
   flipX?: boolean;       // 水平镜像翻转
@@ -76,6 +84,8 @@ export interface TimelineItem {
   // 视频专属属性
   volume?: number;       // 音量 (默认 1.0)
   playbackRate?: number; // 播放倍速 (默认 1.0)
+  trimStart?: number;    // 视频源修剪起始点 (秒，默认 0)
+  mute?: boolean;        // 是否静音
   
   posX?: number;         // X轴坐标偏移 (-100 ~ 100)
   posY?: number;         // Y轴坐标偏移 (-100 ~ 100)
@@ -106,6 +116,10 @@ export interface TimelineItem {
   cropPos?: Crop;
   textAnimation?: string; // 文字入场动画，如 'fadeIn' | 'slideLeft' | 'slideUp' | 'zoom' | 'bounce' | 'typewriter' 等
   textAnimDuration?: number; // 动画时长 (秒，默认 0.6)
+  textAnimOut?: string;
+  textAnimOutDuration?: number;
+  textAnimLoop?: string;
+  textAnimLoopDuration?: number;
   
   // 新引入的多图层复数文字组件系统
   textOverlays?: TextOverlay[];
@@ -113,6 +127,7 @@ export interface TimelineItem {
   fillMode?: 'contain' | 'cover'; // 画面填充模式
   overrides?: string[]; // 被手动修改过的字段名列表（全局覆盖模型）
   collapsed?: boolean; // 视频折叠：折叠后在时间轴中只显示一帧缩略图
+  maskShape?: string;
 }
 
 // 全局默认值接口

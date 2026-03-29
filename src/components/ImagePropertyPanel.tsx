@@ -5,7 +5,10 @@ import IosSelect from './IosSelect';
 import { FILTER_PRESETS } from '../features/filter-engine/filterPresets';
 import ColorPicker from '../features/text-workshop/ColorPicker';
 import ProFontSelectComp from '../features/text-workshop/FontSelector';
+import { ColorCurvePanel } from './ColorCurvePanel';
 
+import { FilterPresetGrid } from './FilterPresetGrid';
+import { CreateFilterButton } from './CreateFilterButton';
 const ProFontSelect = ProFontSelectComp;
 
 interface Props {
@@ -65,6 +68,8 @@ export const ImagePropertyPanel: React.FC<Props> = ({
   favTrans,
   toggleFavTrans
 }) => {
+  const [textAnimTab, setTextAnimTab] = React.useState<'in' | 'loop' | 'out'>('in');
+  
   const renderPremiumColorPicker = (propKey: string, currentVal: string, defVal: string) => (
     <ColorPicker currentVal={currentVal} defVal={defVal} onChange={c => updateSelectedProperty(propKey as keyof TimelineItem, c)} />
   );
@@ -103,29 +108,13 @@ export const ImagePropertyPanel: React.FC<Props> = ({
       {/* 滤镜预设 */}
       <div className="ios-prop-group" style={{ display: propertyTab === 'presets' ? 'block' : 'none' }}>
         <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 一键滤镜预设</div>
-        <div className="filter-preset-scroll" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, maxHeight: 'none', paddingRight: 14, marginLeft: -4 }}>
-          {FILTER_PRESETS.map((preset) => (
-            <div
-              key={preset.name}
-              className="filter-preset-card"
-              style={{ padding: '8px 0px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onClick={() => {
-                commitSnapshotNow();
-                setTimeline(prev => prev.map(t => selectedIds.has(t.id) ? {
-                  ...t, exposure: preset.exposure, contrast: preset.contrast, saturation: preset.saturation, temp: preset.temp, tint: preset.tint, brilliance: preset.brilliance
-                } : t));
-                setStatusMsg(`✨ 已应用${preset.name}预设`); setTimeout(() => setStatusMsg(''), 1500);
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <span style={{ flexShrink: 0, fontSize: 13, marginRight: 6 }}>{preset.icon}</span>
-                <span style={{ width: 42, display: 'flex', justifyContent: 'space-between', fontSize: 11, whiteSpace: 'nowrap', fontWeight: 500 }}>
-                  {preset.name.split('').map((c, i) => <span key={i}>{c}</span>)}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+        <FilterPresetGrid
+          selectedIds={selectedIds}
+          setTimeline={setTimeline}
+          commitSnapshotNow={commitSnapshotNow}
+          setStatusMsg={setStatusMsg}
+          selectedItem={selectedItem}
+        />
       </div>
 
       {/* GROUP 1: 影像与色彩 (合并) */}
@@ -221,6 +210,43 @@ export const ImagePropertyPanel: React.FC<Props> = ({
               >🎲</div>
             </div>
           </div>
+
+          {/* 追加功能：不透明度与混合模式 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>不透明度 (Opacity)</span>
+                <span style={{ fontSize: 11, color: '#60A5FA' }}>{Math.round((selectedItem?.opacity ?? 1.0) * 100)}%</span>
+              </div>
+              <ProSlider min={0.0} max={1.0} step={0.01} value={selectedItem?.opacity ?? 1.0} onChange={d => updatePropertyWithUndo('opacity', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, rgba(255,255,255,0.1), #60A5FA)" />
+            </div>
+            <div className="ios-field" >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><label className="ios-field-label">图层混合选项</label>
+                <span>混合模式</span>
+              </span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <IosSelect
+                  value={(selectedItem as any)?.blendMode || 'normal'}
+                  onChange={val => {
+                    commitSnapshotNow();
+                    updateSelectedProperty('blendMode', val);
+                  }}
+                  style={{ flex: 1, height: 32 }}
+                  options={[
+                    { value: 'normal', label: '正常 (Normal)' },
+                    { value: 'multiply', label: '正片叠底 (Multiply)' },
+                    { value: 'screen', label: '滤色 (Screen)' },
+                    { value: 'overlay', label: '叠加 (Overlay)' },
+                    { value: 'darken', label: '变暗 (Darken)' },
+                    { value: 'lighten', label: '变亮 (Lighten)' },
+                    { value: 'color-dodge', label: '颜色减淡 (Color Dodge)' },
+                    { value: 'color-burn', label: '颜色加深 (Color Burn)' },
+                    { value: 'hard-light', label: '强光 (Hard Light)' }
+                  ]}
+                />
+              </div>
+            </div>
+          </div>
           {([
             ['exposure', '曝光', 0.0, 2.0, 0.01],
             ['brilliance', '鲜明度', 0.0, 2.0, 0.01],
@@ -261,11 +287,29 @@ export const ImagePropertyPanel: React.FC<Props> = ({
               </div>
             );
           })}
+          
+          <div style={{ padding: '0 8px 12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 12 }}>
+            <span className="ios-field-label" style={{ marginBottom: 12, display: 'block' }}>高级色彩曲线 (RGB Curves)</span>
+            {selectedItem && (
+              <ColorCurvePanel 
+                curveMaster={selectedItem.curveMaster}
+                curveRed={selectedItem.curveRed}
+                curveGreen={selectedItem.curveGreen}
+                curveBlue={selectedItem.curveBlue}
+                onChange={(ch, pts) => {
+                  const key = ch === 'master' ? 'curveMaster' : ch === 'red' ? 'curveRed' : ch === 'green' ? 'curveGreen' : 'curveBlue';
+                  updatePropertyWithUndo(key, pts);
+                }}
+                commitUndo={finalizeSliderUndo}
+              />
+            )}
+          </div>
+
           <button className="ios-button ios-button-subtle" style={{ width: '100%', marginTop: 12, borderRadius: 8, height: 36, color: 'rgba(255,255,255,0.7)', border: '1px dashed rgba(255,255,255,0.15)', transition: 'all 0.15s' }} onClick={() => {
             commitSnapshotNow();
             setTimeline(prev => prev.map(t => {
               if (!selectedIds.has(t.id)) return t;
-              const overrides = (t.overrides || []).filter(o => !['exposure', 'brilliance', 'highlights', 'shadows', 'whites', 'blacks', 'contrast', 'saturation', 'vibrance', 'temp', 'tint', 'sharpness', 'fade', 'vignette', 'grain'].includes(o));
+              const overrides = (t.overrides || []).filter(o => !['exposure', 'brilliance', 'highlights', 'shadows', 'whites', 'blacks', 'contrast', 'saturation', 'vibrance', 'temp', 'tint', 'sharpness', 'fade', 'vignette', 'grain', 'curveMaster', 'curveRed', 'curveGreen', 'curveBlue'].includes(o));
               return {
                 ...t, overrides,
                 exposure: GLOBAL_DEFAULTS_INIT.exposure, brilliance: GLOBAL_DEFAULTS_INIT.brilliance,
@@ -274,13 +318,16 @@ export const ImagePropertyPanel: React.FC<Props> = ({
                 contrast: GLOBAL_DEFAULTS_INIT.contrast, saturation: GLOBAL_DEFAULTS_INIT.saturation,
                 vibrance: GLOBAL_DEFAULTS_INIT.vibrance, temp: GLOBAL_DEFAULTS_INIT.temp,
                 tint: GLOBAL_DEFAULTS_INIT.tint, sharpness: GLOBAL_DEFAULTS_INIT.sharpness,
-                fade: GLOBAL_DEFAULTS_INIT.fade, vignette: GLOBAL_DEFAULTS_INIT.vignette, grain: GLOBAL_DEFAULTS_INIT.grain
+                fade: GLOBAL_DEFAULTS_INIT.fade, vignette: GLOBAL_DEFAULTS_INIT.vignette, grain: GLOBAL_DEFAULTS_INIT.grain,
+                curveMaster: undefined, curveRed: undefined, curveGreen: undefined, curveBlue: undefined
               };
             }));
             setStatusMsg('✨ 已全部重置为全局默认参数'); setTimeout(() => setStatusMsg(''), 1500);
           }}>
             ↺ 一键重置全部色彩参数
           </button>
+
+          <CreateFilterButton selectedItem={selectedItem} setStatusMsg={setStatusMsg} />
         </div>
       </div>
 
@@ -456,15 +503,35 @@ export const ImagePropertyPanel: React.FC<Props> = ({
           })()}
         </div>
 
-        {/* 模块二：场控动效（入场时间线）调至排版之下 */}
+        {/* 模块二：场控动效（入出场与循环时间线）调至排版之下 */}
         <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1 }}>🎬 入场时间线</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1 }}>🎬 时序动效引擎</span>
+          </div>
+          
+          <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 4 }}>
+            {(['in', 'loop', 'out'] as const).map(tab => (
+              <div
+                key={tab}
+                onClick={() => setTextAnimTab(tab)}
+                style={{
+                  flex: 1, textAlign: 'center', padding: '6px 0', fontSize: 12, fontWeight: textAnimTab === tab ? 600 : 400,
+                  color: textAnimTab === tab ? '#fff' : 'rgba(255,255,255,0.5)',
+                  background: textAnimTab === tab ? 'rgba(99,102,241,0.5)' : 'transparent',
+                  borderRadius: 8, cursor: 'pointer', transition: '0.2s',
+                  boxShadow: textAnimTab === tab ? '0 2px 8px rgba(99,102,241,0.4)' : 'none'
+                }}
+              >
+                {tab === 'in' ? '✨ 入场' : tab === 'loop' ? '🔁 循环' : '💨 出场'}
+              </div>
+            ))}
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-            {([
+            {textAnimTab === 'in' && ([
               ['none', '🚫 刚性瞬间'], ['fadeIn', '☁️ 电影淡入'], ['slideUp', '↑ 稳重上升'],
               ['typewriter', '⌨️ 原型打字'], ['zoom', '🔍 夸张冲刺'], ['bounce', '⬆ 俏皮弹跳'],
-              ['slideLeft', '→ 左侧划入'], ['slideRight', '← 右侧划入'], ['rotateIn', '🌀 炫酷旋入'],
-              ['flipInX', '🔁 翻转入场'], ['zoomInDown', '🛸 空降缩放'], ['jackInTheBox', '📦 魔盒弹出']
+              ['slideLeft', '→ 左侧划入'], ['slideRight', '← 右侧划入'], ['rotateIn', '🌀 炫酷旋入']
             ] as [string, string][]).map(([val, label]) => (
               <div
                 key={val}
@@ -479,11 +546,60 @@ export const ImagePropertyPanel: React.FC<Props> = ({
                 }}
               >{label}</div>
             ))}
+
+            {textAnimTab === 'loop' && ([
+              ['none', '🚫 无循环'], ['pulse', '💓 心跳呼吸'], ['shake', '📳 快速震动'],
+              ['float', '🎈 缓慢漂浮']
+            ] as [string, string][]).map(([val, label]) => (
+              <div
+                key={val}
+                onClick={() => updateSelectedProperty('textAnimLoop', val)}
+                style={{
+                  padding: '8px 4px', borderRadius: 8, cursor: 'pointer', textAlign: 'center',
+                  fontSize: 10, fontWeight: (selectedItem?.textAnimLoop || 'none') === val ? 700 : 500,
+                  color: (selectedItem?.textAnimLoop || 'none') === val ? '#fff' : 'rgba(255,255,255,0.5)',
+                  background: (selectedItem?.textAnimLoop || 'none') === val ? 'rgba(52,211,153,0.3)' : 'rgba(0,0,0,0.2)',
+                  border: `1px solid ${(selectedItem?.textAnimLoop || 'none') === val ? 'rgba(52,211,153,0.5)' : 'rgba(255,255,255,0.03)'}`,
+                  transition: '0.2s'
+                }}
+              >{label}</div>
+            ))}
+
+            {textAnimTab === 'out' && ([
+              ['none', '🚫 刚性切出'], ['fadeOut', '💨 渐隐消失'], ['zoomOut', '🌀 缩放抽离'],
+              ['slideDownOut', '↓ 直线下坠'], ['slideRightOut', '→ 划出右侧']
+            ] as [string, string][]).map(([val, label]) => (
+              <div
+                key={val}
+                onClick={() => updateSelectedProperty('textAnimOut', val)}
+                style={{
+                  padding: '8px 4px', borderRadius: 8, cursor: 'pointer', textAlign: 'center',
+                  fontSize: 10, fontWeight: (selectedItem?.textAnimOut || 'none') === val ? 700 : 500,
+                  color: (selectedItem?.textAnimOut || 'none') === val ? '#fff' : 'rgba(255,255,255,0.5)',
+                  background: (selectedItem?.textAnimOut || 'none') === val ? 'rgba(248,113,113,0.3)' : 'rgba(0,0,0,0.2)',
+                  border: `1px solid ${(selectedItem?.textAnimOut || 'none') === val ? 'rgba(248,113,113,0.5)' : 'rgba(255,255,255,0.03)'}`,
+                  transition: '0.2s'
+                }}
+              >{label}</div>
+            ))}
           </div>
-          {(selectedItem?.textAnimation && selectedItem.textAnimation !== 'none') && (
+
+          {(textAnimTab === 'in' && selectedItem?.textAnimation && selectedItem.textAnimation !== 'none') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>动效行进总时长</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{(selectedItem?.textAnimDuration ?? 0.6).toFixed(1)}s</span></div>
-              <ProSlider min={0.1} max={5.0} step={0.1} value={selectedItem?.textAnimDuration ?? 0.6} onChange={d => updatePropertyWithUndo('textAnimDuration', d)} onMouseUp={finalizeSliderUndo} />
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>入场行进时长</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{(selectedItem?.textAnimDuration ?? 0.6).toFixed(1)}s</span></div>
+              <ProSlider min={0.1} max={5.0} step={0.1} value={selectedItem?.textAnimDuration ?? 0.6} onChange={d => updatePropertyWithUndo('textAnimDuration', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, rgba(99,102,241,0.2), #6366f1)" />
+            </div>
+          )}
+          {(textAnimTab === 'loop' && selectedItem?.textAnimLoop && selectedItem.textAnimLoop !== 'none') && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>单词循环周期</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{(selectedItem?.textAnimLoopDuration ?? 2.0).toFixed(1)}s</span></div>
+              <ProSlider min={0.2} max={10.0} step={0.2} value={selectedItem?.textAnimLoopDuration ?? 2.0} onChange={d => updatePropertyWithUndo('textAnimLoopDuration', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, rgba(52,211,153,0.2), #34D399)" />
+            </div>
+          )}
+          {(textAnimTab === 'out' && selectedItem?.textAnimOut && selectedItem.textAnimOut !== 'none') && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>出场行进时长</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{(selectedItem?.textAnimOutDuration ?? 0.6).toFixed(1)}s</span></div>
+              <ProSlider min={0.1} max={5.0} step={0.1} value={selectedItem?.textAnimOutDuration ?? 0.6} onChange={d => updatePropertyWithUndo('textAnimOutDuration', d)} onMouseUp={finalizeSliderUndo} gradient="linear-gradient(90deg, rgba(248,113,113,0.2), #f87171)" />
             </div>
           )}
         </div>
@@ -655,6 +771,53 @@ export const ImagePropertyPanel: React.FC<Props> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>缩放: {selectedItem?.zoom?.toFixed(2) || '1.0'}</span>
             <ProSlider min={1.0} max={3.0} step={0.1} value={selectedItem?.zoom || 1.0} onChange={d => updateSelectedProperty('zoom', d)} />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0 8px 0', borderTop: '1px solid rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.05)', marginTop: 8, paddingTop: 16 }}>
+            <span style={{ fontSize: 12, color: '#C084FC', fontWeight: 600 }}>🖼️ 创意蒙版裁剪 (Mask Shapes)</span>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {([
+                ['none', '🚫', '无参数'],
+                ['circle', '⚪', '正圆'],
+                ['ellipse', '👁️', '椭圆'],
+                ['heart', '❤️', '心形'],
+                ['star', '⭐', '星型'],
+                ['triangle', '🔺', '三角'],
+                ['rhombus', '♦️', '菱形'],
+                ['hexagon', '⬡', '六边形'],
+              ]).map(([val, icon, label]) => (
+                <div key={val} className="ios-hover-scale" style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 44, cursor: 'pointer',
+                  opacity: (selectedItem?.maskShape || 'none') === val ? 1 : 0.5, transition: '0.2s'
+                }} onClick={() => { commitSnapshotNow(); updateSelectedProperty('maskShape', val); }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+                    background: (selectedItem?.maskShape || 'none') === val ? 'linear-gradient(135deg, rgba(192,132,252,0.4), rgba(139,92,246,0.4))' : 'rgba(255,255,255,0.05)',
+                    border: `1px solid ${(selectedItem?.maskShape || 'none') === val ? '#C084FC' : 'rgba(255,255,255,0.1)'}`
+                  }}>
+                    {icon}
+                  </div>
+                  <span style={{ fontSize: 9 }}>{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0 8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty('posX', 0); }} style={{ cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.85)' }} title="双击重置">X轴平移 (X Offset)</span>
+                <span style={{ fontSize: 11, color: '#6EE7B7', fontVariantNumeric: 'tabular-nums' }}>{selectedItem?.posX?.toFixed(1) || '0.0'}%</span>
+              </div>
+              <ProSlider gradient="linear-gradient(90deg, #34D399, #10B981)" min={-100} max={100} step={0.5} isCentered centerValue={0} value={selectedItem?.posX || 0} onChange={d => updatePropertyWithUndo('posX', d)} onMouseUp={finalizeSliderUndo} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty('posY', 0); }} style={{ cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.85)' }} title="双击重置">Y轴平移 (Y Offset)</span>
+                <span style={{ fontSize: 11, color: '#A78BFA', fontVariantNumeric: 'tabular-nums' }}>{selectedItem?.posY?.toFixed(1) || '0.0'}%</span>
+              </div>
+              <ProSlider gradient="linear-gradient(90deg, #C084FC, #8B5CF6)" min={-100} max={100} step={0.5} isCentered centerValue={0} value={selectedItem?.posY || 0} onChange={d => updatePropertyWithUndo('posY', d)} onMouseUp={finalizeSliderUndo} />
+            </div>
           </div>
           <div className="ios-field" >
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><label className="ios-field-label">封装格式</label>

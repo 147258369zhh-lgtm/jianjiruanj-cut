@@ -1,5 +1,6 @@
 import { StateCreator } from 'zustand';
 import { Crop } from 'react-image-crop';
+import { FilterPreset } from '../../features/filter-engine/filterPresets';
 
 export interface UiSlice {
   // Tab 状态
@@ -8,6 +9,10 @@ export interface UiSlice {
   libTab: 'image' | 'audio' | 'video';
   leftTab: 'photo' | 'music' | 'video';
   
+  // 自定义与折叠滤镜
+  customFilters: FilterPreset[];
+  hiddenFilterNames: string[];
+
   // 全局 UI
   statusMsg: string;
   showShortcuts: boolean;
@@ -47,6 +52,8 @@ export interface UiSlice {
   setPropertyTab: (v: 'presets' | 'color' | 'text' | 'transform') => void;
   setLibTab: (v: 'image' | 'audio' | 'video') => void;
   setLeftTab: (v: 'photo' | 'music' | 'video') => void;
+  setCustomFilters: (v: FilterPreset[]) => void;
+  setHiddenFilterNames: (v: string[]) => void;
   setStatusMsg: (v: string) => void;
   setShowShortcuts: (v: boolean | ((prev: boolean) => boolean)) => void;
   setShowSortMenu: (v: boolean) => void;
@@ -73,11 +80,20 @@ export interface UiSlice {
   setExportHdr: (v: boolean) => void;
 }
 
+const loadCustomFilters = (): FilterPreset[] => {
+  try { return JSON.parse(localStorage.getItem('__editor_custom_filters__') || '[]'); } catch { return []; }
+};
+const loadHiddenFilters = (): string[] => {
+  try { return JSON.parse(localStorage.getItem('__editor_hidden_filters__') || '[]'); } catch { return []; }
+};
+
 export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   activeTab: 'effects',
   propertyTab: 'presets',
   libTab: 'image',
   leftTab: 'photo',
+  customFilters: loadCustomFilters(),
+  hiddenFilterNames: loadHiddenFilters(),
   statusMsg: '',
   showShortcuts: false,
   showSortMenu: false,
@@ -107,6 +123,8 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   setPropertyTab: (v) => set({ propertyTab: v }),
   setLibTab: (v) => set({ libTab: v }),
   setLeftTab: (v) => set({ leftTab: v }),
+  setCustomFilters: (v) => { localStorage.setItem('__editor_custom_filters__', JSON.stringify(v)); set({ customFilters: v }); },
+  setHiddenFilterNames: (v) => { localStorage.setItem('__editor_hidden_filters__', JSON.stringify(v)); set({ hiddenFilterNames: v }); },
   setStatusMsg: (v) => set({ statusMsg: v }),
   setShowShortcuts: (v) => set(s => ({ showShortcuts: typeof v === 'function' ? v(s.showShortcuts) : v })),
   setShowSortMenu: (v) => set({ showSortMenu: v }),
