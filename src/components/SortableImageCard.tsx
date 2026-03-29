@@ -8,9 +8,9 @@ import { TimelineItem, Resource } from '../types';
 export const SortableImageCard = memo(function SortableImageCard({
   item, resource, isSelected, onSelect, onRemove, pps, previewUrl, onContextMenu, onTrimDuration, onDoubleClickCard, multiSelectIndex, isMultiSelected
 }: {
-  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; onRemove: (id: string) => void; pps: number; previewUrl?: string; onContextMenu?: (e: React.MouseEvent) => void; onTrimDuration?: (id: string, delta: number) => void; onDoubleClickCard?: () => void; multiSelectIndex?: number; isMultiSelected?: boolean;
+  item: TimelineItem; resource?: Resource; isSelected: boolean; onSelect: (id: string, isCtrl: boolean) => void; onRemove: (id: string) => void; pps: number; previewUrl?: string; onContextMenu?: (e: React.MouseEvent, id: string) => void; onTrimDuration?: (id: string, delta: number) => void; onDoubleClickCard?: (id: string) => void; multiSelectIndex?: number; isMultiSelected?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform } = useSortable({ id: item.id });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: item.id });
   const [isHovered, setIsHovered] = useState(false);
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
 
@@ -86,6 +86,7 @@ export const SortableImageCard = memo(function SortableImageCard({
         height: '100%',
         flexShrink: 0,
         position: 'relative',
+        zIndex: isHovered || isSelected ? 50 : 1, // 抬升层级防止放大时右侧被隔壁覆盖
         cursor: 'grab',
         overflow: 'hidden',
         borderRadius: '12px',
@@ -100,8 +101,8 @@ export const SortableImageCard = memo(function SortableImageCard({
       }}
       {...attributes} {...listeners}
       onClick={(e) => { e.stopPropagation(); onSelect(item.id, e.ctrlKey || e.metaKey); }}
-      onDoubleClick={(e) => { e.stopPropagation(); onDoubleClickCard?.(); }}
-      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu?.(e); }}
+      onDoubleClick={(e) => { e.stopPropagation(); onDoubleClickCard?.(item.id); }}
+      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu?.(e, item.id); }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -145,38 +146,73 @@ export const SortableImageCard = memo(function SortableImageCard({
       {isVisible ? (
         <>
           {resource ? (
-            isVideo ? (
-              <div style={{ width: '100%', height: '100%', position: 'relative', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                <video src={imgSrc} muted style={{ ...thumbStyle, position: 'absolute', inset: 0, pointerEvents: 'none' }} preload="metadata" />
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.25)', pointerEvents: 'none' }}>
-                  <span style={{ fontSize: 18, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }}>🎬</span>
-                </div>
-                <div style={{ position: 'absolute', bottom: 2, left: 4, fontSize: 8, color: 'rgba(255,255,255,0.7)', background: 'rgba(0,0,0,0.5)', padding: '1px 3px', borderRadius: 3, pointerEvents: 'none' }}>{item.duration.toFixed(1)}s</div>
-              </div>
-            ) : (
-              <img src={imgSrc} style={thumbStyle} alt="" />
-            )
-          ) : (
-            item.overlayText ? (
+            item.resourceId.startsWith('__TEXT__') ? (
               <div style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: item.textBg || 'rgba(30,30,30,0.9)', padding: '4px' }}>
-                <span style={{ fontSize: Math.min(item.fontSize || 14, 14), fontWeight: 700, color: item.fontColor || '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.5)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '95%' }}>{item.overlayText}</span>
+                <span style={{ fontSize: Math.min(item.fontSize || 14, 14), fontWeight: 700, color: item.fontColor || '#fff', textShadow: '0 1px 4px rgba(0,0,0,0.5)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '95%' }}>
+                  {item.overlayText || '缺失'}
+                </span>
               </div>
-            ) : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#ef4444' }}>缺失</div>
-          )}
+            ) : isVideo ? (() => {
+              if (isDragging) {
+                const frameSrc = `${imgSrc}#t=1`;
+                return (
+                  <div style={{ width: 60, height: '100%', position: 'relative', overflow: 'hidden', background: '#111', borderRadius: 12 }}>
+                    <video src={frameSrc} muted style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', filter: thumbStyle.filter }} preload="metadata" />
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ fontSize: 16 }}>🎬</span>
+                    </div>
+                  </div>
+                );
+              }
+
+              const blockWidth = item.duration * pps;
+              const frameWidth = 60; 
+              const numFrames = Math.min(60, Math.max(1, Math.ceil(blockWidth / frameWidth)));
+              
+              return (
+                <div style={{ width: '100%', height: '100%', position: 'relative', background: '#111', display: 'flex', alignItems: 'stretch', pointerEvents: 'none', overflow: 'hidden' }}>
+                  {Array.from({ length: numFrames }).map((_, i) => {
+                     // 算时间偏移
+                     const timeOffset = item.duration > 0 ? (i / numFrames) * item.duration : 0;
+                     const frameSrc = `${imgSrc}#t=${Math.max(0.1, timeOffset)}`;
+                     return (
+                       <div key={i} style={{ width: `${100 / numFrames}%`, height: '100%', position: 'relative', overflow: 'hidden' }}>
+                         <video src={frameSrc} muted style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', filter: thumbStyle.filter }} preload="metadata" />
+                       </div>
+                     );
+                  })}
+                  {/* 半透明覆盖层与影视图标 */}
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.15)', pointerEvents: 'none' }}>
+                    <div style={{ background: 'rgba(0,0,0,0.5)', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))', backdropFilter: 'blur(4px)' }}>
+                      <span style={{ fontSize: 16 }}>🎬</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })() : (
+              <img src={imgSrc} style={thumbStyle} draggable={false} alt="" />
+            )
+          ) : null}
         </>
       ) : null}
 
       {/* 右上角删除按钮 (hover 时显示) */}
-      {isHovered && (
+      {isHovered && !isDragging && (
         <div
-          onClick={(e) => { e.stopPropagation(); onRemove(item.id); }}
-          onPointerDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(item.id); }}
           style={{
-            position: 'absolute', top: 4, right: 4, zIndex: 20,
-            width: 18, height: 18, borderRadius: 5,
-            background: 'rgba(255, 59, 48, 0.85)',
+            position: 'absolute', 
+            top: isVideo ? 6 : 4, 
+            right: isVideo ? 10 : 4, 
+            zIndex: 60,
+            width: isVideo ? 22 : 18, 
+            height: isVideo ? 22 : 18, 
+            borderRadius: isVideo ? 6 : 5,
+            background: 'rgba(255, 59, 48, 0.95)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', fontSize: 10, color: '#fff',
+            cursor: 'pointer', 
+            fontSize: isVideo ? 12 : 10, 
+            color: '#fff',
             boxShadow: '0 2px 6px rgba(0,0,0,0.5)',
             transition: 'transform 0.15s',
           }}

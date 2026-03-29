@@ -32,7 +32,7 @@ export interface UiSlice {
   localDuration: number | null;
   
   // 主题
-  theme: 'ios' | 'win11';
+  theme: 'ios' | 'win11' | 'harmony';
   
   // 导出设置
   exportFormat: 'mp4' | 'mov';
@@ -64,7 +64,7 @@ export interface UiSlice {
   setIsDraggingHead: (v: boolean) => void;
   setIsJumping: (v: boolean) => void;
   setLocalDuration: (v: number | null) => void;
-  setTheme: (v: 'ios' | 'win11') => void;
+  setTheme: (v: 'ios' | 'win11' | 'harmony') => void;
   setExportFormat: (v: 'mp4' | 'mov') => void;
   setExportResolution: (v: '1080p' | '4k' | 'original') => void;
   setExportFps: (v: '30' | '60') => void;
@@ -95,7 +95,7 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   isDraggingHead: false,
   isJumping: false,
   localDuration: null,
-  theme: (localStorage.getItem('__editor_theme__') as 'ios' | 'win11') || 'ios',
+  theme: (localStorage.getItem('__editor_theme__') as 'ios' | 'win11' | 'harmony') || 'ios',
   exportFormat: 'mp4',
   exportResolution: 'original',
   exportFps: '60',

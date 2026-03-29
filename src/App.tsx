@@ -1,13 +1,13 @@
 
 // import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import 'react-image-crop/dist/ReactCrop.css';
 // Core Layout
 import './styles/Base.css';
 import './styles/Animations.css';
 import './styles/Inputs.css';
 import './styles/FluentOverrides.css';
 import "./Win11Theme.css";
+import "./HarmonyTheme.css";
 
 
 // import { computeFilter as computeFilterMod, computeTextStyles as computeTextStylesMod } from './features/filter-engine/useFilter';
@@ -36,6 +36,9 @@ import { LeftPanel } from './components/LeftPanel';
 
 import { TimelinePanel } from './components/TimelinePanel';
 import { ShortcutsPanel } from './components/ShortcutsPanel';
+import { CrashRecoveryModal } from './features/project-manager/CrashRecoveryModal';
+import { IngestCurationModal } from './features/project-manager/IngestCurationModal';
+import { ExportProgressOverlay } from './features/export-module/ExportProgressOverlay';
 import { DropOverlay } from './components/DropOverlay';
 import { ContextMenuWidget } from './components/ContextMenuWidget';
 
@@ -63,7 +66,7 @@ function App() {
   return (
     <AppContext.Provider value={controller as any}>
     <div className="app-root-container">
-      <div className={`ios-layout ${theme === 'win11' ? 'theme-win11' : ''}`} onClick={() => { setContextMenu(null); setShowShortcuts(false); setShowSortMenu(false); setShowMoreMenu(false); }}>
+      <div className={`ios-layout ${theme === 'win11' ? 'theme-win11' : theme === 'harmony' ? 'theme-harmony' : ''}`} onClick={() => { setContextMenu(null); setShowShortcuts(false); setShowSortMenu(false); setShowMoreMenu(false); }}>
 
 
         {/* 全局浮窗 Toast 通知 */}
@@ -102,6 +105,9 @@ function App() {
         <TimelinePanel />
 
       </div>
+      <CrashRecoveryModal />
+      <IngestCurationModal />
+      <ExportProgressOverlay />
     </div>
     </AppContext.Provider>
   );

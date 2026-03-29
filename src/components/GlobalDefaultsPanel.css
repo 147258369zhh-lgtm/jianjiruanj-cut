@@ -1,0 +1,17 @@
+.preset-cards-container::-webkit-scrollbar {
+  display: none;
+}
+
+.preset-card {
+  user-select: none;
+}
+
+.preset-card:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.preset-card:active {
+  transform: translateY(0);
+}

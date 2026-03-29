@@ -1,0 +1,128 @@
+/* ─── Project Dashboard ─── */
+.project-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-top: 8px;
+}
+
+.dash-section {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.dash-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  margin-bottom: 14px;
+}
+
+/* ─── Stats Grid ─── */
+.dash-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.dash-stat-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.dash-stat-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(99, 102, 241, 0.15);
+}
+
+.dash-stat-icon {
+  font-size: 18px;
+  opacity: 0.7;
+}
+
+.dash-stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  font-family: 'SF Mono', 'Cascadia Code', 'Menlo', monospace;
+  letter-spacing: -0.5px;
+}
+
+.dash-stat-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 500;
+}
+
+/* ─── Quick Actions ─── */
+.dash-actions-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dash-action-btn:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.2);
+  color: #fff;
+  transform: translateX(2px);
+}
+
+.dash-action-btn .action-icon {
+  font-size: 16px;
+  width: 24px;
+  text-align: center;
+}
+
+/* ─── Project Status ─── */
+.dash-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.dash-status-row + .dash-status-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.dash-status-key {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.dash-status-val {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+  font-family: 'SF Mono', 'Cascadia Code', monospace;
+}
+
+.dash-status-val.green {
+  color: #10B981;
+}

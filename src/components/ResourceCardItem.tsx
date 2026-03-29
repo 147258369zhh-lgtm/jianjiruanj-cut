@@ -1,10 +1,90 @@
-import React, { memo, useState, useMemo } from 'react';
+import React, { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { Button } from "@fluentui/react-components";
 import { convertFileSrc } from '@tauri-apps/api/core';
 
-export const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSelectPreview, onAdd, onRemove, onConvert, onReveal: _onReveal, previewUrl }: any) => {
+const HoverMarqueeText = memo(({ text, isHovered, style }: { text: string; isHovered: boolean; style?: React.CSSProperties }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const [scrollDistance, setScrollDistance] = useState(0);
+
+  useEffect(() => {
+    if (containerRef.current && textRef.current) {
+      const dist = Math.max(0, textRef.current.scrollWidth - containerRef.current.clientWidth);
+      setScrollDistance(dist);
+    }
+  }, [text, isHovered]);
+
+  const shouldScroll = isHovered && scrollDistance > 0;
+
+  return (
+    <div ref={containerRef} style={{ flex: 1, minWidth: 0, overflow: 'hidden', ...style }}>
+      <div
+        ref={textRef}
+        title={text}
+        style={{
+          whiteSpace: 'nowrap',
+          display: 'block',
+          overflow: shouldScroll ? 'visible' : 'hidden',
+          textOverflow: shouldScroll ? 'clip' : 'ellipsis',
+          willChange: 'transform',
+          transition: shouldScroll ? `transform ${(scrollDistance / 35).toFixed(1)}s linear 0.3s` : 'transform 0.5s cubic-bezier(0.2, 0, 0, 1) 0.1s',
+          transform: shouldScroll ? `translateX(-${scrollDistance + 10}px)` : 'translateX(0)',
+        }}
+      >
+        {text}
+      </div>
+    </div>
+  );
+});
+
+const ActionCheckbox = ({ isChecked, onToggle }: { isChecked: boolean, onToggle: (e: React.MouseEvent) => void }) => {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onClick={onToggle}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: isChecked ? '#10B981' : (hover ? 'rgba(255,255,255,0.08)' : 'transparent'),
+        border: isChecked ? '1px solid #10B981' : (hover ? '1px solid rgba(255,255,255,0.25)' : '1px solid rgba(255,255,255,0.12)'),
+        color: isChecked ? '#fff' : 'transparent',
+        transition: 'all 0.15s ease',
+        cursor: 'pointer',
+        fontSize: 13, fontWeight: 700
+      }}
+    >
+      {isChecked ? '✓' : ''}
+    </div>
+  );
+};
+
+const ActionDelete = ({ onRemove }: { onRemove: (e: React.MouseEvent) => void }) => {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onClick={onRemove}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: hover ? '#EF4444' : 'rgba(239,68,68,0.15)',
+        color: hover ? '#fff' : '#EF4444',
+        transition: 'all 0.15s ease',
+        cursor: 'pointer',
+        fontSize: 16, fontWeight: 400, paddingBottom: 2
+      }}
+      title="移除"
+    >
+      ×
+    </div>
+  );
+};
+
+export const ResourceCardItem = memo(({ res, isChecked, isAdded, onToggle, onSelectPreview, onRemove, onConvert, onReveal: _onReveal, previewUrl }: any) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const accentColor = '#10B981';
 
   // 识别原始 DNG (未转码)
   const isDNG = res.path.toLowerCase().endsWith('.dng');
@@ -20,6 +100,29 @@ export const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSel
     return '';
   }, [res, previewUrl]);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (res.type !== 'video' || !videoRef.current) return;
+    const el = videoRef.current;
+    el.muted = true;
+    el.loop = true;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          el.play().catch(() => {});
+        } else {
+          el.pause();
+          el.currentTime = 0.1;
+        }
+      });
+    }, { root: null, threshold: 0.1 });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [res.type, displaySrc]);
+
   // 音频项：完全不同的紧凑设计
   if (res.type === 'audio') {
     const audioColors = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#06B6D4'];
@@ -33,7 +136,7 @@ export const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSel
           display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
           background: isChecked ? `${accentColor}15` : (isHovered ? 'rgba(255,255,255,0.03)' : 'transparent'),
           borderRadius: 10, cursor: 'pointer',
-          borderLeft: isChecked ? `3px solid ${accentColor}` : '3px solid transparent',
+          borderLeft: 'none',
           transition: 'all 0.25s ease',
         }}
         onClick={() => onSelectPreview(res)}
@@ -45,42 +148,28 @@ export const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSel
           background: `linear-gradient(135deg, ${accentColor}40, ${accentColor}15)`,
           border: `1px solid ${accentColor}30`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 15,
+          fontSize: 15, position: 'relative',
           transition: 'transform 0.2s',
           transform: isHovered ? 'scale(1.08)' : 'scale(1)',
-        }}>♪</div>
+        }}>
+          ♪
+          {isAdded && <div style={{ position: 'absolute', bottom: -2, right: -2, width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981, 0 0 2px #10B981', zIndex: 10 }} title="已添至时间轴" />}
+        </div>
         {/* 名称 */}
-        <div style={{
-          flex: 1, minWidth: 0,
-          fontSize: 12.5, fontWeight: isChecked ? 600 : 400,
-          color: isChecked ? '#fff' : 'rgba(255,255,255,0.8)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          letterSpacing: 0.3,
-        }}>{res.name}</div>
+        <HoverMarqueeText
+          text={res.name}
+          isHovered={isHovered}
+          style={{
+            fontSize: 12.5, fontWeight: isChecked ? 600 : 400,
+            color: isChecked ? '#fff' : 'rgba(255,255,255,0.8)',
+            letterSpacing: 0.3,
+          }}
+        />
         {/* 行内操作按钮 */}
-        {(isHovered || isAdded) && (
-          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-            <div
-              style={{
-                width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: isAdded ? `${accentColor}90` : 'rgba(255,255,255,0.08)',
-                color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-              onClick={e => { e.stopPropagation(); onAdd(res); }}
-              title={isAdded ? "已添加" : "添加轨道"}
-            >{isAdded ? '✓' : '+'}</div>
-            <div
-              style={{
-                width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', fontSize: 14, cursor: 'pointer',
-                transition: 'all 0.15s',
-              }}
-              onClick={e => { e.stopPropagation(); onRemove(res.id); }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,59,48,0.25)'; e.currentTarget.style.color = '#FF3B30'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
-              title="移除"
-            >×</div>
+        {(isHovered || isChecked) && (
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <ActionCheckbox isChecked={isChecked} onToggle={e => { e.stopPropagation(); onToggle(res.id); }} />
+            <ActionDelete onRemove={e => { e.stopPropagation(); onRemove(res.id); }} />
           </div>
         )}
       </div>
@@ -89,58 +178,48 @@ export const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSel
 
   // 视频项：类似音频的列表布局
   if (res.type === 'video') {
-    const videoColors = ['#6366F1', '#8B5CF6', '#EC4899', '#F59E0B', '#06B6D4'];
-    const vColorIdx = res.name.length % videoColors.length;
-    const vAccent = videoColors[vColorIdx];
     return (
       <div
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '5px 8px',
-          background: isChecked ? `${vAccent}15` : (isHovered ? 'rgba(255,255,255,0.03)' : 'transparent'),
+          display: 'flex', alignItems: 'center', gap: 12, padding: '5px 10px',
+          background: isChecked ? `${accentColor}15` : (isHovered ? 'rgba(255,255,255,0.03)' : 'transparent'),
           borderRadius: 10, cursor: 'pointer',
-          borderLeft: isChecked ? `3px solid ${vAccent}` : '3px solid transparent',
+          borderLeft: 'none',
           transition: 'all 0.25s ease',
         }}
         onClick={() => onSelectPreview(res)}
         onDoubleClick={() => onToggle(res.id)}
       >
-        {/* 视频缩略图 */}
         <div style={{
-          width: 64, height: 40, borderRadius: 6, overflow: 'hidden', flexShrink: 0,
+          width: 106, height: 62, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
           background: '#000', position: 'relative',
-          border: isHovered ? `1px solid ${vAccent}50` : '1px solid rgba(255,255,255,0.06)',
-          transition: 'all 0.25s',
+          border: isHovered ? `1px solid ${accentColor}50` : '1px solid rgba(255,255,255,0.06)',
+          boxShadow: isHovered ? `0 4px 12px ${accentColor}25` : 'none',
+          transition: 'border-color 0.15s, box-shadow 0.15s, transform 0.15s',
+          transform: isHovered ? 'scale(1.04)' : 'scale(1)'
         }}>
-          <video src={displaySrc} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            onMouseEnter={e => { (e.target as HTMLVideoElement).play().catch(() => {}); }}
-            onMouseLeave={e => { (e.target as HTMLVideoElement).pause(); (e.target as HTMLVideoElement).currentTime = 0; }}
-          />
+          <video ref={videoRef} src={`${displaySrc}#t=0.1`} muted preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {isAdded && <div style={{ position: 'absolute', bottom: 4, left: 4, width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981, 0 0 2px #10B981', zIndex: 10 }} title="已添至时间轴" />}
           <div style={{ position: 'absolute', bottom: 2, right: 2, fontSize: 8, color: '#fff', background: 'rgba(0,0,0,0.6)', padding: '0 3px', borderRadius: 2 }}>🎬</div>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: isChecked ? 500 : 400, color: isChecked ? '#fff' : 'rgba(255,255,255,0.8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{res.name}</div>
-        </div>
-        {(isHovered || isAdded) && (
-          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-            <div style={{ width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isAdded ? `${vAccent}90` : 'rgba(255,255,255,0.08)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s' }}
-              onClick={e => { e.stopPropagation(); onAdd(res); }} title={isAdded ? '已添加' : '添加轨道'}>{isAdded ? '✓' : '+'}</div>
-            <div style={{ width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', fontSize: 14, cursor: 'pointer', transition: 'all 0.15s' }}
-              onClick={e => { e.stopPropagation(); onRemove(res.id); }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,59,48,0.25)'; e.currentTarget.style.color = '#FF3B30'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
-              title="移除">×</div>
+        <HoverMarqueeText
+          text={res.name}
+          isHovered={isHovered}
+          style={{
+            fontSize: 12, fontWeight: isChecked ? 500 : 400, color: isChecked ? '#fff' : 'rgba(255,255,255,0.8)'
+          }}
+        />
+        {(isHovered || isChecked) && (
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <ActionCheckbox isChecked={isChecked} onToggle={e => { e.stopPropagation(); onToggle(res.id); }} />
+            <ActionDelete onRemove={e => { e.stopPropagation(); onRemove(res.id); }} />
           </div>
         )}
       </div>
     );
   }
-
-  // 图片项的颜色主题（根据名称 hash 取色）
-  const imgColors = ['#6366F1', '#EC4899', '#10B981', '#F59E0B', '#06B6D4', '#8B5CF6', '#F97316', '#14B8A6'];
-  const imgColorIdx = res.name.split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % imgColors.length;
-  const imgAccent = imgColors[imgColorIdx];
 
   // 图片项：保持缩略图布局
   return (
@@ -149,10 +228,10 @@ export const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSel
       onMouseLeave={() => setIsHovered(false)}
       style={{
         position: 'relative',
-        display: 'flex', alignItems: 'center', gap: 12, padding: '5px 8px',
-        background: isChecked ? `${imgAccent}12` : (isHovered ? `${imgAccent}08` : 'transparent'),
+        display: 'flex', alignItems: 'center', gap: 12, padding: '5px 10px',
+        background: isChecked ? `${accentColor}12` : (isHovered ? `${accentColor}08` : 'transparent'),
         borderRadius: 10, cursor: 'pointer',
-        borderLeft: isChecked ? `3px solid ${imgAccent}` : '3px solid transparent',
+        borderLeft: 'none',
         transition: 'all 0.25s ease',
       }}
       onClick={() => onSelectPreview(res)}
@@ -160,10 +239,10 @@ export const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSel
     >
       {/* 图片缩略图 */}
       <div style={{
-        width: 72, height: 52, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
+        width: 106, height: 62, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
         background: '#151515', display: 'flex', justifyContent: 'center', alignItems: 'center',
-        border: isHovered ? `1px solid ${imgAccent}50` : '1px solid rgba(255,255,255,0.06)',
-        boxShadow: isHovered ? `0 4px 12px ${imgAccent}25` : 'none',
+        border: isHovered ? `1px solid ${accentColor}50` : '1px solid rgba(255,255,255,0.06)',
+        boxShadow: isHovered ? `0 4px 12px ${accentColor}25` : 'none',
         transition: 'background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s',
         transform: isHovered ? 'scale(1.04)' : 'scale(1)',
         position: 'relative'
@@ -173,6 +252,7 @@ export const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSel
         ) : (
           <div style={{ fontSize: 10, opacity: 0.3, color: '#fff' }}>...</div>
         )}
+        {isAdded && <div style={{ position: 'absolute', bottom: 4, left: 4, width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981, 0 0 2px #10B981', zIndex: 10 }} title="已添至时间轴" />}
         {/* DNG 转换 */}
         {isDNG && (
           <div style={{
@@ -191,36 +271,21 @@ export const ResourceCardItem = memo(({ res, isAdded, isChecked, onToggle, onSel
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: 12.5, fontWeight: isChecked ? 500 : 400,
-          color: isChecked ? '#fff' : 'rgba(255,255,255,0.85)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>{res.name}</div>
+        <HoverMarqueeText
+          text={res.name}
+          isHovered={isHovered}
+          style={{
+            fontSize: 12.5, fontWeight: isChecked ? 500 : 400, color: isChecked ? '#fff' : 'rgba(255,255,255,0.85)'
+          }}
+        />
         {isDNG && <div style={{ fontSize: 9, color: 'var(--ios-indigo)', letterSpacing: 1, marginTop: 2 }}>RAW</div>}
       </div>
 
       {/* 行内操作按钮 */}
-      {(isHovered || isAdded) && (
-        <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-          <div
-            style={{
-              width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: isAdded ? 'rgba(99,102,241,0.6)' : 'rgba(255,255,255,0.08)',
-              color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-            }}
-            onClick={e => { e.stopPropagation(); onAdd(res); }}
-            title={isAdded ? "已添加" : "添加轨道"}
-          >{isAdded ? '✓' : '+'}</div>
-          <div
-            style={{
-              width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)', fontSize: 14, cursor: 'pointer', transition: 'all 0.15s',
-            }}
-            onClick={e => { e.stopPropagation(); onRemove(res.id); }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,59,48,0.25)'; e.currentTarget.style.color = '#FF3B30'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; }}
-            title="移除"
-          >×</div>
+      {(isHovered || isChecked) && (
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <ActionCheckbox isChecked={isChecked} onToggle={e => { e.stopPropagation(); onToggle(res.id); }} />
+          <ActionDelete onRemove={e => { e.stopPropagation(); onRemove(res.id); }} />
         </div>
       )}
     </div>

@@ -32,3 +32,69 @@
   background: rgba(0, 0, 0, 0.2);
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ─── 统一分段控制器 (Segmented Control) ─── */
+.ios-segmented-control {
+  display: flex;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 7px;
+  padding: 2px;
+}
+
+.ios-segment {
+  flex: 1;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.45);
+  transition: all 0.15s ease-out;
+  background: transparent;
+}
+
+.ios-segment.active {
+  background: rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+  color: #fff;
+}
+
+/* ─── 资源列表操作按钮 ─── */
+.resource-action-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease-out;
+}
+
+.resource-action-btn.add {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.resource-action-btn.add.added {
+  background: rgba(99, 102, 241, 0.6);
+}
+
+.resource-action-btn.add:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.resource-action-btn.remove {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
+
+.resource-action-btn.remove:hover {
+  background: rgba(255, 59, 48, 0.25);
+  color: #FF3B30;
+}

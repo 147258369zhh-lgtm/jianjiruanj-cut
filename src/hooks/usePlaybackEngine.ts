@@ -46,6 +46,8 @@ export function usePlaybackEngine({
     const startTs = performance.now();
     const baseTime = playTimeRef.current;
 
+    let lastActiveItemId: string | null = null;
+
     const tick = () => {
       const tl = timelineRef.current;
       const currentPps = ppsRef.current;
@@ -64,6 +66,8 @@ export function usePlaybackEngine({
         return;
       }
 
+      let currentActiveItemId: string | null = null;
+
       // 直接操作 DOM，绕过 React 重绘
       if (playheadRef.current) {
         let accX = 0;
@@ -73,15 +77,16 @@ export function usePlaybackEngine({
           const itemDur = tl[i].duration;
           if (currentT >= accDur && currentT < accDur + itemDur) {
             accX += (currentT - accDur) * currentPps;
+            currentActiveItemId = tl[i].id;
             found = true;
             break;
           }
           accDur += itemDur;
-          accX += (itemDur * currentPps) + 4;
+          accX += (itemDur * currentPps);
         }
         if (!found) {
           const overflowDur = currentT - accDur;
-          accX += (overflowDur * currentPps) - (tl.length > 0 ? 4 : 0);
+          accX += (overflowDur * currentPps);
         }
         playheadRef.current.style.transform = `translateX(${60 + accX}px)`;
 
@@ -104,7 +109,10 @@ export function usePlaybackEngine({
 
       playTimeRef.current = currentT;
 
-      if (performance.now() - lastSyncTimeRef.current > 1000) {
+      const boundaryCrossed = lastActiveItemId !== null && lastActiveItemId !== currentActiveItemId;
+      lastActiveItemId = currentActiveItemId;
+
+      if (boundaryCrossed || performance.now() - lastSyncTimeRef.current > 1000) {
         setPlayTime(currentT);
         lastSyncTimeRef.current = performance.now();
       }

@@ -1,10 +1,11 @@
-/* ─── 时间刻度�?(Time Ruler) ─── */
+/* ─── 时间刻度尺 (Time Ruler) ─── */
 .ios-time-ruler {
   height: 28px;
   background: rgba(255, 255, 255, 0.03);
   border-bottom: 1px solid var(--ios-hairline);
   position: relative;
   cursor: crosshair;
+  -webkit-user-select: none;
   user-select: none;
   overflow: hidden;
 }
@@ -13,24 +14,29 @@
   position: absolute;
   bottom: 0;
   width: 1px;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.15);
+  height: 5px;
+  background: rgba(255, 255, 255, 0.10);
+  border-radius: 0.5px;
 }
 
 .ruler-tick.major {
-  height: 12px;
-  background: rgba(255, 255, 255, 0.4);
+  height: 14px;
+  width: 1px;
+  background: rgba(99, 102, 241, 0.45);
 }
 
 .ruler-label {
   position: absolute;
-  top: 2px;
+  top: 3px;
   font-size: 9px;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.45);
   transform: translateX(-50%);
-  font-family: 'Inter', sans-serif;
+  font-family: 'SF Mono', 'Cascadia Code', 'Menlo', monospace;
+  font-weight: 500;
+  letter-spacing: 0.3px;
   pointer-events: none;
 }
+
 
 
 /* 选中区域 - 显著深灰（删除态） */
@@ -89,7 +95,7 @@
 }
 
 .ios-btn-hover:hover {
-  transform: scale(1.05);
+  transform: scale(1.01);
   background: var(--ios-indigo) !important;
 }
 
@@ -171,3 +177,4 @@
 .ios-dark-select option {
   background: #1a1a20;
   color: #fff;
+}

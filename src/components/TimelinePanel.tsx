@@ -98,32 +98,22 @@ export const TimelinePanel: React.FC = () => {
         >
           {/* 渲染刻度线 - 自适应密度 */}
           {(() => {
-            // 根据 pps 动态选择刻度间距
-            let tickStep = 1;
-            if (pps < 15) tickStep = 5;
-            else if (pps < 30) tickStep = 2;
-            else if (pps > 80) tickStep = 0.5;
-            const totalTicks = Math.ceil(maxPlayTime / tickStep) + 1;
-            // 精确计算每个刻度的像素位置（考虑 gap）
-            const getTickX = (time: number) => {
-              let accDur = 0, accX = 0;
-              for (let i = 0; i < timeline.length; i++) {
-                const d = timeline[i].duration;
-                if (time <= accDur + d) {
-                  return 60 + accX + (time - accDur) * pps;
-                }
-                accDur += d;
-                accX += d * pps;
-              }
-              return 60 + accX + (time - accDur) * pps;
-            };
-            return Array.from({ length: totalTicks }).map((_, i) => {
-              const t = i * tickStep;
-              if (t > maxPlayTime + tickStep) return null;
-              const x = getTickX(t);
-              const isMajor = t % (tickStep >= 1 ? 5 : 1) === 0;
-              return (
-                <div key={i} style={{ position: 'relative' }}>
+            // 基于轨道总宽度计算全范围刻度（而非 maxPlayTime，避免空轨道时无刻度）
+            const totalSeconds = Math.max(timelineWidth / pps, 10);
+            // 根据 pps 动态选择主刻度间距
+            let majorStep = 5;
+            let minorStep = 1;
+            if (pps < 10) { majorStep = 30; minorStep = 10; }
+            else if (pps < 20) { majorStep = 10; minorStep = 5; }
+            else if (pps < 40) { majorStep = 5; minorStep = 1; }
+            else if (pps > 80) { majorStep = 2; minorStep = 0.5; }
+
+            const ticks: React.ReactNode[] = [];
+            for (let t = 0; t <= totalSeconds; t += minorStep) {
+              const x = 60 + t * pps;
+              const isMajor = t % majorStep === 0;
+              ticks.push(
+                <React.Fragment key={t}>
                   <div
                     className={`ruler-tick ${isMajor ? 'major' : ''}`}
                     style={{ left: x }}
@@ -133,9 +123,10 @@ export const TimelinePanel: React.FC = () => {
                       {t >= 60 ? `${Math.floor(t / 60)}:${(t % 60).toString().padStart(2, '0')}` : `${t}s`}
                     </div>
                   )}
-                </div>
+                </React.Fragment>
               );
-            });
+            }
+            return ticks;
           })()}
         </div>
 
@@ -280,9 +271,9 @@ export const TimelinePanel: React.FC = () => {
                         onSelect={handleTimelineSelect}
                         onRemove={handleTimelineRemove}
                         pps={pps} previewUrl={previewCache[resourceMap.get(item.resourceId)?.path || '']}
-                        onContextMenu={(e) => handleTimelineContextMenu(e, item.id)}
+                        onContextMenu={handleTimelineContextMenu}
                         onTrimDuration={handleTimelineTrim}
-                        onDoubleClickCard={() => handleTimelineDoubleClick(item.id)}
+                        onDoubleClickCard={handleTimelineDoubleClick}
                       />
                     );
                   })}

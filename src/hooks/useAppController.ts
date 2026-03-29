@@ -7,16 +7,12 @@ import { usePlaybackEngine } from './usePlaybackEngine';
 import { useAudioSync } from './useAudioSync';
 import { useProjectIO } from './useProjectIO';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
-import { useDragImport } from './useDragImport';
+import { useDragImport, IngestItem } from './useDragImport';
 import { useTimelineActions } from './useTimelineActions';
 import { useResourceManager } from './useResourceManager';
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from '@tauri-apps/api/core';
-import 'react-image-crop/dist/ReactCrop.css';
-import 'react-image-crop/dist/ReactCrop.css';
-import "../App.css";
-import "../Win11Theme.css";
 import { Resource, AudioTimelineItem, TimelineItem, GlobalDefaults, GLOBAL_DEFAULTS_INIT, TextOverlay } from '../types';
 
 export function useAppController() {
@@ -376,8 +372,11 @@ export function useAppController() {
     setShowShortcuts
   });
 
+  // ─── 拖拽导入临时缓冲队列 (Module D) ───
+  const [ingestQueue, setIngestQueue] = useState<IngestItem[]>([]);
+
   // ─── 拖拽导入文件 (已提取到 hooks/useDragImport.ts) ───
-  useDragImport({ setIsDragOver, setResources, setStatusMsg });
+  useDragImport({ setIsDragOver, setIngestQueue, setStatusMsg });
 
   // ─── 时间轴 Ctrl+滚轮 缩放 ──────────────────────────────────────
   // ─── 时间轴交互集合 (已提取到 hooks/useTimelineActions.ts) ───
@@ -639,7 +638,7 @@ export function useAppController() {
   const selectedItem = useMemo(() => timeline.find(t => selectedIds.has(t.id)), [timeline, selectedIds]);
 
   const monitorSrc = useMemo(() => {
-    if ((isPlaying || playTime > 0) && timeline.length > 0) {
+    if (timeline.length > 0) {
       let acc = 0;
       for (const t of timeline) {
         if (playTime >= acc && playTime < acc + t.duration) {
@@ -664,16 +663,27 @@ export function useAppController() {
     const videoEl = monitorVideoRef.current;
     if (!videoEl || !monitorSrc || monitorSrc.type !== 'video') return;
     const localTime = monitorSrc.localTime || 0;
+    
+    // 同步速率与音量
+    const itemSpeed = (monitorSrc.currentItem as any)?.playbackRate ?? 1.0;
+    const targetRate = playbackSpeed * itemSpeed;
+    if (videoEl.playbackRate !== targetRate) videoEl.playbackRate = targetRate;
+
+    const vol = (monitorSrc.currentItem as any)?.volume ?? 1.0;
+    if (videoEl.volume !== vol) videoEl.volume = vol;
+
     // 同步 currentTime（仅在差异超过 0.3s 时 seek，避免频繁跳帧）
-    if (Math.abs(videoEl.currentTime - localTime) > 0.3) {
-      videoEl.currentTime = localTime;
+    // 注意：如果是倍速播放，时间轴过了 localTime 时间，对应素材的原始进度应该为 localTime * itemSpeed
+    const localTimeAdjusted = localTime * itemSpeed;
+    if (Math.abs(videoEl.currentTime - localTimeAdjusted) > 0.3) {
+      videoEl.currentTime = localTimeAdjusted;
     }
     if (isPlaying) {
       videoEl.play().catch(() => { });
     } else {
       videoEl.pause();
     }
-  }, [isPlaying, monitorSrc]);
+  }, [isPlaying, monitorSrc, playbackSpeed]);
 
   const handleGenerate = async () => {
     const outputPath = await save({ filters: [{ name: '视频文件', extensions: [exportFormat] }] });
@@ -892,6 +902,8 @@ export function useAppController() {
     maxVideoEnd,
     maxAudioEnd,
     maxTime,
-    timelineWidth
+    timelineWidth,
+    ingestQueue,
+    setIngestQueue
   };
 }

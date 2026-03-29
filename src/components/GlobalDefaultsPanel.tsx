@@ -4,6 +4,8 @@ import { useShallow } from 'zustand/react/shallow';
 import ProSlider from './ProSlider';
 import IosSelect from './IosSelect';
 import { GLOBAL_DEFAULTS_INIT, GlobalDefaults } from '../types';
+import { WORKFLOW_PRESETS } from '../features/preset-manager/presetTemplates';
+import './GlobalDefaultsPanel.css';
 
 interface GlobalDefaultsPanelProps {
   favAnims: string[];
@@ -28,6 +30,57 @@ export const GlobalDefaultsPanel: React.FC<GlobalDefaultsPanelProps> = ({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 40 }}>
       <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
         修改全局默认值将自动应用到所有<strong style={{ color: 'rgba(255,255,255,0.65)' }}>未手动覆盖</strong>的图片。单独修改过的图片参数旁会显示 ✏️ 标记。
+      </div>
+
+      <div className="ios-prop-group preset-group">
+        <div className="ios-text" style={{ color: '#A855F7', fontSize: 13, marginBottom: 12, display: 'block', fontWeight: 600 }}>✨ 专属预设 (一键工作流)</div>
+        <div className="preset-cards-container" style={{ display: 'flex', overflowX: 'auto', gap: 12, paddingBottom: 8 }}>
+          {WORKFLOW_PRESETS.map(preset => (
+            <div 
+              key={preset.id}
+              className="preset-card"
+              style={{ 
+                flex: '0 0 148px', 
+                background: 'rgba(255,255,255,0.04)', 
+                border: `1px solid ${preset.color}40`,
+                borderRadius: 14, 
+                padding: '12px', 
+                cursor: 'pointer',
+                transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+              }}
+              onClick={() => {
+                commitSnapshotNow();
+                const newDefaults = { ...globalDefaults, ...preset.settings };
+                setGlobalDefaults(newDefaults);
+                
+                // 覆盖未手动修改的时间轴元素
+                setTimeline((prev: any[]) => prev.map(t => {
+                   const next: any = { ...t };
+                   // 如果预设设置中定义了 animation为 random，那么每次点击都需要触发真正的随机赋予！
+                   Object.keys(preset.settings).forEach(k => {
+                      if (!next.overrides?.includes(k)) {
+                         let val = (preset.settings as any)[k];
+                         if (k === 'animation' && val === 'random') {
+                            const pool = favAnims.length > 0 ? favAnims : ['anim-img-fadeIn', 'anim-img-slideLeft', 'anim-img-slideRight', 'anim-img-slideUp', 'anim-img-slideDown', 'anim-img-zoomIn', 'anim-img-zoomOut', 'anim-img-panLeft', 'anim-img-panRight'];
+                            val = pool[Math.floor(Math.random() * pool.length)];
+                            if (!next.overrides) next.overrides = [];
+                            next.overrides.push('animation'); // marking it as overridden so it holds its random value permanently
+                         }
+                         next[k] = val;
+                      }
+                   });
+                   return next;
+                }));
+                setStatusMsg(`✨ 已应用预设: ${preset.name}`);
+                setTimeout(() => setStatusMsg(''), 2500);
+              }}
+            >
+              <div style={{ fontSize: 28, marginBottom: 8, filter: `drop-shadow(0 0 10px ${preset.color}60)` }}>{preset.icon}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: preset.color, marginBottom: 6 }}>{preset.name}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', lineHeight: 1.4 }}>{preset.description}</div>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="ios-prop-group">
         <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⏱ 基础参数</div>

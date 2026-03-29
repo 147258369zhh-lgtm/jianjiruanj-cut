@@ -72,6 +72,11 @@ export interface TimelineItem {
   flipY?: boolean;       // 垂直镜像翻转
   vignette: number;      // 暗角 (0)
   fade: number;          // 褪色 (0)
+  
+  // 视频专属属性
+  volume?: number;       // 音量 (默认 1.0)
+  playbackRate?: number; // 播放倍速 (默认 1.0)
+  
   posX?: number;         // X轴坐标偏移 (-100 ~ 100)
   posY?: number;         // Y轴坐标偏移 (-100 ~ 100)
   overlayText?: string;

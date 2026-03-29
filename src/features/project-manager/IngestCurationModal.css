@@ -1,0 +1,227 @@
+.ingest-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 5, 10, 0.90);
+  backdrop-filter: blur(50px) saturate(180%);
+  -webkit-backdrop-filter: blur(50px) saturate(180%);
+  z-index: 9999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: modal-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.ingest-modal-box {
+  width: 90vw;
+  height: 85vh;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 40px 100px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.ingest-header {
+  padding: 24px 32px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.ingest-title-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ingest-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.ingest-desc {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.ingest-desc strong {
+  color: #10B981;
+}
+.ingest-desc strong.reject-count {
+  color: #EF4444;
+}
+
+.ingest-actions {
+  display: flex;
+  gap: 16px;
+}
+
+.ingest-btn {
+  padding: 10px 24px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border: none;
+}
+
+.ingest-btn.cancel {
+  background: rgba(255,255,255,0.05);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.ingest-btn.cancel:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.ingest-btn.confirm {
+  background: var(--ios-indigo, #6366f1);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+}
+
+.ingest-btn.confirm:hover {
+  background: #818cf8;
+  transform: translateY(-1px);
+}
+
+.ingest-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.ingest-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ingest-col.left {
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(16, 185, 129, 0.02);
+}
+
+.ingest-col.right {
+  background: rgba(239, 68, 68, 0.02);
+}
+
+.ingest-col-header {
+  padding: 16px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.ingest-col-header.approved { color: #10B981; }
+.ingest-col-header.rejected { color: #EF4444; }
+
+.ingest-grid-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.ingest-grid-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.ingest-grid-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+}
+
+.ingest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.ingest-item-card {
+  aspect-ratio: 16/9;
+  background: #1e1e1e;
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ingest-item-card:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.ingest-item-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.ingest-item-card:hover img {
+  opacity: 1;
+}
+
+.ingest-item-card.approved {
+  border: 2px solid transparent;
+}
+.ingest-item-card.approved:hover {
+  border-color: #10B981;
+}
+
+.ingest-item-card.rejected {
+  border: 2px solid #EF4444;
+}
+
+.ingest-reason-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 500;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ingest-action-hint {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+  padding: 16px 8px 8px;
+  font-size: 11px;
+  text-align: center;
+  color: rgba(255,255,255,0.7);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.ingest-item-card:hover .ingest-action-hint {
+  opacity: 1;
+}

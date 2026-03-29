@@ -6,7 +6,6 @@ import { useShallow } from 'zustand/react/shallow';
 
 export const ProjectToolbar: React.FC = () => {
   const {
-    handleImport,
     timeline,
     setTimeline,
     resources,
@@ -19,8 +18,7 @@ export const ProjectToolbar: React.FC = () => {
     loadProject,
   } = useAppContext();
   const {
-    leftTab,
-    setStatusMsg,
+    statusMsg, setStatusMsg,
     showSortMenu, setShowSortMenu,
     showMoreMenu, setShowMoreMenu,
     isEditingProjectName, setIsEditingProjectName,
@@ -28,7 +26,6 @@ export const ProjectToolbar: React.FC = () => {
     showExportPanel, setShowExportPanel,
     setShowGlobalDefaults
   } = useStore(useShallow(state => ({
-    leftTab: state.leftTab,
     statusMsg: state.statusMsg, setStatusMsg: state.setStatusMsg,
     showSortMenu: state.showSortMenu, setShowSortMenu: state.setShowSortMenu,
     showMoreMenu: state.showMoreMenu, setShowMoreMenu: state.setShowMoreMenu,
@@ -55,12 +52,7 @@ export const ProjectToolbar: React.FC = () => {
       flexShrink: 0, minHeight: 40,
     }}>
 
-      {/* 左侧：主流程按钮组 */}
-      <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 6, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, padding: '0 14px', height: 30, border: 'none' }} onClick={() => handleImport(leftTab === 'music' ? 'audio' : leftTab === 'video' ? 'video' : 'image')}>
-        📥 导入
-      </button>
-
-      {/* 排序下拉菜单 */}
+      {/* 左侧：排序下拉菜单 */}
       <div style={{ position: 'relative' }}>
         <button className="ios-button-small ios-button ios-button-subtle" style={{ borderRadius: 6, fontSize: 12, padding: '0 10px', height: 30, color: 'rgba(255,255,255,0.7)' }} onClick={(e) => { e.stopPropagation(); setShowSortMenu(!showSortMenu); }}>
           {sortMode === 'manual' ? '📂 排序' : `📂 ${sortMode === 'time' ? '时间序' : '名称序'}${sortDirection === 'desc' ? '↓' : '↑'}`}
@@ -182,10 +174,10 @@ export const ProjectToolbar: React.FC = () => {
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)', borderRadius: 6, cursor: 'pointer', transition: 'all 0.15s' }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'}
               onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
-              onClick={() => { const next = theme === 'ios' ? 'win11' : 'ios'; setTheme(next); localStorage.setItem('__editor_theme__', next); setShowMoreMenu(false); }}
+              onClick={() => { const order: Array<'ios' | 'win11' | 'harmony'> = ['ios', 'win11', 'harmony']; const idx = order.indexOf(theme); const next = order[(idx + 1) % order.length]; setTheme(next); localStorage.setItem('__editor_theme__', next); setShowMoreMenu(false); }}
             >
-              <span>{theme === 'ios' ? '🍃' : '🪩'}</span>
-              <span>切换主题（{theme === 'ios' ? 'iOS' : 'Win11'}）</span>
+              <span>{theme === 'ios' ? '🍃' : theme === 'win11' ? '🪩' : '🔷'}</span>
+              <span>切换主题（{theme === 'ios' ? 'iOS' : theme === 'win11' ? 'Win11' : '鸿蒙'}）</span>
             </div>
             {timeline.length > 0 && (
               <>

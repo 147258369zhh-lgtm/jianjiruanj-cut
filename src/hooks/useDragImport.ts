@@ -1,15 +1,23 @@
 import { useEffect } from 'react';
 import { Resource } from '../types';
 
+export interface IngestItem extends Resource {
+  status: 'approved' | 'rejected';
+  reason?: string;
+  originalIndex: number;
+  lastModified?: number;
+  size?: number;
+}
+
 interface UseDragImportArgs {
   setIsDragOver: (isOver: boolean) => void;
-  setResources: (fn: (prev: Resource[]) => Resource[]) => void;
+  setIngestQueue: (fn: (prev: IngestItem[]) => IngestItem[]) => void;
   setStatusMsg: (msg: string) => void;
 }
 
 export function useDragImport({
   setIsDragOver,
-  setResources,
+  setIngestQueue,
   setStatusMsg
 }: UseDragImportArgs) {
   useEffect(() => {
@@ -26,7 +34,11 @@ export function useDragImport({
 
       const imageExts = ['png', 'jpg', 'jpeg', 'webp', 'dng'];
       const audioExts = ['mp3', 'wav', 'm4a'];
-      const newResources: Resource[] = [];
+      const newItems: IngestItem[] = [];
+
+      // Helper for quick heuristics
+      // HTML5 file gives us size, type, and lastModified
+      let lastTime = 0;
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -34,20 +46,51 @@ export function useDragImport({
         let type: 'image' | 'audio' | null = null;
         if (imageExts.includes(ext)) type = 'image';
         else if (audioExts.includes(ext)) type = 'audio';
+        
         if (type) {
-          newResources.push({
-            id: `res_drop_${Date.now()}_${i}`,
+          let status: 'approved' | 'rejected' = 'approved';
+          let reason: string | undefined = undefined;
+
+          // Heuristic 1: Extremely small file (e.g. < 50KB) - likely useless icon or placeholder
+          if (file.size < 50 * 1024 && type === 'image') {
+            status = 'rejected';
+            reason = '体积过小 (疑为废图或图标)';
+          }
+
+          // Heuristic 2: Burst duplicate detection
+          // If photos are taken within 500ms of each other, it's a burst.
+          // Note: macOS often assigns rapid exact same lastModified to screenshots.
+          if (type === 'image' && file.lastModified) {
+            const timeDiff = Math.abs(file.lastModified - lastTime);
+            if (timeDiff < 600 && lastTime !== 0) {
+              status = 'rejected';
+              reason = '连拍冗余或同时生成';
+            }
+            lastTime = file.lastModified;
+          }
+
+          // Heuristic 3: Screenshot name guessing (macOS/Windows)
+          if (file.name.includes('截屏') || file.name.includes('Screenshot') || file.name.includes('Screen Shot')) {
+            status = 'rejected';
+            reason = '疑为截屏画面 (根据名称特征)';
+          }
+
+          newItems.push({
+            id: `res_drop_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
             name: file.name,
             path: (file as any).path || file.name, // Tauri 提供 path
             type,
+            status,
+            reason,
+            originalIndex: i,
+            lastModified: file.lastModified,
+            size: file.size
           });
         }
       }
 
-      if (newResources.length > 0) {
-        setResources(prev => [...prev, ...newResources]);
-        setStatusMsg(`📥 已导入 ${newResources.length} 个素材文件`);
-        setTimeout(() => setStatusMsg(''), 2000);
+      if (newItems.length > 0) {
+        setIngestQueue(prev => [...prev, ...newItems]);
       }
     };
 
@@ -61,5 +104,5 @@ export function useDragImport({
       window.removeEventListener('dragover', handleDragOver);
       window.removeEventListener('drop', handleDrop);
     };
-  }, [setIsDragOver, setResources, setStatusMsg]);
+  }, [setIsDragOver, setIngestQueue, setStatusMsg]);
 }

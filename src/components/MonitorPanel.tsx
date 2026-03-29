@@ -14,10 +14,11 @@ export const MonitorPanel: React.FC = () => {
     selectedIds, selectedTextIds, setSelectedTextIds, setTimeline, playbackSpeed,
     setPlaybackSpeed, timeTextRef, monitorVideoRef
   } = useAppContext();
-  const { isCropping, crop, setCrop } = useStore(useShallow(state => ({
+  const { isCropping, crop, setCrop, theme } = useStore(useShallow(state => ({
     isCropping: state.isCropping,
     crop: state.crop,
-    setCrop: state.setCrop
+    setCrop: state.setCrop,
+    theme: state.theme
   })));
 
   const [, setIsFullscreen] = useState(false);
@@ -62,12 +63,12 @@ export const MonitorPanel: React.FC = () => {
               <div style={{ position: 'relative', width: '100%', height: '100%', padding: '20px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {monitorSrc.type === 'video' ? (
                   <div style={{
-                    position: 'relative', display: monitorSrc.currentItem?.fillMode === 'cover' ? 'flex' : 'inline-flex', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', maxWidth: '100%', maxHeight: '100%', justifyContent: 'center', alignItems: 'center',
+                    position: 'relative', display: 'flex', width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center',
                     transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
                     transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)'
                   }}>
-                    <video ref={monitorVideoRef} src={monitorSrc.src} muted style={{
-                      display: 'block', maxWidth: '100%', maxHeight: '100%', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', objectFit: monitorSrc.currentItem?.fillMode === 'contain' ? 'contain' : 'cover', borderRadius: '12px',
+                    <video ref={monitorVideoRef} src={monitorSrc.src} style={{
+                      display: 'block', maxWidth: '100%', maxHeight: '100%', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', objectFit: monitorSrc.currentItem?.fillMode === 'cover' ? 'cover' : 'contain', borderRadius: '12px',
                       clipPath: monitorSrc.currentItem?.cropPos ? `inset(${monitorSrc.currentItem.cropPos.y}% ${100 - monitorSrc.currentItem.cropPos.x - monitorSrc.currentItem.cropPos.width}% ${100 - monitorSrc.currentItem.cropPos.y - monitorSrc.currentItem.cropPos.height}% ${monitorSrc.currentItem.cropPos.x}%)` : 'none',
                       filter: computeFilter(monitorSrc.currentItem),
                       transition: 'filter 0.4s'
@@ -89,17 +90,16 @@ export const MonitorPanel: React.FC = () => {
                   </div>
                 ) : (
                   <div style={{
-                    position: 'relative', display: monitorSrc.currentItem?.fillMode === 'cover' ? 'flex' : 'inline-flex', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', maxWidth: '100%', maxHeight: '100%', justifyContent: 'center', alignItems: 'center',
-                    transformOrigin: (monitorSrc.currentItem && resourceMap.get(monitorSrc.currentItem.resourceId)?.focusX) ? `${resourceMap.get(monitorSrc.currentItem.resourceId)?.focusX}% ${resourceMap.get(monitorSrc.currentItem.resourceId)?.focusY}%` : 'center center',
+                    position: 'relative', display: 'flex', width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center',
                     transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
                     transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)'
                   }}>
-                    <img key={monitorSrc.currentItem?.id} src={monitorSrc.src} className={monitorSrc.currentItem?.animation && monitorSrc.currentItem.animation !== 'none' ? monitorSrc.currentItem.animation : ''} style={{
-                      display: 'block', maxWidth: '100%', maxHeight: '100%', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', objectFit: monitorSrc.currentItem?.fillMode === 'contain' ? 'contain' : 'cover', borderRadius: '12px',
+                    <img src={monitorSrc.src} alt="" style={{
+                      display: 'block', maxWidth: '100%', maxHeight: '100%', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', objectFit: monitorSrc.currentItem?.fillMode === 'cover' ? 'cover' : 'contain', borderRadius: '12px',
                       clipPath: monitorSrc.currentItem?.cropPos ? `inset(${monitorSrc.currentItem.cropPos.y}% ${100 - monitorSrc.currentItem.cropPos.x - monitorSrc.currentItem.cropPos.width}% ${100 - monitorSrc.currentItem.cropPos.y - monitorSrc.currentItem.cropPos.height}% ${monitorSrc.currentItem.cropPos.x}%)` : 'none',
                       filter: computeFilter(monitorSrc.currentItem),
                       transition: 'filter 0.4s'
-                    }} alt="" />
+                    }} draggable={false} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} />
                     {(monitorSrc.currentItem?.vignette || monitorSrc.currentItem?.grain) ? (
                       <div style={{
                         position: 'absolute', pointerEvents: 'none', inset: 0, zIndex: 5, borderRadius: 12, overflow: 'hidden',
@@ -233,7 +233,7 @@ export const MonitorPanel: React.FC = () => {
             </div>
           )
         ) : (
-          <div style={{ opacity: 0.03, color: '#fff', fontSize: 100, fontWeight: 900, transform: 'rotate(-10deg)', userSelect: 'none' }}>iOS 26</div>
+          <div style={{ opacity: 0.03, color: '#fff', fontSize: 100, fontWeight: 900, transform: 'rotate(-10deg)', userSelect: 'none', letterSpacing: '4px' }}>{theme === 'harmony' ? 'HarmonyOS 4' : theme === 'win11' ? 'Windows 11' : 'iOS 26'}</div>
         )}
       </div>
 

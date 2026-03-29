@@ -43,22 +43,22 @@ export const LeftPanel: React.FC = () => {
     return byType.filter(r => r.name.toLowerCase().includes(q));
   }, [resources, libTab, searchQuery]);
 
-  const libItemHeight = libTab === 'image' ? 62 : 52;
+  const libItemHeight = (libTab === 'image' || libTab === 'video') ? 72 : 52;
   const libStartIndex = Math.max(0, Math.floor(libScrollTop / libItemHeight) - 3);
   const libEndIndex = Math.min(filteredResources.length - 1, Math.floor((libScrollTop + 800) / libItemHeight) + 8);
   const visibleResources = filteredResources.slice(libStartIndex, libEndIndex + 1);
 
   return (
-    <div className="glass-panel" style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+    <div className="glass-panel" style={{ width: 336, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
 
       {/* 三标签头部 */}
       <div style={{ padding: '8px 10px 6px', borderBottom: '1px solid var(--ios-hairline)' }}>
-        <div style={{ display: 'flex', background: 'rgba(0,0,0,0.25)', borderRadius: 7, padding: 2 }}>
+        <div className="ios-segmented-control">
           {([['photo', '照片'], ['music', '音乐'], ['video', '视频']] as const).map(([key, label]) => (
             <div
               key={key}
+              className={`ios-segment ${leftTab === key ? 'active' : ''}`}
               onClick={() => { setLeftTab(key); if (key === 'photo') setLibTab('image'); else if (key === 'music') setLibTab('audio'); else if (key === 'video') setLibTab('video'); }}
-              style={{ flex: 1, textAlign: 'center', padding: '5px 0', background: leftTab === key ? 'rgba(255,255,255,0.12)' : 'transparent', borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: leftTab === key ? 600 : 400, color: leftTab === key ? '#fff' : 'rgba(255,255,255,0.45)', transition: 'all 0.15s ease-out' }}
             >
               {label}
             </div>
@@ -67,63 +67,8 @@ export const LeftPanel: React.FC = () => {
       </div>
 
       {/* 左侧内容区 */}
-      {leftTab === 'video' ? (
-        /* 视频素材库 */
-        <div style={{ flex: 1, padding: '12px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
-          <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 8, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, height: 36, border: 'none', width: '100%' }} onClick={() => handleImport('video')}>
-            🎬 导入视频文件
-          </button>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>支持 MP4 / MOV / AVI / MKV / WebM</div>
-          {resources.filter(r => r.type === 'video').length === 0 ? (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>暂无视频，点击上方导入</div>
-          ) : (
-            resources.filter(r => r.type === 'video').map(res => (
-              <div key={res.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; }}
-                onClick={() => {
-                  // 获取视频真实时长
-                  const videoEl = document.createElement('video');
-                  videoEl.preload = 'metadata';
-                  videoEl.src = getEffectiveSrc(res.path);
-                  videoEl.onloadedmetadata = () => {
-                    const realDuration = Math.round(videoEl.duration * 10) / 10 || 10;
-                    const gd = globalDefaultsRef.current;
-                    commitSnapshotNow();
-                    setTimeline(p => [...p, {
-                      id: `tm_vid_${Date.now()}_${Math.random()}`, resourceId: res.id, duration: realDuration,
-                      transition: gd.transition, rotation: gd.rotation, contrast: gd.contrast,
-                      saturation: gd.saturation, exposure: gd.exposure, brilliance: gd.brilliance,
-                      temp: gd.temp, tint: gd.tint, zoom: gd.zoom,
-                      highlights: gd.highlights, shadows: gd.shadows, whites: gd.whites, blacks: gd.blacks, vibrance: gd.vibrance,
-                      sharpness: gd.sharpness, fade: gd.fade, vignette: gd.vignette, grain: gd.grain,
-                    }]);
-                    setStatusMsg(`✨ 已添加视频 (${realDuration}s)`); setTimeout(() => setStatusMsg(''), 1500);
-                  };
-                  videoEl.onerror = () => {
-                    // fallback: 如果无法读取时长，使用默认值
-                    commitSnapshotNow();
-                    setTimeline(p => [...p, {
-                      id: `tm_vid_${Date.now()}`, resourceId: res.id, duration: 10, transition: 'fade' as any, rotation: 0, contrast: 1, saturation: 1, exposure: 1, brilliance: 1, temp: 0, tint: 0, zoom: 1,
-                      highlights: 1, shadows: 1, whites: 1, blacks: 1, vibrance: 1, sharpness: 0, fade: 0, vignette: 0, grain: 0
-                    }]);
-                    setStatusMsg(`✨ 已添加视频`); setTimeout(() => setStatusMsg(''), 1500);
-                  };
-                }}
-              >
-                <div style={{ width: 40, height: 28, borderRadius: 4, background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎬</div>
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ fontSize: 11, fontWeight: 500, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{res.name}</div>
-                </div>
-                <div onClick={(e) => { e.stopPropagation(); setResources(p => p.filter(r => r.id !== res.id)); }} style={{ width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }} title="删除">×</div>
-              </div>
-            ))
-          )}
-        </div>
-      ) : (
-        /* 照片/音乐 共用界面 */
-        <>
-          {/* 音乐 sub-tab 切换栏 */}
+      <>
+        {/* 音乐 sub-tab 切换栏 */}
           {leftTab === 'music' && (
             <div style={{ padding: '6px 10px 0' }}>
               <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: 20, padding: 3 }}>
@@ -219,41 +164,64 @@ export const LeftPanel: React.FC = () => {
             </div>
           ) : (
             <>
-              <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {leftTab === 'photo' && (
-                  <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 7, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 11, height: 32, border: 'none', width: '100%' }} onClick={() => handleImport('image')}>📸 导入照片文件</button>
-                )}
-                <input className="ios-input" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 搜索..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6, fontSize: 11 }} />
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  <button className="ios-button-small ios-button ios-button-subtle" style={{ borderRadius: 6, fontSize: 11, padding: '0 6px', color: 'rgba(255,255,255,0.7)' }} onClick={() => { const allIds = filteredResources.map(r => r.id); if (selectedResourceIds.size === allIds.length && allIds.length > 0) setSelectedResourceIds(new Set()); else setSelectedResourceIds(new Set(allIds)); }}>
-                    {filteredResources.length > 0 && selectedResourceIds.size === filteredResources.length ? '反选' : '全选'}
-                  </button>
-                  <button className="ios-button-small ios-button ios-button-primary" disabled={selectedResourceIds.size === 0} style={{ flex: 1, borderRadius: 6, background: selectedResourceIds.size > 0 ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.04)', color: selectedResourceIds.size > 0 ? '#fff' : 'rgba(255,255,255,0.3)', fontWeight: 600, fontSize: 11, border: 'none' }} onClick={async () => {
-                    const selectedList = resources.filter(r => r.type === libTab && selectedResourceIds.has(r.id));
-                    for (const r of selectedList) {
-                      if (r.type === 'image') {
-                        setTimeline(p => [...p, { id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, duration: 3, transition: 'fade' as any, rotation: 0, contrast: 1.0, saturation: 1.0, exposure: 1.0, brilliance: 1.0, temp: 0, tint: 0, zoom: 1.0, highlights: 1.0, shadows: 1.0, whites: 1.0, blacks: 1.0, vibrance: 1.0, sharpness: 0, fade: 0, vignette: 0, grain: 0, fontSize: 24, fontWeight: 'normal' }]);
-                      } else {
-                        const dur = await getMediaDuration(r.path);
-                        setAudioItems(prev => { let startPos = 0; if (prev.length > 0) { const last = prev[prev.length - 1]; startPos = last.timelineStart + last.duration; } return [...prev, { id: `au_${Date.now()}_${Math.random()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }]; });
+              <div style={{ padding: '6px 10px', display: 'flex', gap: 6, alignItems: 'stretch' }}>
+                {/* 左列：巨大的导入按钮 */}
+                <button 
+                  className="ios-button-primary" 
+                  style={{ 
+                    width: 106,
+                    flexShrink: 0, 
+                    borderRadius: 8,
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    gap: 4,
+                    padding: '8px 4px'
+                  }}
+                  onClick={() => handleImport(libTab as 'image' | 'audio' | 'video')}
+                >
+                  <div style={{ fontSize: 18, lineHeight: 1 }}>{libTab === 'image' ? '📸' : libTab === 'audio' ? '🎵' : '🎬'}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%', textAlign: 'center' }}>
+                    导入{libTab === 'image' ? '照片' : libTab === 'audio' ? '音乐' : '视频'}
+                  </div>
+                </button>
+
+                {/* 右列：搜索 + 操作区 */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+                  <input className="ios-input" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 搜索..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, fontSize: 11, width: '100%', boxSizing: 'border-box' }} />
+                  
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'stretch', flex: 1 }}>
+                    <button className="ios-button-small ios-button" style={{ flex: 1, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: 'none', boxShadow: 'none', fontSize: 11, padding: '0 4px', color: 'rgba(255,255,255,0.8)', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={() => { const allIds = filteredResources.map(r => r.id); if (selectedResourceIds.size === allIds.length && allIds.length > 0) setSelectedResourceIds(new Set()); else setSelectedResourceIds(new Set(allIds)); }}>
+                      {filteredResources.length > 0 && selectedResourceIds.size === filteredResources.length ? '反选' : '全选'}
+                    </button>
+                    <button className="ios-button-small ios-button ios-button-primary" disabled={selectedResourceIds.size === 0} style={{ flex: 1.2, borderRadius: 8, background: selectedResourceIds.size > 0 ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.06)', color: selectedResourceIds.size > 0 ? '#fff' : 'rgba(255,255,255,0.3)', fontWeight: 600, fontSize: 11, border: 'none', boxShadow: 'none', padding: '0 4px', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} onClick={async () => {
+                      const selectedList = resources.filter(r => r.type === libTab && selectedResourceIds.has(r.id));
+                      for (const r of selectedList) {
+                        if (r.type === 'image') {
+                          setTimeline(p => [...p, { id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, duration: 3, transition: 'fade' as any, rotation: 0, contrast: 1.0, saturation: 1.0, exposure: 1.0, brilliance: 1.0, temp: 0, tint: 0, zoom: 1.0, highlights: 1.0, shadows: 1.0, whites: 1.0, blacks: 1.0, vibrance: 1.0, sharpness: 0, fade: 0, vignette: 0, grain: 0, fontSize: 24, fontWeight: 'normal' }]);
+                        } else {
+                          const dur = await getMediaDuration(r.path);
+                          setAudioItems(prev => { let startPos = 0; if (prev.length > 0) { const last = prev[prev.length - 1]; startPos = last.timelineStart + last.duration; } return [...prev, { id: `au_${Date.now()}_${Math.random()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }]; });
+                        }
                       }
-                    }
-                    setSelectedResourceIds(new Set());
-                  }}>
-                    {selectedResourceIds.size > 0 ? `+ 编入 ${selectedResourceIds.size}项` : '+ 编入轨道'}
-                  </button>
-                  <button className="ios-button-small ios-button ios-button-subtle" disabled={selectedResourceIds.size === 0} style={{ borderRadius: 6, minWidth: 28, padding: 0, fontSize: 12, color: selectedResourceIds.size > 0 ? '#FF3B30' : 'rgba(255,255,255,0.1)' }} onClick={() => removeFromLibrary(selectedResourceIds)}>🗑</button>
+                      setSelectedResourceIds(new Set());
+                    }}>
+                      {selectedResourceIds.size > 0 ? `+ 编入${selectedResourceIds.size}` : '+ 轨道'}
+                    </button>
+                    <button className="ios-button-small ios-button" disabled={selectedResourceIds.size === 0} style={{ flexShrink: 0, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: 'none', boxShadow: 'none', width: 28, minWidth: 28, padding: 0, fontSize: 12, color: selectedResourceIds.size > 0 ? '#FF3B30' : 'rgba(255,255,255,0.3)' }} onClick={() => removeFromLibrary(selectedResourceIds)}>🗑</button>
+                  </div>
                 </div>
               </div>
-              <div ref={libScrollRef} onScroll={(e) => setLibScrollTop(e.currentTarget.scrollTop)} style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+              <div className="custom-media-scroll" ref={libScrollRef} onScroll={(e) => setLibScrollTop(e.currentTarget.scrollTop)} style={{ flex: 1, overflowY: 'auto', position: 'relative', overflowX: 'hidden' }}>
                 {filteredResources.length === 0 ? (
                   <div style={{ textAlign: 'center', marginTop: 60, opacity: 0.2, fontSize: 11 }}>{leftTab === 'photo' ? '暂无照片，点击顶部 📥导入' : '暂无音乐'}</div>
                 ) : (
                   <div style={{ height: filteredResources.length * libItemHeight, position: 'relative' }}>
                     {visibleResources.map((res, idx) => {
                       const absIndex = libStartIndex + idx; return (
-                        <div key={res.id} style={{ position: 'absolute', top: absIndex * libItemHeight, width: '100%', height: libItemHeight, padding: '0 4px', boxSizing: 'border-box' }}>
-                          <ResourceCardItem res={res} isAdded={addedResourceIds.has(res.id)} isChecked={selectedResourceIds.has(res.id)} onToggle={handleLibToggle} onSelectPreview={handleLibSelectPreview} onAdd={handleLibAdd} onRemove={removeFromLibrary} onConvert={handleConvertDNG} onReveal={handleRevealInExplorer} previewUrl={previewCache[res.path]} />
+                        <div key={res.id} style={{ position: 'absolute', top: absIndex * libItemHeight, width: '100%', height: libItemHeight, padding: '0', boxSizing: 'border-box' }}>
+                          <ResourceCardItem res={res} isChecked={selectedResourceIds.has(res.id)} isAdded={addedResourceIds.has(res.id)} onToggle={handleLibToggle} onSelectPreview={handleLibSelectPreview} onRemove={removeFromLibrary} onConvert={handleConvertDNG} onReveal={handleRevealInExplorer} previewUrl={previewCache[res.path]} />
                         </div>
                       );
                     })}
@@ -263,8 +231,6 @@ export const LeftPanel: React.FC = () => {
             </>
           )}
         </>
-      )}
-
     </div>
   );
 };

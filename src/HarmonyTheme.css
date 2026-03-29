@@ -1,0 +1,761 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   HarmonyTheme.css — HarmonyOS 4 设计语言 · 完整 UI 重设计
+   ═══════════════════════════════════════════════════════════════════════════
+   不只是改色，而是对每个组件的尺寸、间距、字号、圆角、按钮高度进行完整重定义
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════
+   1. 全局设计令牌
+   ═════════════════════════════════ */
+.theme-harmony {
+  --ios-bg: #1A1A1A;
+  --ios-glass: rgba(32, 32, 32, 0.72);
+  --ios-glass-heavy: rgba(26, 26, 26, 0.95);
+  --ios-glass-bright: rgba(255, 255, 255, 0.035);
+  --ios-indigo: #CF0A2C;
+  --ios-indigo-glow: rgba(207, 10, 44, 0.25);
+  --ios-crimson: #CF0A2C;
+  --ios-text: #E5E5E5;
+  --ios-text-dim: #8C8C8C;
+  --ios-hairline: rgba(255, 255, 255, 0.05);
+  --ios-blur: blur(40px) saturate(180%);
+  --squircle: 20px;
+  --squircle-s: 14px;
+  --shadow-premium: 0 2px 16px rgba(0, 0, 0, 0.2), 0 0 0 0.5px rgba(255, 255, 255, 0.035);
+  --shadow-indigo: 0 0 20px rgba(207, 10, 44, 0.15);
+  --ease-ios: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --hm-red: #CF0A2C;
+  --hm-red-hover: #E61A3C;
+  --hm-red-soft: rgba(207, 10, 44, 0.10);
+  --hm-surface: rgba(36, 36, 36, 0.70);
+  --hm-surface-elevated: rgba(44, 44, 44, 0.75);
+  --hm-divider: rgba(255, 255, 255, 0.04);
+  --hm-stroke: rgba(255, 255, 255, 0.05);
+  --hm-text-1: #E5E5E5;
+  --hm-text-2: rgba(255, 255, 255, 0.50);
+  --hm-text-3: rgba(255, 255, 255, 0.25);
+  --hm-capsule: 999px;
+  --hm-card-r: 20px;
+  --hm-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --hm-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* ═══════════════════════════════════
+   2. 全局字体 & 背景
+   ═════════════════════════════════ */
+.theme-harmony,
+.theme-harmony * {
+  font-family: 'HarmonyOS Sans SC', 'HarmonyOS Sans', 'PingFang SC', -apple-system, 'Microsoft YaHei', sans-serif !important;
+}
+
+body:has(.theme-harmony) {
+  background: #111 !important;
+}
+
+body:has(.theme-harmony)::before {
+  background:
+    radial-gradient(ellipse at 25% 30%, rgba(207, 10, 44, 0.025) 0%, transparent 55%),
+    radial-gradient(ellipse at 75% 70%, rgba(255, 130, 60, 0.015) 0%, transparent 55%) !important;
+  filter: blur(100px) !important;
+  animation: none !important;
+}
+
+/* ═══════════════════════════════════
+   3. 主布局 — 间距更宽松 (鸿蒙多留白)
+   ═════════════════════════════════ */
+.theme-harmony .ios-layout {
+  padding: 6px 6px 4px 6px;
+  gap: 6px;
+}
+
+/* 主内容区三栏间距 */
+.theme-harmony .ios-layout > div[style] {
+  gap: 6px !important;
+}
+
+/* ═══════════════════════════════════
+   4. 卡片面板 — 大圆角 + 柔光顶线
+   ═════════════════════════════════ */
+.theme-harmony .glass-panel {
+  background: var(--hm-surface);
+  backdrop-filter: blur(50px) saturate(200%);
+  -webkit-backdrop-filter: blur(50px) saturate(200%);
+  border: 0.5px solid var(--hm-stroke);
+  border-radius: var(--hm-card-r);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.20), 0 0 0 0.5px rgba(255, 255, 255, 0.03);
+  transition: all 0.4s var(--hm-ease);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 鸿蒙轻拟物 — 卡片顶部弧面高光 */
+.theme-harmony .glass-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.07) 25%,
+    rgba(255, 255, 255, 0.10) 50%,
+    rgba(255, 255, 255, 0.07) 75%,
+    transparent 100%);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.theme-harmony .glass-panel:hover {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+/* ═══════════════════════════════════
+   5. 面板头部 — 鸿蒙大号头部 + 更大字号
+   ═════════════════════════════════ */
+.theme-harmony .panel-header-ios {
+  padding: 14px 16px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  background: transparent !important;
+  border-bottom: 0.5px solid var(--hm-divider) !important;
+}
+
+.theme-harmony .header-title {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.1px !important;
+  color: var(--hm-text-1) !important;
+  opacity: 0.95 !important;
+}
+
+/* ═══════════════════════════════════
+   6. 所有按钮 — 鸿蒙胶囊按钮
+   高度 36px, border-radius: 999px
+   ═════════════════════════════════ */
+
+/* 通用按钮基础 */
+.theme-harmony button,
+.theme-harmony [class*="ios-button"] {
+  border-radius: var(--hm-capsule) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.1px !important;
+  transition: all 0.3s var(--hm-spring) !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  min-height: 32px !important;
+  padding: 0 16px !important;
+}
+
+/* 互动特效覆盖 */
+.theme-harmony .ios-btn-hover {
+  transition: all 0.3s var(--hm-spring) !important;
+}
+
+.theme-harmony .ios-btn-hover:hover {
+  transform: scale(1.005) !important;
+  filter: brightness(1.05) !important;
+}
+
+.theme-harmony .ios-btn-hover:active {
+  transform: scale(0.96) !important;
+}
+
+/* 小号按钮 — 28px 高度 */
+.theme-harmony .ios-button-small {
+  min-height: 28px !important;
+  height: 28px !important;
+  padding: 0 12px !important;
+  font-size: 11px !important;
+}
+
+/* 次要（subtle）按钮 */
+.theme-harmony .ios-button-subtle {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.06) !important;
+  color: var(--hm-text-2) !important;
+}
+
+.theme-harmony .ios-button-subtle:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--hm-text-1) !important;
+}
+
+/* ═══════════════════════════════════
+   7. 资源库列表 — 更紧凑的行高 & 缩略图
+   ═════════════════════════════════ */
+.theme-harmony .ios-resource-item {
+  padding: 8px 14px !important;
+  gap: 10px !important;
+  border-radius: 12px !important;
+  border-bottom: none !important;
+  transition: all 0.25s var(--hm-ease) !important;
+  min-height: 48px !important;
+}
+
+.theme-harmony .ios-resource-item:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+  transform: none !important;
+}
+
+.theme-harmony .ios-resource-item.active {
+  background: var(--hm-red-soft) !important;
+  border-left: 2.5px solid var(--hm-red) !important;
+}
+
+/* 缩略图 — 更大更圆 */
+.theme-harmony .ios-thumb-box {
+  width: 44px !important;
+  height: 34px !important;
+  border-radius: 8px !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+}
+
+/* 资源名称文字 */
+.theme-harmony .ios-resource-item span {
+  font-size: 12px !important;
+  font-weight: 400 !important;
+}
+
+/* ═══════════════════════════════════
+   8. 时间轴 — 布局重设计
+   ═════════════════════════════════ */
+.theme-harmony .ios-timeline {
+  background: var(--hm-surface) !important;
+  min-height: 350px !important;
+  border-radius: var(--hm-card-r) !important;
+  padding-bottom: 8px !important;
+}
+
+/* 时间轴头部区 — 更高 */
+.theme-harmony .ios-timeline .panel-header-ios {
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 14px !important;
+}
+
+/* 时间刻度尺 */
+.theme-harmony .ios-time-ruler {
+  height: 26px !important;
+  background: rgba(255, 255, 255, 0.015) !important;
+  border-bottom: 0.5px solid var(--hm-divider) !important;
+}
+
+.theme-harmony .ruler-tick {
+  background: rgba(255, 255, 255, 0.06) !important;
+  height: 4px !important;
+}
+
+.theme-harmony .ruler-tick.major {
+  background: rgba(207, 10, 44, 0.30) !important;
+  height: 12px !important;
+}
+
+.theme-harmony .ruler-label {
+  color: var(--hm-text-3) !important;
+  font-size: 8px !important;
+  font-weight: 400 !important;
+  top: 4px !important;
+}
+
+/* 轨道块 */
+.theme-harmony .timeline-block {
+  border-radius: 10px !important;
+}
+
+.theme-harmony .timeline-block.selected {
+  box-shadow: inset 0 0 0 2px rgba(207, 10, 44, 0.4) !important;
+}
+
+.theme-harmony .timeline-block.selected-region {
+  border-radius: 10px !important;
+}
+
+/* 播放指针 — 红色 */
+.theme-harmony .ios-play-line {
+  background: var(--hm-red) !important;
+  box-shadow: 0 0 16px rgba(207, 10, 44, 0.3) !important;
+  width: 3px !important;
+}
+
+/* ═══════════════════════════════════
+   9. 监视器 — 更大圆角
+   ═════════════════════════════════ */
+.theme-harmony .monitor-container {
+  background: rgba(12, 12, 12, 0.96) !important;
+  border-radius: var(--hm-card-r) !important;
+}
+
+/* 浮动工具栏 — 胶囊化 + 更大间距 */
+.theme-harmony .ios-floating-toolbar {
+  background: rgba(25, 25, 25, 0.88) !important;
+  backdrop-filter: blur(40px) !important;
+  -webkit-backdrop-filter: blur(40px) !important;
+  padding: 10px 20px !important;
+  border-radius: var(--hm-capsule) !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.06) !important;
+  gap: 20px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 16px rgba(207, 10, 44, 0.08) !important;
+}
+
+/* 播放按钮 — 更大 + 拟物光影 */
+.theme-harmony .floating-play-btn {
+  width: 80px !important;
+  height: 80px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.08) !important;
+  font-size: 32px !important;
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  transition: all 0.4s var(--hm-spring) !important;
+}
+
+.theme-harmony .floating-play-btn:hover {
+  transform: scale(1.02) !important;
+  background: rgba(207, 10, 44, 0.10) !important;
+  border-color: rgba(207, 10, 44, 0.2) !important;
+  box-shadow:
+    0 10px 36px rgba(207, 10, 44, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.theme-harmony .floating-play-btn:active {
+  transform: scale(0.90) !important;
+}
+
+/* ═══════════════════════════════════
+   10. 属性面板分组 — 重设尺寸
+   ═════════════════════════════════ */
+.theme-harmony .ios-prop-group {
+  padding: 14px !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  border-radius: 16px !important;
+  margin-bottom: 8px !important;
+  gap: 12px !important;
+  box-shadow: none !important;
+}
+
+.theme-harmony .ios-prop-group:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+/* 分组标题 */
+.theme-harmony .pro-section-title {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  opacity: 0.85 !important;
+  letter-spacing: 0.1px !important;
+  gap: 8px !important;
+}
+
+/* Field Label — 鸿蒙不用大写 */
+.theme-harmony .fui-Field__label {
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  opacity: 0.4 !important;
+  text-transform: none !important;
+  letter-spacing: 0.2px !important;
+}
+
+/* ═══════════════════════════════════
+   11. Select 下拉 — 胶囊 + 重设高度
+   ═════════════════════════════════ */
+.theme-harmony .ios-dark-select,
+.theme-harmony select {
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  border-radius: var(--hm-capsule) !important;
+  color: var(--hm-text-1) !important;
+  font-size: 12px !important;
+  padding: 6px 14px !important;
+  min-height: 32px !important;
+  transition: all 0.25s var(--hm-ease) !important;
+}
+
+.theme-harmony .ios-dark-select:hover,
+.theme-harmony select:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(207, 10, 44, 0.25) !important;
+}
+
+.theme-harmony .ios-dark-select:focus,
+.theme-harmony select:focus {
+  outline: none !important;
+  border-color: var(--hm-red) !important;
+  box-shadow: 0 0 0 3px rgba(207, 10, 44, 0.08) !important;
+}
+
+.theme-harmony .ios-dark-select option,
+.theme-harmony select option {
+  background: #262626;
+  color: #e5e5e5;
+}
+
+/* ═══════════════════════════════════
+   12. Input 输入框 — 圆角 + 红色焦点
+   ═════════════════════════════════ */
+.theme-harmony input[type="text"],
+.theme-harmony input[type="number"] {
+  border-radius: 12px !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  min-height: 30px !important;
+  transition: all 0.25s var(--hm-ease) !important;
+}
+
+.theme-harmony input[type="text"]:focus,
+.theme-harmony input[type="number"]:focus {
+  border-color: var(--hm-red) !important;
+  box-shadow: 0 0 0 3px rgba(207, 10, 44, 0.08) !important;
+  outline: none !important;
+}
+
+.theme-harmony input[type="checkbox"] {
+  accent-color: var(--hm-red) !important;
+}
+
+/* ═══════════════════════════════════
+   13. Slider/Range — 红色滑块 + 更大触控区
+   ═════════════════════════════════ */
+.theme-harmony .pro-scrubber,
+.theme-harmony input[type="range"] {
+  height: 3px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-radius: var(--hm-capsule) !important;
+}
+
+.theme-harmony .pro-scrubber::-webkit-slider-thumb,
+.theme-harmony input[type="range"]::-webkit-slider-thumb {
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 50% !important;
+  background: var(--hm-red) !important;
+  border: 2px solid rgba(255, 255, 255, 0.85) !important;
+  box-shadow: 0 1px 8px rgba(207, 10, 44, 0.25) !important;
+  transition: all 0.3s var(--hm-spring) !important;
+}
+
+.theme-harmony .pro-scrubber::-webkit-slider-thumb:hover,
+.theme-harmony input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.3) !important;
+  box-shadow: 0 2px 12px rgba(207, 10, 44, 0.35) !important;
+}
+
+/* 缩放控制条 */
+.theme-harmony .zoom-control {
+  color: var(--hm-text-2) !important;
+  font-size: 10px !important;
+  gap: 8px !important;
+}
+
+.theme-harmony .zoom-control input[type="range"] {
+  width: 90px !important;
+}
+
+/* ═══════════════════════════════════
+   14. 滤镜预设网格 — 胶囊卡片 + 更大间距
+   ═════════════════════════════════ */
+.theme-harmony .filter-preset-scroll {
+  gap: 6px !important;
+  padding: 4px 0 !important;
+}
+
+.theme-harmony .filter-preset-card {
+  border-radius: var(--hm-capsule) !important;
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  padding: 8px 8px !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  box-shadow: none !important;
+  transition: all 0.3s var(--hm-spring) !important;
+}
+
+.theme-harmony .filter-preset-card:hover {
+  background: var(--hm-red-soft) !important;
+  border-color: rgba(207, 10, 44, 0.20) !important;
+  color: #fff !important;
+  transform: translateY(-1px) scale(1.02) !important;
+  box-shadow: 0 4px 12px rgba(207, 10, 44, 0.08) !important;
+}
+
+.theme-harmony .filter-preset-card:active {
+  transform: scale(0.95) !important;
+}
+
+/* ═══════════════════════════════════
+   15. 右键菜单 — 大圆角 + 弹簧缩放
+   ═════════════════════════════════ */
+.theme-harmony .context-menu {
+  min-width: 200px !important;
+  background: rgba(40, 40, 40, 0.92) !important;
+  backdrop-filter: blur(60px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(60px) saturate(200%) !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 24px !important;
+  padding: 8px !important;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35) !important;
+  animation: hm-scale-in 0.35s var(--hm-spring) !important;
+  transform-origin: top left;
+}
+
+@keyframes hm-scale-in {
+  from { opacity: 0; transform: scale(0.82); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.theme-harmony .context-menu-item {
+  padding: 10px 16px !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  border-radius: 14px !important;
+  margin: 2px 0 !important;
+  gap: 10px !important;
+  transition: all 0.2s var(--hm-ease) !important;
+}
+
+.theme-harmony .context-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.theme-harmony .context-menu-item.danger {
+  color: var(--hm-red) !important;
+}
+
+.theme-harmony .context-menu-item.danger:hover {
+  background: var(--hm-red-soft) !important;
+}
+
+.theme-harmony .context-menu-separator {
+  height: 0.5px !important;
+  background: var(--hm-divider) !important;
+  margin: 4px 14px !important;
+}
+
+/* ═══════════════════════════════════
+   16. Toast 通知 — 胶囊型 + 弹簧缩放
+   ═════════════════════════════════ */
+.theme-harmony .global-toast {
+  background: rgba(40, 40, 40, 0.88) !important;
+  backdrop-filter: blur(40px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: var(--hm-capsule) !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3) !important;
+  padding: 10px 28px !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.1px !important;
+  animation: hm-toast-in 0.45s var(--hm-spring) !important;
+}
+
+@keyframes hm-toast-in {
+  from { opacity: 0; transform: translateX(-50%) scale(0.8) translateY(16px); }
+  to { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
+}
+
+/* ═══════════════════════════════════
+   17. 快捷键面板 — 大弹窗
+   ═════════════════════════════════ */
+.theme-harmony .shortcuts-panel {
+  background: rgba(38, 38, 38, 0.94) !important;
+  backdrop-filter: blur(60px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(60px) saturate(200%) !important;
+  border: 0.5px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 28px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4) !important;
+  padding: 28px 32px !important;
+  width: 360px !important;
+  animation: hm-panel-in 0.4s var(--hm-spring) !important;
+}
+
+@keyframes hm-panel-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.88); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ═══════════════════════════════════
+   18. 拖拽导入遮罩 — 红色调 + 更粗虚线
+   ═════════════════════════════════ */
+.theme-harmony .drop-overlay {
+  background: rgba(207, 10, 44, 0.04) !important;
+  border: 3px dashed rgba(207, 10, 44, 0.25) !important;
+  backdrop-filter: blur(24px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
+  gap: 20px !important;
+}
+
+.theme-harmony .drop-overlay-icon {
+  font-size: 60px !important;
+}
+
+.theme-harmony .drop-overlay-text {
+  font-size: 18px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.5px !important;
+}
+
+.theme-harmony .drop-overlay-subtext {
+  font-size: 12px !important;
+}
+
+/* ═══════════════════════════════════
+   19. 滚动条 — 极简 3px
+   ═════════════════════════════════ */
+.theme-harmony ::-webkit-scrollbar {
+  width: 3px !important;
+  height: 3px !important;
+}
+
+.theme-harmony ::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.theme-harmony ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 10px !important;
+}
+
+.theme-harmony ::-webkit-scrollbar-thumb:hover {
+  background: rgba(207, 10, 44, 0.25) !important;
+}
+
+/* ═══════════════════════════════════
+   20. 选中态 & 交互特效
+   ═════════════════════════════════ */
+.theme-harmony .ios-selected::after {
+  box-shadow: inset 0 0 0 2px rgba(207, 10, 44, 0.45) !important;
+  border-radius: 14px !important;
+}
+
+.theme-harmony .ios-hover-scale {
+  transition: all 0.3s var(--hm-spring) !important;
+}
+
+.theme-harmony .ios-hover-scale:hover {
+  transform: scale(1.02) !important;
+  filter: brightness(1.05) !important;
+}
+
+.theme-harmony .ios-hover-scale:active {
+  transform: scale(0.96) !important;
+}
+
+.theme-harmony .pulsate-ios {
+  animation: pulsate-hm 2.5s infinite ease-in-out !important;
+}
+
+@keyframes pulsate-hm {
+  0% { box-shadow: 0 0 0 0 rgba(207, 10, 44, 0.40); }
+  70% { box-shadow: 0 0 0 12px rgba(207, 10, 44, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(207, 10, 44, 0); }
+}
+
+.theme-harmony .ios-selection-box {
+  background: rgba(207, 10, 44, 0.04) !important;
+  border: 1px solid rgba(207, 10, 44, 0.18) !important;
+  border-radius: 10px !important;
+}
+
+/* ═══════════════════════════════════
+   21. Trim Handle — 红色
+   ═════════════════════════════════ */
+.theme-harmony .trim-handle:hover,
+.theme-harmony .trim-handle.active {
+  background: rgba(207, 10, 44, 0.12) !important;
+}
+
+.theme-harmony .trim-handle:hover::after,
+.theme-harmony .trim-handle.active::after {
+  background: var(--hm-red) !important;
+  box-shadow: 0 0 6px rgba(207, 10, 44, 0.3) !important;
+}
+
+/* ═══════════════════════════════════
+   22. Dashboard 仪表盘 — 鸿蒙风格
+   ═════════════════════════════════ */
+.theme-harmony .dash-section {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  border-radius: 16px !important;
+  padding: 14px !important;
+}
+
+.theme-harmony .dash-section-title {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  letter-spacing: 0.3px !important;
+  color: var(--hm-text-2) !important;
+}
+
+.theme-harmony .dash-stat-card {
+  border-radius: 14px !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+  padding: 12px !important;
+}
+
+.theme-harmony .dash-stat-card:hover {
+  border-color: rgba(207, 10, 44, 0.15) !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.theme-harmony .dash-action-btn {
+  border-radius: var(--hm-capsule) !important;
+  padding: 10px 16px !important;
+  font-size: 12px !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  background: rgba(255, 255, 255, 0.025) !important;
+  transition: all 0.25s var(--hm-spring) !important;
+}
+
+.theme-harmony .dash-action-btn:hover {
+  background: var(--hm-red-soft) !important;
+  border-color: rgba(207, 10, 44, 0.15) !important;
+  transform: translateX(3px) !important;
+}
+
+/* ═══════════════════════════════════
+   23. Export Progress Overlay
+   ═════════════════════════════════ */
+.theme-harmony .export-overlay {
+  background: rgba(5, 5, 8, 0.94) !important;
+}
+
+.theme-harmony .export-progress-card {
+  border-radius: 28px !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  padding: 40px 36px !important;
+}
+
+/* ═══════════════════════════════════
+   24. 项目工具栏按钮间距
+   ═════════════════════════════════ */
+.theme-harmony .panel-header-ios button {
+  min-height: 26px !important;
+  height: 26px !important;
+  padding: 0 10px !important;
+  font-size: 10px !important;
+  border-radius: var(--hm-capsule) !important;
+}
+
+/* 搜索框胶囊化 */
+.theme-harmony input[type="search"],
+.theme-harmony input[placeholder] {
+  border-radius: var(--hm-capsule) !important;
+  border: 0.5px solid var(--hm-stroke) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  padding: 4px 14px !important;
+  min-height: 28px !important;
+}
