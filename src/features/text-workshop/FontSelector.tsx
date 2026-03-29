@@ -17,7 +17,7 @@ interface ProFontSelectProps {
 const ProFontSelect = ({ value, optGroups, onChange, style }: ProFontSelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  
+
   useEffect(() => {
     if (!isOpen) return;
     const onClick = (e: MouseEvent) => {
@@ -32,7 +32,7 @@ const ProFontSelect = ({ value, optGroups, onChange, style }: ProFontSelectProps
 
   return (
     <div ref={ref} style={{ position: 'relative', width: '100%', ...style }}>
-      <div 
+      <div
         onClick={() => setIsOpen(!isOpen)}
         style={{
           width: '100%', height: 36, boxSizing: 'border-box', display: 'flex',
