@@ -1,0 +1,14 @@
+src/App.tsx(21,1): error TS6133: 'ReactCrop' is declared but its value is never read.
+src/App.tsx(61,1): error TS6133: 'LeftPanel' is declared but its value is never read.
+src/App.tsx(187,25): error TS6133: 'setIsFullscreen' is declared but its value is never read.
+src/App.tsx(477,9): error TS6133: 'formatTime' is declared but its value is never read.
+src/App.tsx(800,9): error TS6133: 'computeFilter' is declared but its value is never read.
+src/App.tsx(801,9): error TS6133: 'computeTextStyles' is declared but its value is never read.
+src/App.tsx(1120,13): error TS2322: Type 'RefObject<HTMLSpanElement | null>' is not assignable to type 'RefObject<HTMLSpanElement>'.
+  Type 'HTMLSpanElement | null' is not assignable to type 'HTMLSpanElement'.
+    Type 'null' is not assignable to type 'HTMLSpanElement'.
+src/App.tsx(1121,13): error TS2322: Type 'RefObject<HTMLVideoElement | null>' is not assignable to type 'RefObject<HTMLVideoElement>'.
+  Type 'HTMLVideoElement | null' is not assignable to type 'HTMLVideoElement'.
+    Type 'null' is not assignable to type 'HTMLVideoElement'.
+src/components/MonitorPanel.tsx(5,28): error TS2307: Cannot find module '../utils/formatUtils' or its corresponding type declarations.
+src/components/MonitorPanel.tsx(50,10): error TS6133: 'isFullscreen' is declared but its value is never read.

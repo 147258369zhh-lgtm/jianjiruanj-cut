@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { formatTime } from '../utils/formatTime';
 import { computeFilter as computeFilterMod, computeTextStyles as computeTextStylesMod } from '../features/filter-engine/useFilter';
 import ReactCrop from 'react-image-crop';
+import './MonitorPanel.css';
 
 export const MonitorPanel: React.FC = () => {
   const {

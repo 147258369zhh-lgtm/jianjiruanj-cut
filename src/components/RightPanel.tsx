@@ -3,6 +3,7 @@ import { GlobalDefaultsPanel } from './GlobalDefaultsPanel';
 import { ImagePropertyPanel } from './ImagePropertyPanel';
 import { AudioPropertyPanel } from './AudioPropertyPanel';
 import { ExportPanel } from './ExportPanel';
+import './RightPanel.css';
 
 
 

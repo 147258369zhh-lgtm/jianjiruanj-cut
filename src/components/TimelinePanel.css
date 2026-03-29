@@ -1,0 +1,173 @@
+/* ─── 时间刻度�?(Time Ruler) ─── */
+.ios-time-ruler {
+  height: 28px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid var(--ios-hairline);
+  position: relative;
+  cursor: crosshair;
+  user-select: none;
+  overflow: hidden;
+}
+
+.ruler-tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.ruler-tick.major {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.ruler-label {
+  position: absolute;
+  top: 2px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  transform: translateX(-50%);
+  font-family: 'Inter', sans-serif;
+  pointer-events: none;
+}
+
+
+/* 选中区域 - 显著深灰（删除态） */
+.timeline-block.selected-region {
+  background: rgba(10, 11, 15, 0.98) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.3) !important;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+}
+
+/* ─── 滚动条：极简 Apple 风格 (仅运行或悬浮时显�? ─── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  transition: all 0.3s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* 时间轴横向滚动条 - 更专业的沉浸式设�?*/
+.ios-timeline ::-webkit-scrollbar {
+  height: 6px;
+}
+
+.ios-timeline ::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+  margin: 0 100px;
+  /* 两端留白，避开操作�?*/
+}
+
+.ios-timeline ::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.2);
+  border-radius: 3px;
+  border: none;
+}
+
+.ios-timeline ::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.6);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+}
+
+/* ─── 动画与触�?─── */
+.ios-btn-hover {
+  transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ios-btn-hover:hover {
+  transform: scale(1.05);
+  background: var(--ios-indigo) !important;
+}
+
+.ios-btn-hover:active {
+  transform: scale(0.96);
+}
+
+.pulsate-ios {
+  animation: pulsate-indigo 2.5s infinite ease-in-out;
+}
+
+@keyframes pulsate-indigo {
+  0% {
+    box-shadow: 0 0 0 0 rgba(94, 92, 230, 0.5);
+  }
+
+  70% {
+    box-shadow: 0 0 0 15px rgba(94, 92, 230, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(94, 92, 230, 0);
+  }
+}
+
+.floating-play-btn {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  /* 更高透玻璃质�?*/
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  color: #fff;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25), inset 0 0 15px rgba(255, 255, 255, 0.08);
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+  /* 文字阴影增强对比�?*/
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.floating-play-btn:hover {
+  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.35), inset 0 0 25px rgba(255, 255, 255, 0.15);
+}
+
+.ios-dark-select {
+  background: rgba(20, 20, 25, 0.8) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ios-dark-select:hover {
+  background-color: rgba(30, 30, 35, 0.9) !important;
+  border-color: var(--ios-indigo) !important;
+}
+
+.ios-dark-select:focus {
+  outline: none !important;
+  border-color: var(--ios-indigo) !important;
+  box-shadow: 0 0 0 2px var(--ios-indigo-glow) !important;
+}
+
+.ios-dark-select option {
+  background: #1a1a20;
+  color: #fff;

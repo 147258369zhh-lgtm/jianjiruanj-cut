@@ -2,7 +2,11 @@
 // import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import 'react-image-crop/dist/ReactCrop.css';
-import "./App.css";
+// Core Layout
+import './styles/Base.css';
+import './styles/Animations.css';
+import './styles/Inputs.css';
+import './styles/FluentOverrides.css';
 import "./Win11Theme.css";
 
 

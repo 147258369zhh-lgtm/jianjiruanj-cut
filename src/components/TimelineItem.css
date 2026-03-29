@@ -1,0 +1,50 @@
+
+/* ─── Trim Handle (卡片边缘拖拽手柄) ─── */
+.trim-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 15;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.trim-handle::after {
+  content: '';
+  width: 3px;
+  height: 24px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.5);
+  transition: background 0.2s;
+}
+
+.trim-handle:hover,
+.trim-handle.active {
+  opacity: 1;
+  background: rgba(99, 102, 241, 0.25);
+}
+
+.trim-handle:hover::after,
+.trim-handle.active::after {
+  background: var(--ios-indigo);
+  box-shadow: 0 0 8px var(--ios-indigo-glow);
+}
+
+.trim-handle-left {
+  left: 0;
+  border-radius: 12px 0 0 12px;
+}
+
+.trim-handle-right {
+  right: 0;
+  border-radius: 0 12px 12px 0;
+}
+
+/* 父元�?hover 时显示手�?*/
+.ios-btn-hover:hover .trim-handle {
+  opacity: 0.6;

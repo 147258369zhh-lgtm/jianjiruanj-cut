@@ -1,4 +1,5 @@
 import React from 'react';
+import './DropOverlay.css';
 
 export const DropOverlay: React.FC<{ isDragOver: boolean }> = ({ isDragOver }) => {
   if (!isDragOver) return null;

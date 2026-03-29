@@ -1,0 +1,68 @@
+
+/* ─── 监视器风�?─── */
+.monitor-container {
+  background: var(--ios-glass-heavy);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ios-floating-toolbar {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 15, 20, 0.85);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), var(--shadow-indigo);
+  z-index: 100;
+  transition: bottom 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.ios-timeline {
+  min-height: 370px;
+  padding-bottom: 10px;
+  background: var(--ios-glass);
+  margin-bottom: 4px;
+  overflow: visible !important;
+  user-select: none;
+  will-change: transform;
+  /* GPU 加速提�?*/
+  touch-action: none;
+  /* 防止拖拽时触发页面滚�?*/
+}
+
+.ios-play-container {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1001;
+  width: 80px;
+  /* 终极宽度�?0px，彻底解决“抓不到”的问题，同时全屏遮罩下�?hover */
+  margin-left: -40px;
+  /* (0 - 80) / 2 = -40 */
+  cursor: col-resize;
+  pointer-events: auto;
+  background: transparent;
+}
+
+.ios-play-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 38px;
+  /* 居中�?80px 容器�? (80-4)/2 = 38 */
+  width: 4px;
+  background: var(--ios-indigo);
+  box-shadow: 0 0 20px var(--ios-indigo-glow);
+  z-index: 1000;
+  pointer-events: none;
+}

@@ -6,6 +6,8 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, horizontalList
 import { restrictToParentElement, restrictToHorizontalAxis } from '@dnd-kit/modifiers';
 import { SortableImageCard } from './SortableImageCard';
 import { AudioTrackItem } from './AudioTrackItem';
+import './TimelinePanel.css';
+import './TimelineItem.css';
 
 export const TimelinePanel: React.FC = () => {
   const {

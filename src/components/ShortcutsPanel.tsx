@@ -1,4 +1,5 @@
 import React from 'react';
+import './ShortcutsPanel.css';
 
 export const ShortcutsPanel: React.FC<{ showShortcuts: boolean }> = ({ showShortcuts }) => {
   if (!showShortcuts) return null;

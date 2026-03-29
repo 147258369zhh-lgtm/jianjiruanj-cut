@@ -1,0 +1,3469 @@
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useStore } from "./store";
+import { useShallow } from 'zustand/react/shallow';
+import { useProjectHistory } from './hooks/useProjectHistory';
+
+
+import { invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
+
+import { restrictToParentElement, restrictToHorizontalAxis } from '@dnd-kit/modifiers';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import ReactCrop, { Crop } from 'react-image-crop';
+import 'react-image-crop/dist/ReactCrop.css';
+import 'react-image-crop/dist/ReactCrop.css';
+import "./App.css";
+import "./Win11Theme.css";
+
+import { Resource, AudioTimelineItem, TimelineItem, GlobalDefaults, GLOBAL_DEFAULTS_INIT, ANIMATION_PRESETS, TextOverlay } from './types';
+import ProSliderMod from './components/ProSlider';
+import { computeFilter as computeFilterMod, computeTextStyles as computeTextStylesMod } from './features/filter-engine/useFilter';
+import { FILTER_PRESETS as FILTER_PRESETS_MOD } from './features/filter-engine/filterPresets';
+import { formatTime as formatTimeMod } from './utils/formatTime';
+import ColorPicker from './features/text-workshop/ColorPicker';
+import ProFontSelectComp from './features/text-workshop/FontSelector';
+const ProFontSelect = ProFontSelectComp;
+
+// ProSlider 已迁移到 components/ProSlider.tsx
+const ProSlider = ProSliderMod;
+
+// getMediaDuration 已迁移到 utils/mediaUtils.ts
+import { getMediaDuration } from './utils/mediaUtils';
+
+// 莫兰迪绚烂色谱常量已迁移至 utils/constants
+
+// AudioWaveform 已迁移到 components/AudioWaveform.tsx
+
+// IosSelect 已迁移到 components/IosSelect.tsx
+import IosSelect from './components/IosSelect';
+
+
+
+
+// 缩略图引擎已迁移到 utils/thumbnail.ts
+import { thumbCache } from './utils/thumbnail';
+
+// ─── 子组件: 极简图片卡片 ──────────────────────────────────────────
+// SortableImageCard 已迁移到 components/SortableImageCard.tsx
+import { SortableImageCard } from './components/SortableImageCard';
+
+// AudioTrackItem 已迁移到 components/AudioTrackItem.tsx
+import { AudioTrackItem } from './components/AudioTrackItem';
+
+// ─── 子组件: iOS 资源库卡片 ──────────────────────────────────────────
+// ResourceCardItem 已迁移到 components/ResourceCardItem.tsx
+import { ResourceCardItem } from './components/ResourceCardItem';
+
+// ─── 主应用 ──────────────────────────────────────────────────────
+function App() {
+  const [pps, setPps] = useState(24);
+  const [resources, setResources] = useState<Resource[]>([
+    { id: 'lib_aud_1', name: '🎵 宁静心境 (Please Calm My Mind)', path: '/audio/please-calm-my-mind.mp3', type: 'audio' },
+    { id: 'lib_aud_2', name: '🎹 遗忘的华尔兹 (Forgotten Waltz)', path: '/audio/forgotten-waltz.mp3', type: 'audio' },
+    { id: 'lib_aud_3', name: '🌿 钢琴小品 (Piano Music)', path: '/audio/piano-music.mp3', type: 'audio' },
+    { id: 'lib_aud_4', name: '✨ 温柔恬静 (Calm Soft)', path: '/audio/calm-soft.mp3', type: 'audio' },
+    { id: 'lib_aud_5', name: '🌊 柔和背景 (Background Soft Calm)', path: '/audio/background-soft-calm.mp3', type: 'audio' },
+  ]);
+
+  const {
+    state: project,
+    setTimeline,
+    setAudioItems,
+    setVoiceoverClips,
+    undo,
+    redo,
+    historyLength,
+    redoLength,
+    commitSnapshotNow
+  } = useProjectHistory({ timeline: [], audioItems: [], voiceoverClips: [] });
+
+  const timeline = project.timeline;
+  const audioItems = project.audioItems;
+  const voiceoverClips = project.voiceoverClips;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedTextIds, setSelectedTextIds] = useState<Set<string>>(new Set()); // 文字图层多选集合
+  const [selectedAudioIds, setSelectedAudioIds] = useState<Set<string>>(new Set());
+  const [selectedVoiceoverIds, setSelectedVoiceoverIds] = useState<Set<string>>(new Set());
+  const [selectedResourceIds, setSelectedResourceIds] = useState<Set<string>>(new Set());
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playTime, setPlayTime] = useState(0);
+  const {
+    activeTab, setActiveTab,
+    propertyTab, setPropertyTab,
+    libTab, setLibTab,
+    leftTab, setLeftTab,
+    statusMsg, setStatusMsg,
+    showShortcuts, setShowShortcuts,
+    showSortMenu, setShowSortMenu,
+    showExportPanel, setShowExportPanel,
+    showGlobalDefaults, setShowGlobalDefaults,
+    showMoreMenu, setShowMoreMenu,
+    isEditingProjectName, setIsEditingProjectName,
+    isDragOver, setIsDragOver,
+    isGenerating, setIsGenerating,
+    contextMenu, setContextMenu,
+    selectionBox, setSelectionBox,
+    crop, setCrop,
+    isCropping, setIsCropping,
+    isEditingAudio, setIsEditingAudio,
+    isDraggingHead, setIsDraggingHead,
+    isJumping, setIsJumping,
+    localDuration, setLocalDuration,
+    theme, setTheme,
+    exportFormat, setExportFormat,
+    exportResolution, setExportResolution,
+    exportFps, setExportFps,
+    exportQuality, setExportQuality,
+    exportCodec, setExportCodec,
+    exportHdr, setExportHdr
+  } = useStore(useShallow(state => ({
+    activeTab: state.activeTab, setActiveTab: state.setActiveTab,
+    propertyTab: state.propertyTab, setPropertyTab: state.setPropertyTab,
+    libTab: state.libTab, setLibTab: state.setLibTab,
+    leftTab: state.leftTab, setLeftTab: state.setLeftTab,
+    statusMsg: state.statusMsg, setStatusMsg: state.setStatusMsg,
+    showShortcuts: state.showShortcuts, setShowShortcuts: state.setShowShortcuts,
+    showSortMenu: state.showSortMenu, setShowSortMenu: state.setShowSortMenu,
+    showExportPanel: state.showExportPanel, setShowExportPanel: state.setShowExportPanel,
+    showGlobalDefaults: state.showGlobalDefaults, setShowGlobalDefaults: state.setShowGlobalDefaults,
+    showMoreMenu: state.showMoreMenu, setShowMoreMenu: state.setShowMoreMenu,
+    isEditingProjectName: state.isEditingProjectName, setIsEditingProjectName: state.setIsEditingProjectName,
+    isDragOver: state.isDragOver, setIsDragOver: state.setIsDragOver,
+    isGenerating: state.isGenerating, setIsGenerating: state.setIsGenerating,
+    contextMenu: state.contextMenu, setContextMenu: state.setContextMenu,
+    selectionBox: state.selectionBox, setSelectionBox: state.setSelectionBox,
+    crop: state.crop, setCrop: state.setCrop,
+    isCropping: state.isCropping, setIsCropping: state.setIsCropping,
+    isEditingAudio: state.isEditingAudio, setIsEditingAudio: state.setIsEditingAudio,
+    isDraggingHead: state.isDraggingHead, setIsDraggingHead: state.setIsDraggingHead,
+    isJumping: state.isJumping, setIsJumping: state.setIsJumping,
+    localDuration: state.localDuration, setLocalDuration: state.setLocalDuration,
+    theme: state.theme, setTheme: state.setTheme,
+    exportFormat: state.exportFormat, setExportFormat: state.setExportFormat,
+    exportResolution: state.exportResolution, setExportResolution: state.setExportResolution,
+    exportFps: state.exportFps, setExportFps: state.setExportFps,
+    exportQuality: state.exportQuality, setExportQuality: state.setExportQuality,
+    exportCodec: state.exportCodec, setExportCodec: state.setExportCodec,
+    exportHdr: state.exportHdr, setExportHdr: state.setExportHdr
+  })));
+
+  const {
+    projectName, setProjectName,
+    sortMode, setSortMode,
+    sortDirection, setSortDirection,
+    globalDefaults, setGlobalDefaults,
+    monitorRes, setMonitorRes
+  } = useStore(useShallow(state => ({
+    projectName: state.projectName, setProjectName: state.setProjectName,
+    sortMode: state.sortMode, setSortMode: state.setSortMode,
+    sortDirection: state.sortDirection, setSortDirection: state.setSortDirection,
+    globalDefaults: state.globalDefaults, setGlobalDefaults: state.setGlobalDefaults,
+    monitorRes: state.monitorRes, setMonitorRes: state.setMonitorRes
+  })));
+
+  // AI 配音相关状态
+  const [musicSubTab, setMusicSubTab] = useState<'audio' | 'tts'>('audio');
+  const [ttsText, setTtsText] = useState('');
+  const [ttsVoice, setTtsVoice] = useState('zh-CN-YunyangNeural');
+  const [ttsRate, setTtsRate] = useState('+0%');
+  const [ttsGenerating, setTtsGenerating] = useState(false);
+  const [generatedVoiceovers, setGeneratedVoiceovers] = useState<{ id: string; name: string; path: string; duration: number; selected: boolean }[]>([]);
+
+  // 导出设置 (已迁移至 Zustand)
+
+  // 裁切编辑 (已迁移至 Zustand)
+
+  // 音频剪辑 (已迁移至 Zustand)
+
+  // 播放指针拖拽 (已迁移至 Zustand)
+  const [audioBlobs, setAudioBlobs] = useState<{ [id: string]: string }>({}); // 核心：URL 映射缓存
+  const [previewCache, setPreviewCache] = useState<{ [path: string]: string }>({}); // RAW 预览图映射缓存
+  const lastScrubTimeRef = useRef<number>(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [_isFullscreen, setIsFullscreen] = useState(false);
+
+  // ─── 改版新增状态 ────────────────────────────────────────────────────
+  const [_showAdvancedExport, _setShowAdvancedExport] = useState(false);
+
+  // ─── 全局默认值系统 (任务6) ──────────────────────────────────────────
+  const globalDefaultsRef = useRef(globalDefaults);
+  globalDefaultsRef.current = globalDefaults;
+
+  // 检查字段是否被覆盖
+  const isOverridden = useCallback((item: TimelineItem, key: string) => {
+    return item.overrides?.includes(key) ?? false;
+  }, []);
+
+  // 监听退出全屏
+  useEffect(() => {
+    const onFsChange = () => { if (!document.fullscreenElement) setIsFullscreen(false); };
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
+  }, []);
+
+  // ─── 智能面部检测引擎 WebWorker ─────────────────────────
+  const faceWorkerRef = useRef<Worker | null>(null);
+  
+  useEffect(() => {
+    faceWorkerRef.current = new Worker(new URL('./workers/faceDetector.worker.ts', import.meta.url), { type: 'module' });
+    faceWorkerRef.current.onmessage = (e) => {
+      const { id, focusX, focusY, found } = e.data;
+      setResources(prev => prev.map(r => r.id === id ? { ...r, focusX, focusY, hasFace: found } : r));
+    };
+    return () => faceWorkerRef.current?.terminate();
+  }, []);
+
+  // ─── 性能优化：状态 Ref (消除播放时级联重渲染) ─────────────────
+  const timelineRef = useRef(timeline);
+  timelineRef.current = timeline;
+  const audioItemsRef = useRef(audioItems);
+  audioItemsRef.current = audioItems;
+  const selectedIdsRef = useRef(selectedIds);
+  selectedIdsRef.current = selectedIds;
+  const selectedAudioIdsRef = useRef(selectedAudioIds);
+  selectedAudioIdsRef.current = selectedAudioIds;
+  const selectedVoiceoverIdsRef = useRef(selectedVoiceoverIds);
+  selectedVoiceoverIdsRef.current = selectedVoiceoverIds;
+  const resourcesRef = useRef(resources);
+  resourcesRef.current = resources;
+  const ppsRef = useRef(pps);
+  ppsRef.current = pps;
+
+  // 恢复单个字段的继承 (全局覆盖模型)
+  const restoreInheritance = useCallback((itemId: string, key: keyof GlobalDefaults) => {
+    commitSnapshotNow();
+    setTimeline(prev => prev.map(t => {
+      if (t.id === itemId || selectedIdsRef.current.has(t.id)) {
+        const newOverrides = (t.overrides || []).filter(k => k !== key);
+        return { ...t, [key]: globalDefaults[key], overrides: newOverrides };
+      }
+      return t;
+    }));
+    setStatusMsg(`🔗 已恢复「${key}」为全局默认值`); setTimeout(() => setStatusMsg(''), 1500);
+  }, [globalDefaults, commitSnapshotNow, setTimeline]);
+
+  // ─── 滤镜预设 (已迁移到 features/filter-engine/filterPresets.ts) ───
+  const FILTER_PRESETS = FILTER_PRESETS_MOD;
+  // ─── 收藏预设管理 ───────────────────────────────────────────────
+  const [favTrans, setFavTrans] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('__editor_fav_trans__') || '[]'); } catch { return []; }
+  });
+  const [favAnims, setFavAnims] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('__editor_fav_anims__') || '[]'); } catch { return []; }
+  });
+
+  const toggleFavTrans = useCallback((val: string) => {
+    setFavTrans(prev => {
+      const next = prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val];
+      localStorage.setItem('__editor_fav_trans__', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const toggleFavAnim = useCallback((val: string) => {
+    setFavAnims(prev => {
+      const next = prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val];
+      localStorage.setItem('__editor_fav_anims__', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const playheadRef = useRef<HTMLDivElement>(null); // 指针 DOM 引用
+  const libScrollRef = useRef<HTMLDivElement>(null);
+  const [libScrollTop, setLibScrollTop] = useState(0);
+  const timeTextRef = useRef<HTMLSpanElement>(null); // 时间文字 DOM 引用
+  const monitorVideoRef = useRef<HTMLVideoElement>(null); // 预览区视频元素引用
+  const clickTimesRef = useRef<number[]>([]); // 用于记录点击时间戳实现三击
+
+  const audioElsRef = useRef<{ [id: string]: HTMLAudioElement }>({});
+  const lastSyncTimeRef = useRef<number>(0);
+  // 性能优化：将 playTime 同步到 ref，供音频同步 RAF 循环读取
+  const playTimeRef = useRef(playTime);
+  playTimeRef.current = playTime;
+
+  // ─── 播放头位置分割片段 (ref-based, 零依赖) ──────────────────
+  const splitAtPlayhead = useCallback(() => {
+    const pt = playTimeRef.current;
+    let splitted = false;
+    commitSnapshotNow();
+
+    const selectedViz = selectedIdsRef.current;
+    const selectedAud = selectedAudioIdsRef.current;
+    const selectedVO = selectedVoiceoverIdsRef.current;
+    const noSelection = selectedViz.size === 0 && selectedAud.size === 0 && selectedVO.size === 0;
+
+    // 1. 尝试分割视频轨
+    if (noSelection || selectedViz.size > 0) {
+      const tl = timelineRef.current;
+      let accDur = 0;
+      for (let i = 0; i < tl.length; i++) {
+          const item = tl[i];
+          const isTarget = pt > accDur + 0.2 && pt < accDur + item.duration - 0.2;
+          const canSplit = noSelection || selectedViz.has(item.id);
+          if (isTarget && canSplit) {
+              const splitPoint = pt - accDur;
+              const left = { ...item, duration: splitPoint, id: `tm_${Date.now()}_L` };
+              const right = { ...item, duration: item.duration - splitPoint, id: `tm_${Date.now()}_R` };
+              setTimeline(prev => [...prev.slice(0, i), left, right, ...prev.slice(i + 1)]);
+              splitted = true;
+              break; 
+          }
+          accDur += item.duration;
+      }
+    }
+
+    // 2. 尝试分割音频轨
+    if (noSelection || selectedAud.size > 0) {
+      setAudioItems(prev => {
+          let changed = false;
+          const result: any[] = [];
+          for (const item of prev) {
+              const isTarget = pt > item.timelineStart + 0.2 && pt < item.timelineStart + item.duration - 0.2;
+              const canSplit = noSelection || selectedAud.has(item.id);
+              if (isTarget && canSplit) {
+                  const splitPoint = pt - item.timelineStart;
+                  const left = { ...item, duration: splitPoint, id: `au_${Date.now()}_${Math.random().toString().slice(2, 6)}_L` };
+                  const right = { ...item, duration: item.duration - splitPoint, timelineStart: pt, startOffset: (item.startOffset||0) + splitPoint, id: `au_${Date.now()}_${Math.random().toString().slice(2, 6)}_R` };
+                  result.push(left, right);
+                  changed = true;
+                  splitted = true;
+              } else {
+                  result.push(item);
+              }
+          }
+          return changed ? result : prev;
+      });
+    }
+
+    // 3. 尝试分割配音轨
+    if (noSelection || selectedVO.size > 0) {
+      setVoiceoverClips(prev => {
+          let changed = false;
+          const result: any[] = [];
+          for (const clip of prev) {
+              const isTarget = pt > clip.timelineStart + 0.2 && pt < clip.timelineStart + clip.duration - 0.2;
+              const canSplit = noSelection || selectedVO.has(clip.id);
+              if (isTarget && canSplit) {
+                  const splitPoint = pt - clip.timelineStart;
+                  const left = { ...clip, duration: splitPoint, id: `vo_${Date.now()}_${Math.random().toString().slice(2, 6)}_L` };
+                  const right = { ...clip, duration: clip.duration - splitPoint, timelineStart: pt, startOffset: (clip.startOffset||0) + splitPoint, id: `vo_${Date.now()}_${Math.random().toString().slice(2, 6)}_R` };
+                  result.push(left, right);
+                  changed = true;
+                  splitted = true;
+              } else {
+                  result.push(clip);
+              }
+          }
+          return changed ? result : prev;
+      });
+    }
+
+    if (splitted) {
+        setStatusMsg('✂️ 已切断播放头下的所选片段');
+    } else {
+        setStatusMsg('⚠️ 没有可供切割的片段（请确认选中状态及位置）');
+    }
+    setTimeout(() => setStatusMsg(''), 1500);
+  }, [commitSnapshotNow]);
+
+  // ─── 工程保存/加载 (ref-based) ─────────────────────────────────
+  const saveProject = useCallback(async () => {
+    const projectData = JSON.stringify({
+      resources: resourcesRef.current,
+      timeline: timelineRef.current,
+      audioItems: audioItemsRef.current,
+      pps: ppsRef.current
+    }, null, 2);
+    const outputPath = await save({ filters: [{ name: '工程文件', extensions: ['proj.json'] }] });
+    if (!outputPath) return;
+    try {
+      await invoke('write_file', { path: outputPath, content: projectData });
+      setStatusMsg('💾 工程已保存'); setTimeout(() => setStatusMsg(''), 2000);
+    } catch {
+      localStorage.setItem('__editor_project__', projectData);
+      setStatusMsg('💾 工程已保存到本地缓存'); setTimeout(() => setStatusMsg(''), 2000);
+    }
+  }, []);
+
+  const loadProject = useCallback(async () => {
+    const selected = await open({ filters: [{ name: '工程文件', extensions: ['proj.json', 'json'] }] });
+    if (!selected) return;
+    try {
+      const path = typeof selected === 'string' ? selected : (selected as any).path;
+      const content = await invoke<string>('read_file', { path });
+      const data = JSON.parse(content);
+      if (data.resources) setResources(data.resources);
+      if (data.timeline) setTimeline(data.timeline);
+      if (data.audioItems) setAudioItems(data.audioItems);
+      if (data.pps) setPps(data.pps);
+      setStatusMsg('📂 工程已加载'); setTimeout(() => setStatusMsg(''), 2000);
+    } catch {
+      const cached = localStorage.getItem('__editor_project__');
+      if (cached) {
+        const data = JSON.parse(cached);
+        if (data.resources) setResources(data.resources);
+        if (data.timeline) setTimeline(data.timeline);
+        if (data.audioItems) setAudioItems(data.audioItems);
+        if (data.pps) setPps(data.pps);
+        setStatusMsg('📂 已从本地缓存恢复'); setTimeout(() => setStatusMsg(''), 2000);
+      } else {
+        setStatusMsg('❌ 加载失败'); setTimeout(() => setStatusMsg(''), 2000);
+      }
+    }
+  }, []);
+
+  // ─── 自动保存 (每60秒) ───────────────────────────────────────────
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (timelineRef.current.length > 0 || audioItemsRef.current.length > 0) {
+        localStorage.setItem('__editor_autosave__', JSON.stringify({
+          resources: resourcesRef.current,
+          timeline: timelineRef.current,
+          audioItems: audioItemsRef.current,
+          pps: ppsRef.current
+        }));
+      }
+    }, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 启动时检查自动保存
+  useEffect(() => {
+    const saved = localStorage.getItem('__editor_autosave__');
+    if (saved) {
+      try {
+        const data = JSON.parse(saved);
+        if (data.timeline?.length > 0 || data.audioItems?.length > 0) {
+          setStatusMsg('💡 发现自动保存数据 (上次会话)');
+        }
+      } catch { /* ignore */ }
+    }
+  }, []);
+
+  // 恢复：时间轴播放跟随同步联动
+  useEffect(() => {
+    if (isPlaying && timelineScrollRef.current) {
+      const containerWidth = timelineScrollRef.current.clientWidth;
+      const targetScroll = (playTime * 10) - (containerWidth / 2);
+      if (Math.abs(timelineScrollRef.current.scrollLeft - targetScroll) > 5) {
+         timelineScrollRef.current.scrollLeft = Math.max(0, targetScroll);
+      }
+    }
+  }, [playTime, isPlaying]);
+
+  // 恢复：选择图片片段时时间轴自动居中定位
+  useEffect(() => {
+    if (!isPlaying && selectedIds.size === 1 && timelineScrollRef.current) {
+      const id = Array.from(selectedIds)[0];
+      let start = 0;
+      for (let i = 0; i < timeline.length; i++) {
+        if (timeline[i].id === id) {
+          const center = (start + timeline[i].duration / 2) * 10;
+          const cw = timelineScrollRef.current.clientWidth;
+          timelineScrollRef.current.scrollTo({ left: Math.max(0, center - cw/2), behavior: 'smooth' });
+          break;
+        }
+        start += timeline[i].duration;
+      }
+    }
+  }, [selectedIds, isPlaying, timeline]);
+
+  // ─── 全局快捷键系统 (ref-based, 零依赖 — 消除播放卡顿) ────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        setIsPlaying(prev => !prev);
+        return;
+      }
+
+      if (e.code === 'Delete' || e.code === 'Backspace') {
+        e.preventDefault();
+        if (selectedIdsRef.current.size > 0) {
+          commitSnapshotNow();
+          setTimeline(p => p.filter(t => !selectedIdsRef.current.has(t.id)));
+          setSelectedIds(new Set());
+        }
+        if (selectedAudioIdsRef.current.size > 0) {
+          commitSnapshotNow();
+          setAudioItems(p => p.filter(a => !selectedAudioIdsRef.current.has(a.id)));
+          setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set());
+        }
+        return;
+      }
+
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+        e.preventDefault();
+        const step = e.shiftKey ? 1.0 : 0.1;
+        const delta = e.code === 'ArrowLeft' ? -step : step;
+        setPlayTime(prev => Math.max(0, prev + delta));
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        if (e.code === 'KeyZ') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+        if (e.code === 'KeyY') { e.preventDefault(); redo(); return; }
+        if (e.code === 'KeyA') { e.preventDefault(); setSelectedIds(new Set(timelineRef.current.map(t => t.id))); return; }
+        if (e.code === 'KeyS') { e.preventDefault(); saveProject(); return; }
+        if (e.code === 'KeyO') { e.preventDefault(); loadProject(); return; }
+        if (e.code === 'KeyB') { e.preventDefault(); splitAtPlayhead(); return; }
+      }
+
+      // Home/End 跳转时间轴开头/末尾 (任务12)
+      if (e.code === 'Home') { e.preventDefault(); setPlayTime(0); return; }
+      if (e.code === 'End') {
+        e.preventDefault();
+        const total = timelineRef.current.reduce((s, t) => s + t.duration, 0);
+        setPlayTime(total); return;
+      }
+
+      // [ / ] 调整选中项时长 (任务12)
+      if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
+        if (selectedIdsRef.current.size > 0) {
+          e.preventDefault();
+          const delta = e.code === 'BracketLeft' ? -0.5 : 0.5;
+          commitSnapshotNow();
+          setTimeline(p => p.map(t => selectedIdsRef.current.has(t.id) ? { ...t, duration: Math.max(0.3, t.duration + delta) } : t));
+          return;
+        }
+      }
+
+      // ? = 快捷键提示面板
+      if (e.key === '?' || e.code === 'Slash') {
+        setShowShortcuts(prev => !prev);
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [commitSnapshotNow, undo, redo, splitAtPlayhead, saveProject, loadProject]);
+
+  // ─── 拖拽导入文件 ──────────────────────────────────────────────
+  useEffect(() => {
+    let dragCounter = 0;
+    const handleDragEnter = (e: DragEvent) => { e.preventDefault(); dragCounter++; setIsDragOver(true); };
+    const handleDragLeave = (e: DragEvent) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; setIsDragOver(false); } };
+    const handleDragOver = (e: DragEvent) => { e.preventDefault(); };
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter = 0;
+      setIsDragOver(false);
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
+
+      const imageExts = ['png', 'jpg', 'jpeg', 'webp', 'dng'];
+      const audioExts = ['mp3', 'wav', 'm4a'];
+      const newResources: Resource[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        let type: 'image' | 'audio' | null = null;
+        if (imageExts.includes(ext)) type = 'image';
+        else if (audioExts.includes(ext)) type = 'audio';
+        if (type) {
+          newResources.push({
+            id: `res_drop_${Date.now()}_${i}`,
+            name: file.name,
+            path: (file as any).path || file.name, // Tauri 提供 path
+            type,
+          });
+        }
+      }
+
+      if (newResources.length > 0) {
+        setResources(prev => [...prev, ...newResources]);
+        setStatusMsg(`📥 已导入 ${newResources.length} 个素材文件`);
+        setTimeout(() => setStatusMsg(''), 2000);
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', handleDrop);
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, []);
+
+  // ─── 时间轴 Ctrl+滚轮 缩放 ──────────────────────────────────────
+  const handleTimelineWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -4 : 4;
+      setPps(prev => Math.max(8, Math.min(120, prev + delta)));
+    }
+  }, []);
+
+
+
+  // 性能优化：资源 Map 索引 (O(1) 查找替代 O(n) 遍历)
+  const resourceMap = useMemo(() => new Map(resources.map(r => [r.id, r])), [resources]);
+    // 1. 核心：高性能播放引擎 (RequestAnimationFrame + DOM 脱芀)
+  // 性能优化：移除 timeline/pps 依赖，改用 ref 读取——防止大量照片时每次 timeline 变化都重建 RAF 循环
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    let rafId: number;
+    const startTs = performance.now();
+    const baseTime = playTimeRef.current; // 直接从 ref 读初始时间，避免闭包捕获
+
+    const tick = () => {
+      const tl = timelineRef.current;   // 每帧从 ref 读取最新数据
+      const currentPps = ppsRef.current;
+      const elapsed = (performance.now() - startTs) / 1000 * playbackSpeed;
+      const currentT = baseTime + elapsed;
+
+      // 读取 maxPlayTime（不放入 deps，直接计算）
+      const maxAudio = audioItemsRef.current.length > 0
+        ? Math.max(...audioItemsRef.current.map(a => a.timelineStart + a.duration))
+        : 0;
+      const maxT = tl.reduce((s, t) => s + t.duration, 0);
+      const maxPt = Math.max(maxT, maxAudio) + 0.01;
+
+      if (currentT >= maxPt && maxPt > 0.02) {
+        setPlayTime(maxPt);
+        setIsPlaying(false);
+        return;
+      }
+
+      // 直接操作 DOM，绕过 React 重绘
+      if (playheadRef.current) {
+        let accX = 0;
+        let accDur = 0;
+        let found = false;
+        for (let i = 0; i < tl.length; i++) {
+          const itemDur = tl[i].duration;
+          if (currentT >= accDur && currentT < accDur + itemDur) {
+            accX += (currentT - accDur) * currentPps;
+            found = true;
+            break;
+          }
+          accDur += itemDur;
+          accX += (itemDur * currentPps) + 4;
+        }
+        if (!found) {
+          const overflowDur = currentT - accDur;
+          accX += (overflowDur * currentPps) - (tl.length > 0 ? 4 : 0);
+        }
+        playheadRef.current.style.transform = `translateX(${60 + accX}px)`;
+
+        const scrollEl = timelineScrollRef.current;
+        if (scrollEl) {
+          const headX = 60 + accX;
+          const viewLeft = scrollEl.scrollLeft;
+          const viewRight = viewLeft + scrollEl.clientWidth;
+          if (headX > viewRight - 100) {
+            scrollEl.scrollLeft = headX - scrollEl.clientWidth / 2;
+          } else if (headX < viewLeft + 60) {
+            scrollEl.scrollLeft = Math.max(0, headX - 100);
+          }
+        }
+      }
+
+      if (timeTextRef.current) {
+        timeTextRef.current.textContent = formatTime(currentT);
+      }
+
+      playTimeRef.current = currentT;
+
+      if (performance.now() - lastSyncTimeRef.current > 1000) {
+        setPlayTime(currentT);
+        lastSyncTimeRef.current = performance.now();
+      }
+
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(rafId);
+      const finalElapsed = (performance.now() - startTs) / 1000;
+      setPlayTime(baseTime + finalElapsed * playbackSpeed);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, playbackSpeed]);
+
+  // 性能优化：已添加资源 ID 集合 (替代 timeline.some() + audioItems.some())
+  const addedResourceIds = useMemo(() => new Set([...timeline.map(t => t.resourceId), ...audioItems.map(a => a.resourceId)]), [timeline, audioItems]);
+
+  // 1b. 自动资源预热引擎 (Blob 转换 — 兼容 Tauri WebView2 音频播放)
+  useEffect(() => {
+    resources.filter(r => r.type === 'audio').forEach(res => {
+      if (audioBlobs[res.id]) return;
+      let fetchUrl: string;
+      if (res.path.startsWith('http') || res.path.startsWith('blob:')) {
+        fetchUrl = res.path;
+      } else if (res.path.startsWith('/')) {
+        fetchUrl = res.path;
+      } else {
+        fetchUrl = convertFileSrc(res.path);
+      }
+      fetch(fetchUrl)
+        .then(r => r.blob())
+        .then(blob => {
+          const url = URL.createObjectURL(blob);
+          setAudioBlobs(prev => ({ ...prev, [res.id]: url }));
+        })
+        .catch(e => console.warn(`[Audio Blob] 预热失败: ${res.name}`, fetchUrl, e));
+    });
+  }, [resources, audioBlobs]);
+
+  // DNG 预览缓存
+  useEffect(() => {
+    resources.filter(r => r.type === 'image' && r.path.toLowerCase().endsWith('.dng')).forEach(res => {
+      if (previewCache[res.path]) return;
+      invoke('get_preview_url', { path: res.path })
+        .then((url: any) => {
+          setPreviewCache(prev => ({ ...prev, [res.path]: url }));
+        })
+        .catch(e => console.error(`Failed to fetch DNG preview for ${res.name}`, e));
+    });
+  }, [resources, previewCache]);
+
+  const getEffectiveSrc = (path: string) => {
+    if (path.toLowerCase().endsWith('.dng')) {
+      const p = previewCache[path];
+      return p ? (p.startsWith('http') || p.startsWith('blob:') ? p : convertFileSrc(p)) : '';
+    }
+    return convertFileSrc(path);
+  };
+
+  // 计算整个工程的物理最远时间点
+  const maxPlayTime = useMemo(() => {
+    const maxT = timeline.length > 0 ? timeline.reduce((acc, t) => acc + t.duration, 0) : 0;
+    const maxA = audioItems.length > 0 ? Math.max(...audioItems.map(a => a.timelineStart + a.duration)) : 0;
+    return Math.max(maxT, maxA) + 0.01;
+  }, [timeline, audioItems]);
+
+  // 精确计算 playLine 的左边距，修复 `gap: 4px` 造成的误差
+  const playLineLeft = useMemo(() => {
+    let accDur = 0;
+    let accX = 0;
+
+    for (let i = 0; i < timeline.length; i++) {
+      const itemDur = timeline[i].duration;
+      if (playTime >= accDur && playTime < accDur + itemDur) {
+        const localOffset = (playTime - accDur) * pps;
+        return 60 + accX + localOffset;
+      }
+      accDur += itemDur;
+      accX += (itemDur * pps); // 取消 gap 距离以严格对齐音轨
+    }
+
+    // 如果超出了所有图片的边界（比如正在纯放音频）
+    if (playTime >= accDur) {
+      const overflowDur = playTime - accDur;
+      return 60 + accX + (overflowDur * pps);
+    }
+    return 60;
+  }, [playTime, timeline, pps]);
+
+  // 三连击检测算法
+  const handleTripleClickZone = () => {
+    const now = Date.now();
+    clickTimesRef.current.push(now);
+
+    // 只保留最近 3 次点击
+    if (clickTimesRef.current.length > 3) {
+      clickTimesRef.current.shift();
+    }
+
+    // 检查是否凑齐了三次，且头尾点击间隔在 500ms 内
+    if (clickTimesRef.current.length === 3) {
+      const duration = clickTimesRef.current[2] - clickTimesRef.current[0];
+      if (duration < 500) {
+        setPlayTime(0);
+        setIsPlaying(false);
+        setStatusMsg(' ⚡ 三击重置，指针归零');
+        setTimeout(() => setStatusMsg(''), 1500);
+        clickTimesRef.current = []; // 触发后清空池子
+      }
+    }
+  };
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }), useSensor(KeyboardSensor));
+
+  // formatTime 已迁移到 utils/formatTime.ts
+  const formatTime = formatTimeMod;
+
+
+
+  // playTimeRef 已在上方声明并持续同步
+
+  // 性能优化：音频同步使用独立 RAF 循环，避免依赖高频 playTime state 更新
+  useEffect(() => {
+    if (!isPlaying) {
+      Object.values(audioElsRef.current).forEach(a => {
+        try { a.pause(); } catch (e) { }
+      });
+      return;
+    }
+
+    let audioRafId: number;
+    const syncAudio = () => {
+      const currentPlayTime = playTimeRef.current;
+
+      audioItems.forEach(item => {
+        const res = resourceMap.get(item.resourceId);
+        if (!res) return;
+
+        // 优先用 blob 缓存，其次判断路径类型
+        const playPath = audioBlobs[res.id]
+          || (res.path.startsWith('http') || res.path.startsWith('/') || res.path.startsWith('blob:')
+            ? res.path
+            : convertFileSrc(res.path));
+
+        let audio = audioElsRef.current[item.id];
+        if (!audio || (audio.src !== playPath && !audio.src.startsWith('blob:'))) {
+          if (audio) { audio.pause(); audio.src = ""; }
+          audio = new Audio();
+          // 仅对外部 URL 设置 crossOrigin，Tauri asset 协议不需要
+          if (playPath.startsWith('http') && !playPath.includes('asset.localhost')) {
+            audio.crossOrigin = 'anonymous';
+          }
+          audio.preload = 'auto';
+          audio.src = playPath;
+          audio.onerror = (e) => console.warn('[Audio Error]', item.id, playPath, e);
+          audioElsRef.current[item.id] = audio;
+        }
+
+        const itemEnd = item.timelineStart + item.duration;
+        const targetPos = item.startOffset + (currentPlayTime - item.timelineStart);
+
+        if (currentPlayTime >= item.timelineStart && currentPlayTime < itemEnd) {
+          // 计算淡入淡出音量 (任务7)
+          const baseVol = item.volume ?? 1.0;
+          const elapsed = currentPlayTime - item.timelineStart;
+          const remaining = itemEnd - currentPlayTime;
+          const fi = item.fadeIn || 0;
+          const fo = item.fadeOut || 0;
+          let fadeMul = 1.0;
+          if (fi > 0 && elapsed < fi) fadeMul = Math.min(fadeMul, elapsed / fi);
+          if (fo > 0 && remaining < fo) fadeMul = Math.min(fadeMul, remaining / fo);
+          const effectiveVol = Math.max(0, Math.min(1, baseVol * fadeMul));
+
+          if (audio.paused) {
+            audio.currentTime = targetPos;
+            audio.volume = effectiveVol;
+            const p = audio.play();
+            if (p) p.catch(() => { });
+          } else {
+            // 放宽容差到 0.5s，避免频繁 seek 导致反复卡顿
+            if (Math.abs(audio.currentTime - targetPos) > 0.5) {
+              audio.currentTime = targetPos;
+            }
+            audio.volume = effectiveVol;
+          }
+        } else {
+          if (!audio.paused) audio.pause();
+        }
+      });
+      // 配音轨同步播放
+      voiceoverClips.forEach((clip: any) => {
+        const playPath = convertFileSrc(clip.path);
+        let audio = audioElsRef.current[clip.id];
+        if (!audio) {
+          audio = new Audio();
+          audio.preload = 'auto';
+          audio.src = playPath;
+          audio.onerror = (e) => console.warn('[VO Error]', clip.id, e);
+          audioElsRef.current[clip.id] = audio;
+        }
+        const itemEnd = clip.timelineStart + clip.duration;
+        const targetPos = (clip.startOffset || 0) + (currentPlayTime - clip.timelineStart);
+        if (currentPlayTime >= clip.timelineStart && currentPlayTime < itemEnd) {
+          const vol = clip.volume ?? 1.0;
+          if (audio.paused) {
+            audio.currentTime = targetPos;
+            audio.volume = vol;
+            const p = audio.play(); if (p) p.catch(() => {});
+          } else {
+            if (Math.abs(audio.currentTime - targetPos) > 0.5) audio.currentTime = targetPos;
+            audio.volume = vol;
+          }
+        } else {
+          if (!audio.paused) audio.pause();
+        }
+      });
+
+      audioRafId = requestAnimationFrame(syncAudio);
+    };
+
+    audioRafId = requestAnimationFrame(syncAudio);
+    return () => cancelAnimationFrame(audioRafId);
+  }, [isPlaying, audioItems, resourceMap, audioBlobs, voiceoverClips]);
+
+  const togglePlay = () => {
+    const nextState = !isPlaying;
+    if (nextState) setStatusMsg("");
+    setIsPlaying(nextState);
+  };
+
+  const updateSelectedProperty = (key: keyof TimelineItem, val: any) => {
+    if (selectedIds.size === 0) return;
+    
+    const textRelatedKeys = ['overlayText', 'fontFamily', 'fontColor', 'fontSize', 'fontWeight', 'textAlign', 'textBg', 'textBgPadding', 'textBgRadius', 'textShadowColor', 'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY', 'textStrokeColor', 'textStrokeWidth', 'textGlow', 'textGlowColor', 'textGlowRadius', 'textLetterSpacing', 'textLineHeight', 'textOpacity', 'textRotation', 'textX', 'textY', 'textAnimation', 'textAnimDuration'];
+    
+    setTimeline(prev => prev.map(t => {
+      if (!selectedIds.has(t.id)) return t;
+
+      // 核心业务：当用户选定了一个或多个 TextOverlay，且修改的是文字专属属性时，仅改变子图层
+      if (selectedTextIds.size > 0 && textRelatedKeys.includes(key as string)) {
+        let textKey = key as keyof TextOverlay;
+        if (key === 'overlayText') textKey = 'text'; // 兼容字段
+        
+        const newOverlays = (t.textOverlays || []).map(layer => {
+          if (selectedTextIds.has(layer.id)) {
+            return { ...layer, [textKey]: val };
+          }
+          return layer;
+        });
+        return { ...t, textOverlays: newOverlays };
+      }
+
+      // 全局修改，影响整体主属
+      const globalKeys: string[] = Object.keys(GLOBAL_DEFAULTS_INIT);
+      if (globalKeys.includes(key as string)) {
+        const newOverrides = Array.from(new Set([...(t.overrides || []), key as string]));
+        return { ...t, [key]: val, overrides: newOverrides };
+      }
+      return { ...t, [key]: val };
+    }));
+  };
+
+  // Slider 撤销保护：拖动前压栈，拖动结束后自动保存
+  const sliderUndoFlag = useRef(false);
+  const updatePropertyWithUndo = (key: keyof TimelineItem, val: any) => {
+    if (!sliderUndoFlag.current) { commitSnapshotNow(); sliderUndoFlag.current = true; }
+    updateSelectedProperty(key, val);
+  };
+  const finalizeSliderUndo = () => { sliderUndoFlag.current = false; };
+
+  const updateAudioItem = (id: string, patch: Partial<AudioTimelineItem>, isDragging: boolean = false) => {
+    setAudioItems(prev => {
+      return prev.map(a => {
+        if (a.id === id) {
+          let newPatch = { ...patch };
+
+          // ─── 吸附碰撞算法 (Magnetic Snapping) ───
+          if (isDragging && newPatch.timelineStart !== undefined) {
+            const snapThreshold = 0.4; // 吸附触发距离 (0.4秒)
+            const myDur = a.duration;
+            let candidateT = newPatch.timelineStart;
+            let bestDiff = snapThreshold;
+
+            for (const other of prev) {
+              if (other.id === id) continue;
+              const otherStart = other.timelineStart;
+              const otherEnd = other.timelineStart + other.duration;
+
+              // 我的开始碰别人结束
+              if (Math.abs(candidateT - otherEnd) < bestDiff) { candidateT = otherEnd; bestDiff = Math.abs(newPatch.timelineStart - otherEnd); }
+              // 我的结束碰别人开始
+              if (Math.abs(candidateT + myDur - otherStart) < bestDiff) { candidateT = otherStart - myDur; bestDiff = Math.abs(newPatch.timelineStart + myDur - otherStart); }
+
+              // 并行对齐 (头对头，尾对尾)
+              if (Math.abs(candidateT - otherStart) < bestDiff) { candidateT = otherStart; bestDiff = Math.abs(newPatch.timelineStart - otherStart); }
+              if (Math.abs(candidateT + myDur - otherEnd) < bestDiff) { candidateT = otherEnd - myDur; bestDiff = Math.abs(newPatch.timelineStart + myDur - otherEnd); }
+            }
+
+            if (Math.abs(candidateT - 0) < bestDiff) { candidateT = 0; }
+
+            newPatch.timelineStart = Math.max(0, candidateT);
+          }
+          return { ...a, ...newPatch };
+        }
+        return a;
+      });
+    });
+  };
+
+  // 合并选区缝合间隙
+  const stitchSelectedAudioGaps = () => {
+    if (selectedAudioIds.size < 2) {
+      setStatusMsg("聚合失败：请按住 Ctrl 选定至少 2 段音频残片");
+      setTimeout(() => setStatusMsg(""), 3000);
+      return;
+    }
+    setAudioItems(prev => {
+      // 1. 过滤并按照时间轴顺序排序所有选中的碎片
+      const sortedSelected = prev.filter(a => selectedAudioIds.has(a.id)).sort((a, b) => a.timelineStart - b.timelineStart);
+
+      // 2. 以最开头的那个碎片为锚点
+      let anchorTime = sortedSelected[0].timelineStart;
+
+      // 3. 构建新的位移映射表
+      const shifts = new Map<string, number>();
+      for (const piece of sortedSelected) {
+        shifts.set(piece.id, anchorTime);
+        anchorTime += piece.duration; // 紧随其后排队
+      }
+
+      // 4. 应用修改
+      return prev.map(item => {
+        if (shifts.has(item.id)) {
+          return { ...item, timelineStart: shifts.get(item.id)! };
+        }
+        return item;
+      });
+    });
+    setStatusMsg("🧲 已成功跨越时空缝合选中的残片！");
+    setTimeout(() => setStatusMsg(""), 3000);
+  };
+
+  const applyAllToTimeline = () => {
+    if (!selectedItem) return;
+    setTimeline(prev => prev.map(t => ({
+      ...t,
+      duration: selectedItem.duration,
+      transition: selectedItem.transition,
+      contrast: selectedItem.contrast,
+      saturation: selectedItem.saturation,
+      exposure: selectedItem.exposure,
+      brilliance: selectedItem.brilliance,
+      temp: selectedItem.temp,
+      tint: selectedItem.tint,
+      zoom: selectedItem.zoom,
+      rotation: selectedItem.rotation,
+      overlayText: selectedItem.overlayText,
+      fontSize: selectedItem.fontSize,
+      fontWeight: selectedItem.fontWeight,
+      cropPos: selectedItem.cropPos,
+    })));
+    setStatusMsg('效果已成功应用到所有图片');
+    setTimeout(() => setStatusMsg(''), 3000);
+  };
+
+  // ─── 音频剪辑核心算法 ───
+  // 逻辑：将一个音轨项根据保留区域切分为多个独立音轨项，并自动计算起始位置留存空隙
+  const executeAudioCut = (itemId: string) => {
+    const item = audioItems.find(a => a.id === itemId);
+    if (!item) return;
+    const cuts = (item.cutPoints || []).slice().sort((a, b) => a - b);
+    const selected = new Set(item.selectedRegions || []);
+    const boundaries = [0, ...cuts, item.duration];
+
+    const newFragments: AudioTimelineItem[] = [];
+    let currentTimelinePos = item.timelineStart;
+
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      const startClip = boundaries[i];
+      const endClip = boundaries[i + 1];
+      const dur = endClip - startClip;
+
+      if (!selected.has(i)) {
+        if (dur > 0.01) {
+          newFragments.push({
+            ...item,
+            id: `aud_${Date.now()}_${i}`,
+            timelineStart: currentTimelinePos,
+            startOffset: item.startOffset + startClip,
+            duration: dur,
+            cutPoints: [],
+            selectedRegions: []
+          });
+        }
+      }
+      // 取消波纹删除：无论分段是否被保留，始终将其持续时间计入偏移累加中，制造真实的“缝隙”
+      currentTimelinePos += dur;
+    }
+
+    if (newFragments.length === 0) {
+      setAudioItems(prev => prev.filter(a => a.id !== itemId));
+      setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set());
+    } else {
+      setAudioItems(prev => {
+        const idx = prev.findIndex(a => a.id === itemId);
+        const next = [...prev];
+        next.splice(idx, 1, ...newFragments);
+        return next;
+      });
+      // 将剪除后存活下来的片段维持为选中状态，以免右侧面板丢失上下文
+      setSelectedAudioIds(new Set(newFragments.map(f => f.id)));
+    }
+
+    setIsEditingAudio(false);
+    setStatusMsg("✂️ 残片已切除。此时已留出空隙，如需拼合缝合可点击上方 '缝合选区'");
+    setTimeout(() => setStatusMsg(""), 4000);
+  };
+
+  // 播放指针 — 终极防抖极速定位器 (Ref+144hz帧率级反馈)
+  const seekToX = useCallback((clientX: number) => {
+    const el = timelineScrollRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const rawX = clientX - rect.left + el.scrollLeft - 60;
+    
+    const targetTime = Math.max(0, rawX / ppsRef.current);
+    const maxT = timelineRef.current.reduce((s, t) => s + t.duration, 0);
+    const finalTime = Math.max(0, Math.min(targetTime, maxT + 5));
+
+    // 144Hz极速响应: 零延迟更新 DOM，超越 React diffing
+    if (playheadRef.current) {
+      playheadRef.current.style.transform = `translateX(${60 + finalTime * ppsRef.current}px)`;
+    }
+
+    // React State 更新节流: 防止组件树大规模冲刷掉帧 (保持监控预渲染同步 ~30帧)
+    const now = Date.now();
+    if (now - lastScrubTimeRef.current > 32 || finalTime === 0 || finalTime === maxT + 5) {
+      lastScrubTimeRef.current = now;
+      setPlayTime(finalTime);
+    }
+  }, []);
+
+  const handleTimelineMouseMove = (e: React.MouseEvent) => {
+    if (isDraggingHead) {
+      seekToX(e.clientX);
+    } else if (selectionBox) {
+      const rect = timelineScrollRef.current?.getBoundingClientRect();
+      if (rect) {
+        const currentX = e.clientX - rect.left + timelineScrollRef.current!.scrollLeft;
+        setSelectionBox(prev => prev ? { ...prev, x2: currentX } : null);
+      }
+    }
+  };
+
+  const handleTimelineMouseUp = (e: React.MouseEvent) => {
+    if (isDraggingHead) setIsDraggingHead(false);
+    if (selectionBox) {
+      const xStart = Math.min(selectionBox.x1, selectionBox.x2) - 60; // 减侧边栏
+      const xEnd = Math.max(selectionBox.x1, selectionBox.x2) - 60;
+
+      const newlySelected = new Set(e.ctrlKey ? selectedIds : []);
+      let currentAcc = 0;
+      timeline.forEach(item => {
+        const itemStart = currentAcc * pps;
+        const itemEnd = (currentAcc + item.duration) * pps;
+        // 简单的横向相交检测
+        if (!(itemEnd < xStart || itemStart > xEnd)) {
+          newlySelected.add(item.id);
+        }
+        currentAcc += item.duration;
+      });
+      setSelectedIds(newlySelected);
+      setSelectionBox(null);
+    }
+  };
+
+  const handleImport = async (type: 'image' | 'audio' | 'video') => {
+    const selected = await open({
+      multiple: true,
+      filters: [{
+        name: type === 'image' ? '图片' : type === 'video' ? '视频' : '音频',
+        extensions: type === 'image' ? ['png', 'jpg', 'jpeg', 'webp', 'dng', 'DNG'] : type === 'video' ? ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm'] : ['mp3', 'wav', 'm4a']
+      }]
+    });
+    if (selected && Array.isArray(selected)) {
+      const newResources: Resource[] = (selected as any[]).map(rawSelected => {
+        const path = typeof rawSelected === 'string' ? rawSelected : rawSelected.path;
+        const id = `res_${Date.now()}_${Math.random()}`;
+        
+        if (type === 'image') {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = async () => {
+            try {
+              const bitmap = await createImageBitmap(img);
+              faceWorkerRef.current?.postMessage({
+                id,
+                imageBitmap: bitmap,
+                width: img.naturalWidth,
+                height: img.naturalHeight
+              }, [bitmap]);
+            } catch (err) { console.error('Face detection task dispatch failed', err); }
+          };
+          img.src = convertFileSrc(path);
+        }
+
+        return { id, name: path.split(/[\\/]/).pop() || '', path, type };
+      });
+      setResources(prev => [...prev, ...newResources]);
+      setLibTab(type === 'image' ? 'image' : type === 'video' ? 'video' : 'audio');
+      setStatusMsg(`🎉 素材处理完成 (${newResources.length}项)`);
+      setTimeout(() => setStatusMsg(''), 2000);
+    }
+  };
+
+  const handleRevealInExplorer = async (resourceId: string) => {
+    const res = resourceMap.get(resourceId);
+    if (!res) return;
+    try {
+      // 如果已经有缓存预览，打开预览所在的文件夹
+      const targetPath = previewCache[res.path] || res.path;
+      await invoke('reveal_in_explorer', { path: targetPath });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleConvertDNG = async (resourceId: string) => {
+    const res = resourceMap.get(resourceId);
+    if (!res) return;
+
+    try {
+      setStatusMsg(`正在转换 DNG: ${res.name}...`);
+      const normalizedPath = await invoke<string>('normalize_image', { path: res.path });
+
+      // Always update preview cache with the result of normalize_image
+      setPreviewCache(prev => ({ ...prev, [res.path]: normalizedPath }));
+      setStatusMsg("✨ DNG 转换成功 (已开启 AWB 算法)");
+
+      // If the normalizedPath is different, it means the resource itself was converted/replaced
+      if (normalizedPath && normalizedPath !== res.path) {
+        setResources(prev => prev.map(r => r.id === resourceId ? { ...r, path: normalizedPath } : r));
+        setStatusMsg(`🎉 ${res.name} 已更新为转换后的文件`);
+      }
+    } catch (e: any) {
+      console.error('DNG conversion failed:', e);
+      setStatusMsg(`❌ 转换失败: ${String(e).slice(0, 50)}`);
+    } finally {
+      setTimeout(() => setStatusMsg(''), 3000);
+    }
+  };
+
+  const removeFromLibrary = useCallback((id: string | Set<string>) => {
+    const ids = typeof id === 'string' ? new Set([id]) : id;
+    
+    // Memory Leak Fix: Cleanup Blobs
+    const toRemove = resourcesRef.current.filter(r => ids.has(r.id));
+    toRemove.forEach(r => {
+      let src = previewCache[r.path] || r.path;
+      if (src && !src.startsWith('http') && !src.startsWith('blob:') && !src.startsWith('/')) src = convertFileSrc(src);
+      if (thumbCache.has(src)) {
+        const cachedUrl = thumbCache.get(src);
+        if (cachedUrl && cachedUrl.startsWith('blob:')) URL.revokeObjectURL(cachedUrl);
+        thumbCache.delete(src);
+      }
+      if (r.type === 'audio') {
+         setAudioBlobs(prev => {
+            const next = {...prev};
+            const blobUrl = next[r.id];
+            if (blobUrl && blobUrl.startsWith('blob:')) URL.revokeObjectURL(blobUrl);
+            delete next[r.id];
+            return next;
+         });
+      }
+    });
+
+    setResources(prev => prev.filter(r => !ids.has(r.id)));
+    setTimeline(prev => prev.filter(t => !ids.has(t.resourceId)));
+    setAudioItems(prev => prev.filter(a => !ids.has(a.resourceId)));
+    setSelectedResourceIds(new Set());
+  }, [previewCache]);
+
+  // --- Memoization Fixes ---
+  const handleLibToggle = useCallback((id: string) => {
+    setSelectedResourceIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }, []);
+  const handleLibSelectPreview = useCallback((r: Resource) => setMonitorRes(r), []);
+
+  const handleLibAdd = useCallback(async (r: Resource) => {
+    if (r.type === 'image') {
+      const gd = globalDefaultsRef.current;
+      const isRandom = gd.animation === 'random';
+      const anim = isRandom ? ANIMATION_PRESETS[Math.floor(Math.random() * ANIMATION_PRESETS.length)] : gd.animation;
+      const overrides = isRandom ? ['animation'] : [];
+      setTimeline(p => [...p, {
+        id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, 
+        duration: gd.duration, transition: gd.transition, 
+        rotation: gd.rotation, contrast: gd.contrast, saturation: gd.saturation, 
+        exposure: gd.exposure, brilliance: gd.brilliance, temp: gd.temp, tint: gd.tint, zoom: gd.zoom,
+        highlights: gd.highlights, shadows: gd.shadows, whites: gd.whites, blacks: gd.blacks, vibrance: gd.vibrance,
+        sharpness: gd.sharpness, fade: gd.fade, vignette: gd.vignette, grain: gd.grain,
+        animation: anim, overrides, fontSize: 24, fontWeight: 'normal'
+      }]);
+    } else {
+      const dur = await getMediaDuration(r.path);
+      setAudioItems(prev => {
+        let startPos = 0;
+        if (prev.length > 0) { const last = prev[prev.length - 1]; startPos = last.timelineStart + last.duration; }
+        return [...prev, { id: `au_${Date.now()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }];
+      });
+    }
+  }, []);
+
+  const handleTimelineSelect = useCallback((id: string, isCtrl: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (isCtrl) { if (next.has(id)) next.delete(id); else next.add(id); }
+      else { next.clear(); next.add(id); }
+      return next;
+    });
+    setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set());
+    // 需求②：单击图片 → 暂停播放 + 播放指针跳到该图片起始位置 + 平滑动画
+    if (!isCtrl) {
+      setIsPlaying(false);
+      const tl = timelineRef.current;
+      let startTime = 0;
+      for (const t of tl) {
+        if (t.id === id) break;
+        startTime += t.duration;
+      }
+      setPlayTime(startTime);
+      setIsJumping(true);
+      setTimeout(() => setIsJumping(false), 350);
+      // 平滑滚动时间轴到选中图片位置
+      const scrollEl = timelineScrollRef.current;
+      if (scrollEl) {
+        let accX = 0;
+        for (let i = 0; i < tl.length; i++) {
+          if (tl[i].id === id) break;
+          accX += tl[i].duration * ppsRef.current;
+        }
+        scrollEl.scrollTo({ left: Math.max(0, accX - scrollEl.clientWidth / 3), behavior: 'smooth' });
+      }
+    }
+  }, []);
+
+  const handleTimelineRemove = useCallback((id: string) => {
+    commitSnapshotNow();
+    setTimeline(p => p.filter(t => t.id !== id));
+    setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+  }, [commitSnapshotNow]);
+
+  const handleTimelineTrim = useCallback((id: string, delta: number) => {
+    commitSnapshotNow();
+    setTimeline(p => p.map(t => t.id === id ? { ...t, duration: Math.max(0.3, t.duration + delta) } : t));
+  }, [commitSnapshotNow]);
+
+  const handleTimelineContextMenu = useCallback((e: React.MouseEvent, id: string) => {
+    setContextMenu({ x: e.clientX, y: e.clientY, type: 'image', targetId: id });
+  }, []);
+
+  const handleAudioSelect = useCallback((id: string, isCtrl: boolean) => {
+    setSelectedAudioIds(prev => {
+      const next = new Set(prev);
+      if (isCtrl) { if (next.has(id)) next.delete(id); else next.add(id); }
+      else { next.clear(); next.add(id); }
+      return next;
+    });
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleTimelineDoubleClick = useCallback((id: string) => {
+    // 需求②：双击图片 → 同样暂停 + 精准跳到起始位置（不自动播放，用户手动按按钮播放）
+    const tl = timelineRef.current;
+    let startTime = 0;
+    for (const t of tl) { if (t.id === id) break; startTime += t.duration; }
+    setPlayTime(startTime);
+    setIsPlaying(false);
+    setIsJumping(true);
+    setTimeout(() => setIsJumping(false), 350);
+    const scrollEl = timelineScrollRef.current;
+    if (scrollEl) {
+      let accX = 0;
+      for (let i = 0; i < tl.length; i++) {
+        if (tl[i].id === id) break;
+        accX += tl[i].duration * ppsRef.current;
+      }
+      scrollEl.scrollTo({ left: Math.max(0, accX - scrollEl.clientWidth / 3), behavior: 'smooth' });
+    }
+  }, []);
+
+  const selectedItem = useMemo(() => timeline.find(t => selectedIds.has(t.id)), [timeline, selectedIds]);
+
+  const monitorSrc = useMemo(() => {
+    if ((isPlaying || playTime > 0) && timeline.length > 0) {
+      let acc = 0;
+      for (const t of timeline) {
+        if (playTime >= acc && playTime < acc + t.duration) {
+          const res = resourceMap.get(t.resourceId);
+          if (res) {
+            return { ...res, currentItem: t, src: getEffectiveSrc(res.path), localTime: playTime - acc };
+          }
+          // 纯文字项（无 resourceId）
+          if (!t.resourceId && t.overlayText) {
+            return { id: t.id, name: t.overlayText, type: 'text' as const, path: '', currentItem: t, src: '', localTime: 0 };
+          }
+          return null;
+        }
+        acc += t.duration;
+      }
+    }
+    return monitorRes ? { ...monitorRes, currentItem: null, src: getEffectiveSrc(monitorRes.path), localTime: 0 } : null;
+  }, [isPlaying, playTime, timeline, resources, monitorRes, previewCache]);
+
+  // 同步视频播放与时间线
+  useEffect(() => {
+    const videoEl = monitorVideoRef.current;
+    if (!videoEl || !monitorSrc || monitorSrc.type !== 'video') return;
+    const localTime = monitorSrc.localTime || 0;
+    // 同步 currentTime（仅在差异超过 0.3s 时 seek，避免频繁跳帧）
+    if (Math.abs(videoEl.currentTime - localTime) > 0.3) {
+      videoEl.currentTime = localTime;
+    }
+    if (isPlaying) {
+      videoEl.play().catch(() => {});
+    } else {
+      videoEl.pause();
+    }
+  }, [isPlaying, monitorSrc]);
+
+  const handleGenerate = async () => {
+    const outputPath = await save({ filters: [{ name: '视频文件', extensions: [exportFormat] }] });
+    if (!outputPath) return;
+    setIsGenerating(true); setStatusMsg('正在极速渲染中...');
+
+    let computedResolution = '1920:1080';
+    if (exportResolution === '4k') computedResolution = '3840:2160';
+
+    if (exportResolution === 'original') {
+      setStatusMsg('正在探测全轨原图极致边界...');
+      let maxW = 1920;
+      let maxH = 1080;
+      for (const t of timeline) {
+        const res = resourceMap.get(t.resourceId);
+        if (res && res.type === 'image') {
+          const img = new Image();
+          await new Promise((resolve) => {
+            img.onload = () => {
+              maxW = Math.max(maxW, img.naturalWidth);
+              maxH = Math.max(maxH, img.naturalHeight);
+              resolve(null);
+            };
+            img.onerror = resolve;
+            img.src = res.path.startsWith('http') ? res.path : convertFileSrc(res.path);
+          });
+        }
+      }
+      maxW = maxW + (maxW % 2); // FFmpeg H264 要求宽高为偶数
+      maxH = maxH + (maxH % 2);
+      computedResolution = `${maxW}:${maxH}`;
+    }
+
+    try {
+      await invoke('generate_video', {
+        payload: {
+          items: timeline.map(t => ({ ...t, path: resourceMap.get(t.resourceId)?.path })),
+          resourcePaths: resources.map(r => ({ id: r.id, path: r.path })),
+          audioClips: audioItems.map(a => ({ ...a, path: resourceMap.get(a.resourceId)?.path })),
+          outputPath,
+          resolution: computedResolution,
+          fps: parseInt(exportFps, 10),
+          quality: exportQuality,
+          codec: exportCodec,
+          hdr: exportHdr,
+          autoOpen: true
+        }
+      });
+      setStatusMsg('导出成功！');
+    } catch (e) { setStatusMsg(`导出失败: ${e}`); }
+    finally { setIsGenerating(false); }
+  };
+
+  const filteredResources = useMemo(() => {
+    const byType = resources.filter(r => r.type === libTab);
+    if (!searchQuery.trim()) return byType;
+    const q = searchQuery.toLowerCase();
+    return byType.filter(r => r.name.toLowerCase().includes(q));
+  }, [resources, libTab, searchQuery]);
+
+  const libItemHeight = libTab === 'image' ? 62 : 52;
+  const libStartIndex = Math.max(0, Math.floor(libScrollTop / libItemHeight) - 3);
+  const libEndIndex = Math.min(filteredResources.length - 1, Math.floor((libScrollTop + 800) / libItemHeight) + 8);
+  const visibleResources = filteredResources.slice(libStartIndex, libEndIndex + 1);
+
+  // 性能优化：memo 化计算，避免每次渲染重算
+  const maxVideoEnd = useMemo(() => timeline.reduce((acc, t) => acc + t.duration, 0), [timeline]);
+  const maxAudioEnd = useMemo(() => audioItems.length > 0 ? Math.max(...audioItems.map(a => a.timelineStart + a.duration)) : 0, [audioItems]);
+  const maxTime = useMemo(() => Math.max(maxVideoEnd, maxAudioEnd, playTime), [maxVideoEnd, maxAudioEnd, playTime]);
+  const timelineWidth = useMemo(() => Math.max(8000, maxTime * pps + 1000), [maxTime, pps]);
+
+  // computeFilter + computeTextStyles 已迁移到 features/filter-engine/useFilter.ts
+  const computeFilter = computeFilterMod;
+  const computeTextStyles = computeTextStylesMod;
+
+  // 影视级色盘已迁移
+  const renderPremiumColorPicker = (propKey: string, currentVal: string, defVal: string) => (
+    <ColorPicker currentVal={currentVal} defVal={defVal} onChange={c => updateSelectedProperty(propKey as keyof TimelineItem, c)} />
+  );
+
+  return (
+    <div className="app-root-container">
+      <div className={`ios-layout ${theme === 'win11' ? 'theme-win11' : ''}`} onClick={() => { setContextMenu(null); setShowShortcuts(false); setShowSortMenu(false); setShowMoreMenu(false); }}>
+
+
+        {/* 全局浮窗 Toast 通知 */}
+        {statusMsg && (
+          <div className="global-toast">
+            {statusMsg}
+          </div>
+        )}
+
+        {/* 快捷键提示面板 */}
+        {showShortcuts && (
+          <div className="shortcuts-panel" onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>⌨️ 快捷键速查</div>
+            {[
+              ['Space', '播放/暂停'], ['Delete', '删除选中'], ['← →', '微调 ±0.1s'],
+              ['Shift+←→', '微调 ±1s'], ['Ctrl+Z', '撤销'], ['Ctrl+Y', '重做'],
+              ['Ctrl+A', '全选'], ['Ctrl+S', '保存工程'], ['Ctrl+O', '加载工程'],
+              ['Ctrl+B', '分割片段'], ['Ctrl+滚轮', '时间轴缩放'], ['?', '显示/隐藏此面板'],
+            ].map(([key, desc]) => (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12, borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontFamily: 'monospace', fontWeight: 600 }}>{key}</span>
+                <span style={{ opacity: 0.7 }}>{desc}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 拖拽导入遮罩 */}
+        {isDragOver && (
+          <div className="drop-overlay">
+            <div className="drop-overlay-icon">📥</div>
+            <div className="drop-overlay-text">释放以导入素材</div>
+            <div className="drop-overlay-subtext">支持 PNG / JPG / WEBP / DNG / MP3 / WAV / M4A</div>
+          </div>
+        )}
+
+        {/* 右键上下文菜单 */}
+        {contextMenu && (
+          <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e => e.stopPropagation()}>
+            {contextMenu.type === 'image' ? (
+              <>
+                <div className="context-menu-item" onClick={() => { commitSnapshotNow(); setTimeline(p => [...p, ...p.filter(t => t.id === contextMenu.targetId).map(t => ({ ...t, id: `tm_${Date.now()}_cp` }))]); setContextMenu(null); }}>📋 复制片段</div>
+                <div className="context-menu-item" onClick={() => { setContextMenu(null); splitAtPlayhead(); }}>✂️ 在播放头分割 (Ctrl+B)</div>
+                <div className="context-menu-separator" />
+                <div className="context-menu-item danger" onClick={() => { commitSnapshotNow(); setTimeline(p => p.filter(t => t.id !== contextMenu.targetId)); setSelectedIds(new Set()); setContextMenu(null); }}>🗑 删除</div>
+              </>
+            ) : (
+              <>
+                <div className="context-menu-item" onClick={() => { setContextMenu(null); splitAtPlayhead(); }}>✂️ 在播放头分割</div>
+                <div className="context-menu-separator" />
+                <div className="context-menu-item danger" onClick={() => { commitSnapshotNow(); setAudioItems(p => p.filter(a => a.id !== contextMenu.targetId)); setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set()); setContextMenu(null); }}>🗑 删除</div>
+              </>
+            )}
+          </div>
+        )}
+
+
+        {/* ═══ 顶部项目操作栏 (任务1: 项目级主流程) ═══ */}
+        <div className="project-toolbar" style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+          background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--ios-hairline)',
+          flexShrink: 0, minHeight: 40,
+        }}>
+
+          {/* 左侧：主流程按钮组 */}
+          <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 6, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, padding: '0 14px', height: 30, border: 'none' }} onClick={() => handleImport(leftTab === 'music' ? 'audio' : leftTab === 'video' ? 'video' : 'image')}>
+            📥 导入
+          </button>
+          {/* 排序下拉菜单 (任务5) */}
+          <div style={{ position: 'relative' }}>
+            <button className="ios-button-small ios-button ios-button-subtle" style={{ borderRadius: 6, fontSize: 12, padding: '0 10px', height: 30, color: 'rgba(255,255,255,0.7)' }} onClick={(e) => { e.stopPropagation(); setShowSortMenu(!showSortMenu); }}>
+              {sortMode === 'manual' ? '📂 排序' : `📂 ${sortMode === 'time' ? '时间序' : '名称序'}${sortDirection === 'desc' ? '↓' : '↑'}`}
+            </button>
+            {showSortMenu && (
+              <div className="sort-dropdown" style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'rgba(30,30,46,0.96)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 6, zIndex: 999, minWidth: 160, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+                {[
+                  { mode: 'manual' as const, label: '✋ 手动排序', dir: 'asc' as const },
+                  { mode: 'name' as const, label: '🔤 按名称 A→Z', dir: 'asc' as const },
+                  { mode: 'name' as const, label: '🔤 按名称 Z→A', dir: 'desc' as const },
+                  { mode: 'time' as const, label: '🕐 按文件名数字 ↑', dir: 'asc' as const },
+                  { mode: 'time' as const, label: '🕐 按文件名数字 ↓', dir: 'desc' as const },
+                ].map((opt, idx) => (
+                  <div key={idx} style={{ padding: '6px 12px', fontSize: 12, color: (sortMode === opt.mode && sortDirection === opt.dir) ? '#fff' : 'rgba(255,255,255,0.65)', background: (sortMode === opt.mode && sortDirection === opt.dir) ? 'rgba(94,92,230,0.3)' : 'transparent', borderRadius: 6, cursor: 'pointer', transition: 'all 0.15s' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = (sortMode === opt.mode && sortDirection === opt.dir) ? 'rgba(94,92,230,0.3)' : 'transparent'; }}
+                    onClick={() => {
+                      if (opt.mode === 'manual') {
+                        setSortMode('manual');
+                        setStatusMsg('✋ 已切换为手动排序'); setTimeout(() => setStatusMsg(''), 1500);
+                      } else {
+                        if (sortMode === 'manual' && timeline.length > 0) {
+                          // 排序前提示
+                          setStatusMsg('⚠️ 排序将覆盖当前手动顺序（可 Ctrl+Z 撤销）');
+                          setTimeout(() => setStatusMsg(''), 2500);
+                        }
+                        commitSnapshotNow();
+                        setSortMode(opt.mode);
+                        setSortDirection(opt.dir);
+                        const sorted = [...timeline].sort((a, b) => {
+                          const ra = resources.find(r => r.id === a.resourceId);
+                          const rb = resources.find(r => r.id === b.resourceId);
+                          const nameA = ra?.name || '';
+                          const nameB = rb?.name || '';
+                          if (opt.mode === 'name') {
+                            return opt.dir === 'asc' ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+                          } else {
+                            // 按文件名中的数字比较
+                            const numA = parseInt((nameA.match(/\d+/) || ['0'])[0], 10);
+                            const numB = parseInt((nameB.match(/\d+/) || ['0'])[0], 10);
+                            return opt.dir === 'asc' ? numA - numB : numB - numA;
+                          }
+                        });
+                        setTimeline(sorted);
+                        setStatusMsg(`📂 已按${opt.mode === 'name' ? '名称' : '数字'}${opt.dir === 'asc' ? '升序' : '降序'}排列`);
+                        setTimeout(() => setStatusMsg(''), 1500);
+                      }
+                      setShowSortMenu(false);
+                    }}>
+                    {opt.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* 撤销重做按钮组 (重新排列到左侧操作块) */}
+          <div style={{ display: 'flex', gap: 6, marginLeft: 6 }}>
+            <button
+              className="ios-btn ios-hover-scale"
+              onClick={undo}
+              disabled={historyLength === 0}
+              style={{ width: 30, height: 30, padding: 0, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', background: historyLength === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.08)', border: 'none', color: historyLength === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.9)', cursor: historyLength === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}
+              title="撤销上一步 (Ctrl+Z)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+            </button>
+            <button
+              className="ios-btn ios-hover-scale"
+              onClick={redo}
+              disabled={redoLength === 0}
+              style={{ width: 30, height: 30, padding: 0, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', background: redoLength === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.08)', border: 'none', color: redoLength === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.9)', cursor: redoLength === 0 ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}
+              title="重做 (Ctrl+Shift+Z)"
+            >
+               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 3.7"/></svg>
+            </button>
+          </div>
+
+          {/* 中间：项目名称居中 */}
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            {isEditingProjectName ? (
+              <input
+                autoFocus
+                value={projectName}
+                onChange={e => setProjectName(e.target.value)}
+                onBlur={() => setIsEditingProjectName(false)}
+                onKeyDown={e => { if (e.key === 'Enter') setIsEditingProjectName(false); }}
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid var(--ios-indigo)', borderRadius: 4, color: '#fff', fontSize: 13, fontWeight: 600, padding: '2px 8px', width: 160, outline: 'none', textAlign: 'center' }}
+              />
+            ) : (
+              <span
+                onClick={() => setIsEditingProjectName(true)}
+                style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)', cursor: 'pointer', padding: '2px 8px', borderRadius: 4, transition: 'background 0.15s' }}
+                title="点击编辑项目名称"
+              >{projectName}</span>
+            )}
+          </div>
+
+          {/* 右侧：··· 更多菜单 + 🚀导出 */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowMoreMenu(v => !v); }}
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.75)', fontSize: 16, lineHeight: 1, padding: '0 10px', height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'background 0.15s' }}
+              title="更多选项"
+            >···</button>
+            {showMoreMenu && (
+              <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'rgba(28,28,42,0.97)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 6, zIndex: 1000, minWidth: 180, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+                {[
+                  { icon: '💾', label: '保存工程  Ctrl+S', action: () => { saveProject(); setShowMoreMenu(false); } },
+                  { icon: '📂', label: '加载工程  Ctrl+O', action: () => { loadProject(); setShowMoreMenu(false); } },
+                ].map(item => (
+                  <div key={item.label}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)', borderRadius: 6, cursor: 'pointer', transition: 'all 0.15s' }}
+                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'}
+                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                    onClick={item.action}
+                  ><span>{item.icon}</span><span>{item.label}</span></div>
+                ))}
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '4px 6px' }} />
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)', borderRadius: 6, cursor: 'pointer', transition: 'all 0.15s' }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                  onClick={() => { const next = theme === 'ios' ? 'win11' : 'ios'; setTheme(next); localStorage.setItem('__editor_theme__', next); setShowMoreMenu(false); }}
+                >
+                  <span>{theme === 'ios' ? '🍃' : '🪩'}</span>
+                  <span>切换主题（{theme === 'ios' ? 'iOS' : 'Win11'}）</span>
+                </div>
+                {timeline.length > 0 && (
+                  <>
+                    <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '4px 6px' }} />
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)', borderRadius: 6, cursor: 'pointer', transition: 'all 0.15s' }}
+                      onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'}
+                      onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+                      onClick={() => { setShowGlobalDefaults(true); setShowExportPanel(false); setShowMoreMenu(false); }}
+                    >
+                      <span>⚙️</span><span>全局默认设置</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 6, background: '#10B981', fontWeight: 600, fontSize: 12, padding: '0 16px', height: 30, border: 'none' }} onClick={() => { setShowExportPanel(!showExportPanel); setShowGlobalDefaults(false); }}>
+            🚀 导出
+          </button>
+        </div>
+
+        {/* ═══ 主内容区 ═══ */}
+        <div style={{ flex: 1, display: 'flex', gap: 8, minHeight: 0 }}>
+
+          {/* 1. 左侧资源区 (任务2: 照片/音乐/文字 三标签) */}
+          <div className="glass-panel" style={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+
+            {/* 三标签头部 */}
+            <div style={{ padding: '8px 10px 6px', borderBottom: '1px solid var(--ios-hairline)' }}>
+              <div style={{ display: 'flex', background: 'rgba(0,0,0,0.25)', borderRadius: 7, padding: 2 }}>
+                {([['photo', '照片'], ['music', '音乐'], ['video', '视频']] as const).map(([key, label]) => (
+                  <div
+                    key={key}
+                    onClick={() => { setLeftTab(key); if (key === 'photo') setLibTab('image'); else if (key === 'music') setLibTab('audio'); else if (key === 'video') setLibTab('video'); }}
+                    style={{ flex: 1, textAlign: 'center', padding: '5px 0', background: leftTab === key ? 'rgba(255,255,255,0.12)' : 'transparent', borderRadius: 5, cursor: 'pointer', fontSize: 12, fontWeight: leftTab === key ? 600 : 400, color: leftTab === key ? '#fff' : 'rgba(255,255,255,0.45)', transition: 'all 0.15s ease-out' }}
+                  >
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 左侧内容区 */}
+            {leftTab === 'video' ? (
+              /* 视频素材库 */
+              <div style={{ flex: 1, padding: '12px', display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto' }}>
+                <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 8, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 12, height: 36, border: 'none', width: '100%' }} onClick={() => handleImport('video')}>
+                  🎬 导入视频文件
+                </button>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', textAlign: 'center' }}>支持 MP4 / MOV / AVI / MKV / WebM</div>
+                {resources.filter(r => r.type === 'video').length === 0 ? (
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>暂无视频，点击上方导入</div>
+                ) : (
+                  resources.filter(r => r.type === 'video').map(res => (
+                    <div key={res.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)'; }}
+                      onClick={() => {
+                        // 获取视频真实时长
+                        const videoEl = document.createElement('video');
+                        videoEl.preload = 'metadata';
+                        videoEl.src = getEffectiveSrc(res.path);
+                        videoEl.onloadedmetadata = () => {
+                          const realDuration = Math.round(videoEl.duration * 10) / 10 || 10;
+                          const gd = globalDefaultsRef.current;
+                          commitSnapshotNow();
+                          setTimeline(p => [...p, {
+                            id: `tm_vid_${Date.now()}_${Math.random()}`, resourceId: res.id, duration: realDuration,
+                            transition: gd.transition, rotation: gd.rotation, contrast: gd.contrast,
+                            saturation: gd.saturation, exposure: gd.exposure, brilliance: gd.brilliance,
+                            temp: gd.temp, tint: gd.tint, zoom: gd.zoom,
+                            highlights: gd.highlights, shadows: gd.shadows, whites: gd.whites, blacks: gd.blacks, vibrance: gd.vibrance,
+                            sharpness: gd.sharpness, fade: gd.fade, vignette: gd.vignette, grain: gd.grain,
+                          }]);
+                          setStatusMsg(`✨ 已添加视频 (${realDuration}s)`); setTimeout(() => setStatusMsg(''), 1500);
+                        };
+                        videoEl.onerror = () => {
+                          // fallback: 如果无法读取时长，使用默认值
+                          commitSnapshotNow();
+                          setTimeline(p => [...p, {
+                            id: `tm_vid_${Date.now()}`, resourceId: res.id, duration: 10, transition: 'fade', rotation: 0, contrast: 1, saturation: 1, exposure: 1, brilliance: 1, temp: 0, tint: 0, zoom: 1,
+                            highlights: 1, shadows: 1, whites: 1, blacks: 1, vibrance: 1, sharpness: 0, fade: 0, vignette: 0, grain: 0
+                          }]);
+                          setStatusMsg(`✨ 已添加视频`); setTimeout(() => setStatusMsg(''), 1500);
+                        };
+                      }}
+                    >
+                      <div style={{ width: 40, height: 28, borderRadius: 4, background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>🎬</div>
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{res.name}</div>
+                      </div>
+                      <div onClick={(e) => { e.stopPropagation(); setResources(p => p.filter(r => r.id !== res.id)); }} style={{ width: 20, height: 20, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }} title="删除">×</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : (
+              /* 照片/音乐 共用界面 */
+              <>
+                {/* 音乐 sub-tab 切换栏 */}
+                {leftTab === 'music' && (
+                  <div style={{ padding: '6px 10px 0' }}>
+                    <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: 20, padding: 3 }}>
+                      {[{ id: 'audio', label: '🎵 插入音频' }, { id: 'tts', label: '🎙️ AI 配音' }].map(t => (
+                        <div key={t.id} onClick={() => setMusicSubTab(t.id as any)} style={{
+                          flex: 1, textAlign: 'center', padding: '5px 0', fontSize: 11, borderRadius: 17, cursor: 'pointer',
+                          fontWeight: musicSubTab === t.id ? 'bold' : 'normal',
+                          color: musicSubTab === t.id ? '#10B981' : 'rgba(255,255,255,0.45)',
+                          background: musicSubTab === t.id ? 'rgba(16,185,129,0.12)' : 'transparent',
+                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                        }}>{t.label}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {leftTab === 'music' && musicSubTab === 'tts' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', flex: 1 }}>
+                    <textarea value={ttsText} onChange={e => setTtsText(e.target.value)} placeholder="输入需要配音的文字内容..." style={{ width: '100%', height: 80, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#fff', fontSize: 12, padding: '8px 10px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <select value={ttsVoice} onChange={e => setTtsVoice(e.target.value)} style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', fontSize: 10, padding: '4px 6px', outline: 'none', cursor: 'pointer' }}>
+                        <optgroup label="🎙️ 专业播音" style={{ background: '#1a1a2e', color: '#ccc' }}>
+                          <option value="zh-CN-YunyangNeural" style={{ background: '#1a1a2e' }}>云扬 · 新闻播音（推荐）</option>
+                          <option value="zh-CN-YunjianNeural" style={{ background: '#1a1a2e' }}>云健 · 热情解说</option>
+                        </optgroup>
+                        <optgroup label="🎵 自然亲和" style={{ background: '#1a1a2e', color: '#ccc' }}>
+                          <option value="zh-CN-YunxiNeural" style={{ background: '#1a1a2e' }}>云希 · 阳光男声</option>
+                          <option value="zh-CN-XiaoxiaoNeural" style={{ background: '#1a1a2e' }}>晓晓 · 温暖女声</option>
+                          <option value="zh-CN-XiaoyiNeural" style={{ background: '#1a1a2e' }}>晓依 · 活泼女声</option>
+                          <option value="zh-CN-YunxiaNeural" style={{ background: '#1a1a2e' }}>云夏 · 少年男声</option>
+                        </optgroup>
+                      </select>
+                      <select value={ttsRate} onChange={e => setTtsRate(e.target.value)} style={{ width: 66, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', fontSize: 10, padding: '4px 4px', outline: 'none', cursor: 'pointer' }}>
+                        <option value="-30%" style={{ background: '#1a1a2e' }}>0.7x</option>
+                        <option value="-20%" style={{ background: '#1a1a2e' }}>0.8x</option>
+                        <option value="-10%" style={{ background: '#1a1a2e' }}>0.9x</option>
+                        <option value="+0%" style={{ background: '#1a1a2e' }}>1.0x</option>
+                        <option value="+10%" style={{ background: '#1a1a2e' }}>1.1x</option>
+                        <option value="+20%" style={{ background: '#1a1a2e' }}>1.2x</option>
+                        <option value="+50%" style={{ background: '#1a1a2e' }}>1.5x</option>
+                        <option value="+100%" style={{ background: '#1a1a2e' }}>2.0x</option>
+                      </select>
+                    </div>
+                    <button disabled={ttsGenerating || !ttsText.trim()} onClick={async () => {
+                      setTtsGenerating(true); setStatusMsg('🎙️ 正在生成配音...');
+                      try {
+                        const filePath: string = await invoke('generate_tts', { req: { text: ttsText, voice: ttsVoice, rate: ttsRate } });
+                        const dur = await getMediaDuration(filePath);
+                        const name = `配音_${(generatedVoiceovers.length + 1).toString().padStart(3, '0')}`;
+                        setGeneratedVoiceovers(prev => [...prev, { id: `vo_${Date.now()}`, name, path: filePath, duration: dur, selected: false }]);
+                        setStatusMsg(`✅ ${name} 已生成 (${dur.toFixed(1)}s)`);
+                      } catch (err: any) { setStatusMsg(`❌ 配音失败: ${err?.toString()?.substring(0, 80)}`); }
+                      setTtsGenerating(false); setTimeout(() => setStatusMsg(''), 3000);
+                    }} style={{ width: '100%', height: 34, borderRadius: 8, border: 'none', cursor: ttsGenerating || !ttsText.trim() ? 'not-allowed' : 'pointer', background: ttsGenerating ? 'rgba(16,185,129,0.15)' : 'linear-gradient(135deg, #10B981, #059669)', color: '#fff', fontWeight: 600, fontSize: 12, opacity: ttsGenerating || !ttsText.trim() ? 0.5 : 1 }}>
+                      {ttsGenerating ? '⏳ 生成中...' : '🎙️ 生成配音'}
+                    </button>
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8, marginTop: 4, flex: 1, overflowY: 'auto' }}>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginBottom: 6 }}>已生成的配音</div>
+                      {generatedVoiceovers.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: 20, opacity: 0.15, fontSize: 10 }}>暂无配音，输入文字后点击生成</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {generatedVoiceovers.map(vo => (
+                            <div key={vo.id} onClick={() => setGeneratedVoiceovers(prev => prev.map(v => v.id === vo.id ? { ...v, selected: !v.selected } : v))} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8, background: vo.selected ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.03)', border: `1px solid ${vo.selected ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.05)'}`, cursor: 'pointer', transition: 'all 0.15s' }}>
+                              <span style={{ fontSize: 14 }}>🎙️</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 11, fontWeight: 500, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{vo.name}</div>
+                                <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)' }}>{vo.duration.toFixed(1)}s</div>
+                              </div>
+                              <div style={{ width: 18, height: 18, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', background: vo.selected ? '#10B981' : 'rgba(255,255,255,0.06)', fontSize: 10, color: '#fff' }}>{vo.selected ? '✓' : ''}</div>
+                              <div onClick={(e) => { e.stopPropagation(); setGeneratedVoiceovers(prev => prev.filter(v => v.id !== vo.id)); }} style={{ width: 18, height: 18, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {generatedVoiceovers.some(v => v.selected) && (
+                        <button onClick={() => {
+                          commitSnapshotNow();
+                          const selected = generatedVoiceovers.filter(v => v.selected);
+                          setVoiceoverClips((prev: any[]) => {
+                            let sp = 0;
+                            if (prev.length > 0) { sp = prev[prev.length - 1].timelineStart + prev[prev.length - 1].duration; }
+                            return [...prev, ...selected.map((vo, i) => ({ id: `vc_${Date.now()}_${i}`, resourceId: vo.id, path: vo.path, name: vo.name, timelineStart: sp + selected.slice(0, i).reduce((s: number, v: any) => s + v.duration, 0), startOffset: 0, duration: vo.duration, volume: 1.0 }))];
+                          });
+                          setGeneratedVoiceovers(prev => prev.map(v => ({ ...v, selected: false })));
+                          setStatusMsg(`✅ 已插入 ${selected.length} 段配音到配音轨`);
+                          setTimeout(() => setStatusMsg(''), 1500);
+                        }} style={{ width: '100%', height: 30, borderRadius: 7, border: 'none', cursor: 'pointer', marginTop: 6, background: 'linear-gradient(135deg, #10B981, #059669)', color: '#fff', fontWeight: 600, fontSize: 11 }}>
+                          + 插入 {generatedVoiceovers.filter(v => v.selected).length} 段到配音轨
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {leftTab === 'photo' && (
+                        <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 7, background: 'var(--ios-indigo)', fontWeight: 600, fontSize: 11, height: 32, border: 'none', width: '100%' }} onClick={() => handleImport('image')}>📸 导入照片文件</button>
+                      )}
+                      <input className="ios-input" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="🔍 搜索..." style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 6, fontSize: 11 }} />
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                        <button className="ios-button-small ios-button ios-button-subtle" style={{ borderRadius: 6, fontSize: 11, padding: '0 6px', color: 'rgba(255,255,255,0.7)' }} onClick={() => { const allIds = filteredResources.map(r => r.id); if (selectedResourceIds.size === allIds.length && allIds.length > 0) setSelectedResourceIds(new Set()); else setSelectedResourceIds(new Set(allIds)); }}>
+                          {filteredResources.length > 0 && selectedResourceIds.size === filteredResources.length ? '反选' : '全选'}
+                        </button>
+                        <button className="ios-button-small ios-button ios-button-primary" disabled={selectedResourceIds.size === 0} style={{ flex: 1, borderRadius: 6, background: selectedResourceIds.size > 0 ? 'var(--ios-indigo)' : 'rgba(255,255,255,0.04)', color: selectedResourceIds.size > 0 ? '#fff' : 'rgba(255,255,255,0.3)', fontWeight: 600, fontSize: 11, border: 'none' }} onClick={async () => {
+                          const selectedList = resources.filter(r => r.type === libTab && selectedResourceIds.has(r.id));
+                          for (const r of selectedList) {
+                            if (r.type === 'image') {
+                              setTimeline(p => [...p, { id: `tm_${Date.now()}_${Math.random()}`, resourceId: r.id, duration: 3, transition: 'fade', rotation: 0, contrast: 1.0, saturation: 1.0, exposure: 1.0, brilliance: 1.0, temp: 0, tint: 0, zoom: 1.0, highlights: 1.0, shadows: 1.0, whites: 1.0, blacks: 1.0, vibrance: 1.0, sharpness: 0, fade: 0, vignette: 0, grain: 0, fontSize: 24, fontWeight: 'normal' }]);
+                            } else {
+                              const dur = await getMediaDuration(r.path);
+                              setAudioItems(prev => { let startPos = 0; if (prev.length > 0) { const last = prev[prev.length - 1]; startPos = last.timelineStart + last.duration; } return [...prev, { id: `au_${Date.now()}_${Math.random()}`, resourceId: r.id, timelineStart: startPos, startOffset: 0, duration: dur, volume: 1.0 }]; });
+                            }
+                          }
+                          setSelectedResourceIds(new Set());
+                        }}>
+                          {selectedResourceIds.size > 0 ? `+ 编入 ${selectedResourceIds.size}项` : '+ 编入轨道'}
+                        </button>
+                        <button className="ios-button-small ios-button ios-button-subtle" disabled={selectedResourceIds.size === 0} style={{ borderRadius: 6, minWidth: 28, padding: 0, fontSize: 12, color: selectedResourceIds.size > 0 ? '#FF3B30' : 'rgba(255,255,255,0.1)' }} onClick={() => removeFromLibrary(selectedResourceIds)}>🗑</button>
+                      </div>
+                    </div>
+                    <div ref={libScrollRef} onScroll={(e) => setLibScrollTop(e.currentTarget.scrollTop)} style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+                      {filteredResources.length === 0 ? (
+                        <div style={{ textAlign: 'center', marginTop: 60, opacity: 0.2, fontSize: 11 }}>{leftTab === 'photo' ? '暂无照片，点击顶部 📥导入' : '暂无音乐'}</div>
+                      ) : (
+                        <div style={{ height: filteredResources.length * libItemHeight, position: 'relative' }}>
+                          {visibleResources.map((res, idx) => { const absIndex = libStartIndex + idx; return (
+                            <div key={res.id} style={{ position: 'absolute', top: absIndex * libItemHeight, width: '100%', height: libItemHeight, padding: '0 4px', boxSizing: 'border-box' }}>
+                              <ResourceCardItem res={res} isAdded={addedResourceIds.has(res.id)} isChecked={selectedResourceIds.has(res.id)} onToggle={handleLibToggle} onSelectPreview={handleLibSelectPreview} onAdd={handleLibAdd} onRemove={removeFromLibrary} onConvert={handleConvertDNG} onReveal={handleRevealInExplorer} previewUrl={previewCache[res.path]} />
+                            </div>
+                          ); })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+          </div>
+
+          {/* 2. 监视器 */}
+          <div
+            className="glass-panel monitor-container"
+            style={{ flex: 2, position: 'relative' }}
+            onDoubleClick={(e) => {
+              if ((e.target as HTMLElement).tagName === 'SELECT' || (e.target as HTMLElement).tagName === 'INPUT') return;
+              const el = e.currentTarget;
+              if (!document.fullscreenElement) { el.requestFullscreen().catch(() => {}); setIsFullscreen(true); }
+              else { document.exitFullscreen(); setIsFullscreen(false); }
+            }}
+          >
+            <div className="panel-header-ios" style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, background: 'rgba(0,0,0,0.2)' }}>
+              <span className="header-title" style={{ opacity: 0.8 }}>照片合成视频王 - 预览</span>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span ref={timeTextRef} style={{ fontSize: 28, fontWeight: 900, fontFamily: 'monospace', letterSpacing: -1 }}>{formatTime(playTime)}</span>
+                <span style={{ fontSize: 10, opacity: 0.4, fontWeight: 600, letterSpacing: 1 }}>ENGINE ACTIVE</span>
+              </div>
+            </div>
+
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+              {monitorSrc ? (
+                monitorSrc.src ? (
+                  isCropping ? (
+                    <ReactCrop crop={crop} onChange={(c: any) => setCrop(c)} style={{ maxWidth: '85%', maxHeight: '85%' }}>
+                      <img src={monitorSrc.src} style={{ maxWidth: '100%', maxHeight: '100%' }} alt="" />
+                    </ReactCrop>
+                  ) : (
+                    <div style={{ position: 'relative', width: '100%', height: '100%', padding: '20px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {monitorSrc.type === 'video' ? (
+                        <div style={{
+                          position: 'relative', display: monitorSrc.currentItem?.fillMode === 'cover' ? 'flex' : 'inline-flex', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', maxWidth: '100%', maxHeight: '100%', justifyContent: 'center', alignItems: 'center',
+                          transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
+                          transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)'
+                        }}>
+                          <video ref={monitorVideoRef} src={monitorSrc.src} muted style={{
+                            display: 'block', maxWidth: '100%', maxHeight: '100%', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', objectFit: monitorSrc.currentItem?.fillMode === 'contain' ? 'contain' : 'cover', borderRadius: '12px',
+                            clipPath: monitorSrc.currentItem?.cropPos ? `inset(${monitorSrc.currentItem.cropPos.y}% ${100 - monitorSrc.currentItem.cropPos.x - monitorSrc.currentItem.cropPos.width}% ${100 - monitorSrc.currentItem.cropPos.y - monitorSrc.currentItem.cropPos.height}% ${monitorSrc.currentItem.cropPos.x}%)` : 'none',
+                            filter: computeFilter(monitorSrc.currentItem),
+                            transition: 'filter 0.4s'
+                          }} />
+                          {(monitorSrc.currentItem?.vignette || monitorSrc.currentItem?.grain) ? (
+                            <div style={{
+                              position: 'absolute', pointerEvents: 'none', inset: 0, zIndex: 5, borderRadius: 12, overflow: 'hidden',
+                              background: monitorSrc.currentItem?.vignette ? `radial-gradient(ellipse at center, transparent ${60 - Math.abs(monitorSrc.currentItem.vignette)*40}%, rgba(${monitorSrc.currentItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(monitorSrc.currentItem.vignette)}) 120%)` : 'none',
+                              mixBlendMode: 'overlay'
+                            }}>
+                              {monitorSrc.currentItem?.grain > 0 && (
+                                <div style={{
+                                  position: 'absolute', inset: 0, opacity: monitorSrc.currentItem.grain, mixBlendMode: 'soft-light',
+                                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`
+                                }} />
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div style={{
+                          position: 'relative', display: monitorSrc.currentItem?.fillMode === 'cover' ? 'flex' : 'inline-flex', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', maxWidth: '100%', maxHeight: '100%', justifyContent: 'center', alignItems: 'center',
+                          transformOrigin: (monitorSrc.currentItem && resourceMap.get(monitorSrc.currentItem.resourceId)?.focusX) ? `${resourceMap.get(monitorSrc.currentItem.resourceId)?.focusX}% ${resourceMap.get(monitorSrc.currentItem.resourceId)?.focusY}%` : 'center center',
+                          transform: `rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
+                          transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)'
+                        }}>
+                          <img key={monitorSrc.currentItem?.id} src={monitorSrc.src} className={monitorSrc.currentItem?.animation && monitorSrc.currentItem.animation !== 'none' ? monitorSrc.currentItem.animation : ''} style={{
+                            display: 'block', maxWidth: '100%', maxHeight: '100%', width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto', objectFit: monitorSrc.currentItem?.fillMode === 'contain' ? 'contain' : 'cover', borderRadius: '12px',
+                            clipPath: monitorSrc.currentItem?.cropPos ? `inset(${monitorSrc.currentItem.cropPos.y}% ${100 - monitorSrc.currentItem.cropPos.x - monitorSrc.currentItem.cropPos.width}% ${100 - monitorSrc.currentItem.cropPos.y - monitorSrc.currentItem.cropPos.height}% ${monitorSrc.currentItem.cropPos.x}%)` : 'none',
+                            filter: computeFilter(monitorSrc.currentItem),
+                            transition: 'filter 0.4s'
+                          }} alt="" />
+                          {(monitorSrc.currentItem?.vignette || monitorSrc.currentItem?.grain) ? (
+                            <div style={{
+                              position: 'absolute', pointerEvents: 'none', inset: 0, zIndex: 5, borderRadius: 12, overflow: 'hidden',
+                              background: monitorSrc.currentItem?.vignette ? `radial-gradient(ellipse at center, transparent ${60 - Math.abs(monitorSrc.currentItem.vignette)*40}%, rgba(${monitorSrc.currentItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(monitorSrc.currentItem.vignette)}) 120%)` : 'none',
+                              mixBlendMode: 'overlay'
+                            }}>
+                              {monitorSrc.currentItem?.grain > 0 && (
+                                <div style={{
+                                  position: 'absolute', inset: 0, opacity: monitorSrc.currentItem.grain, mixBlendMode: 'soft-light',
+                                  backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`
+                                }} />
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                      {(() => {
+                        const activeTexts: any[] = [];
+                        if (monitorSrc.currentItem) {
+                          if (monitorSrc.currentItem.overlayText) {
+                            activeTexts.push({ ...monitorSrc.currentItem, id: monitorSrc.currentItem.id + '_root', text: monitorSrc.currentItem.overlayText, isRoot: true });
+                          }
+                          if (monitorSrc.currentItem.textOverlays?.length) {
+                            activeTexts.push(...monitorSrc.currentItem.textOverlays);
+                          }
+                        }
+                        
+                        return activeTexts.map((txt, layerIdx) => {
+                          const isSelected = selectedTextIds.has(txt.id) || (txt.isRoot && selectedIds.has(monitorSrc.currentItem!.id) && selectedTextIds.size === 0);
+                          return (
+                            <div
+                              key={`tlayer-${txt.id}`}
+                              className={`text-anim-${txt.textAnimation || 'none'}`}
+                              style={{
+                                position: 'absolute',
+                                top: `${txt.textY ?? 50}%`,
+                                left: `${txt.textX ?? 50}%`,
+                                transform: `translate(-50%, -50%) rotate(${txt.textRotation ?? 0}deg)`,
+                                '--text-anim-dur': `${txt.textAnimDuration ?? 0.6}s`,
+                                cursor: 'move',
+                                maxWidth: '100%',
+                                userSelect: 'none',
+                                zIndex: 10 + layerIdx,
+                                outline: isSelected ? '2px dashed rgba(99,102,241,0.8)' : 'none',
+                                outlineOffset: '4px',
+                                padding: '4px 8px',
+                                ...computeTextStyles(txt as any)
+                              } as React.CSSProperties}
+                              onMouseDown={(e) => {
+                                e.preventDefault(); e.stopPropagation();
+                                
+                                // 处理 Alt 多选逻辑
+                                let newSelectedSet = new Set(selectedTextIds);
+                                if (e.altKey) {
+                                  if (newSelectedSet.has(txt.id)) {
+                                    newSelectedSet.delete(txt.id);
+                                  } else {
+                                    newSelectedSet.add(txt.id);
+                                  }
+                                } else {
+                                  if (!newSelectedSet.has(txt.id)) {
+                                    newSelectedSet = new Set([txt.id]);
+                                  }
+                                }
+                                setSelectedTextIds(newSelectedSet);
+                                
+                                const container = e.currentTarget.parentElement;
+                                if (!container) return;
+                                const rect = container.getBoundingClientRect();
+                                const startX = e.clientX, startY = e.clientY;
+                                
+                                // 提取所有被选中图层的初始坐标，用于群体位移
+                                const startCoords: Record<string, {x: number, y: number}> = {};
+                                if (txt.isRoot) {
+                                  startCoords[txt.id] = { x: txt.textX ?? 50, y: txt.textY ?? 50 };
+                                } else {
+                                  const textItemContext = monitorSrc.currentItem?.textOverlays || [];
+                                  textItemContext.forEach((layer: any) => {
+                                    if (newSelectedSet.has(layer.id) || layer.id === txt.id) {
+                                      startCoords[layer.id] = { x: layer.textX ?? 50, y: layer.textY ?? 50 };
+                                    }
+                                  });
+                                }
+
+                                const onMove = (me: MouseEvent) => {
+                                  const dx = ((me.clientX - startX) / rect.width) * 100;
+                                  const dy = ((me.clientY - startY) / rect.height) * 100;
+                                  
+                                  if (txt.isRoot) {
+                                    setTimeline(p => p.map(t => t.id === monitorSrc.currentItem?.id
+                                      ? { ...t, textX: Math.max(0, Math.min(100, startCoords[txt.id].x + dx)), textY: Math.max(0, Math.min(100, startCoords[txt.id].y + dy)) }
+                                      : t));
+                                  } else {
+                                    setTimeline(p => p.map(t => {
+                                      if (t.id !== monitorSrc.currentItem?.id) return t;
+                                      return {
+                                        ...t,
+                                        textOverlays: (t.textOverlays || []).map(layer => {
+                                          if (startCoords[layer.id]) {
+                                            return { 
+                                              ...layer, 
+                                              textX: Math.max(0, Math.min(100, startCoords[layer.id].x + dx)), 
+                                              textY: Math.max(0, Math.min(100, startCoords[layer.id].y + dy)) 
+                                            };
+                                          }
+                                          return layer;
+                                        })
+                                      };
+                                    }));
+                                  }
+                                };
+                                const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+                                window.addEventListener('mousemove', onMove);
+                                window.addEventListener('mouseup', onUp);
+                              }}
+                            >{txt.text}</div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )
+                ) : (
+                  /* 纯文字项预览（无图片背景） */
+                  <div style={{ position: 'relative', width: '85%', height: '60%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 16, background: monitorSrc.currentItem?.textBg || 'rgba(30,30,30,0.9)', border: `2px solid ${monitorSrc.currentItem?.fontColor || '#fff'}30` }}>
+                    <div style={{ 
+                      maxWidth: '80%', 
+                      wordBreak: 'break-word' as const,
+                      transform: `rotate(${monitorSrc.currentItem?.textRotation ?? 0}deg)`,
+                      ...computeTextStyles(monitorSrc.currentItem)
+                    }}>{monitorSrc.currentItem?.overlayText}</div>
+                  </div>
+                )
+              ) : (
+                <div style={{ opacity: 0.03, color: '#fff', fontSize: 100, fontWeight: 900, transform: 'rotate(-10deg)', userSelect: 'none' }}>iOS 26</div>
+              )}
+            </div>
+
+            <div className="floating-play-btn" style={{ position: 'absolute', bottom: 60, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }} onClick={togglePlay}>
+              <span style={{ display: 'inline-block', transform: isPlaying ? 'none' : 'translateX(4px)' }}>
+                {isPlaying ? '⏸' : '▶'}
+              </span>
+            </div>
+
+            {/* Mini 进度条 + 播放速度 */}
+            <div style={{ position: 'absolute', bottom: 12, left: 20, right: 20, display: 'flex', alignItems: 'center', gap: 10, zIndex: 50 }}>
+              <div
+                style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.1)', cursor: 'pointer', position: 'relative' }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const bar = e.currentTarget;
+                  const seek = (clientX: number) => {
+                    const rect = bar.getBoundingClientRect();
+                    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+                    setPlayTime(maxPlayTime * pct);
+                  };
+                  seek(e.clientX);
+                  const onMove = (ev: MouseEvent) => seek(ev.clientX);
+                  const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                }}
+              >
+                <div style={{ width: `${maxPlayTime > 0 ? (playTime / maxPlayTime * 100) : 0}%`, height: '100%', borderRadius: 3, background: 'var(--ios-indigo)', transition: isPlaying ? 'none' : 'width 0.15s', boxShadow: '0 0 6px var(--ios-indigo-glow)' }} />
+              </div>
+              <select
+                value={playbackSpeed}
+                onChange={(e) => setPlaybackSpeed(parseFloat(e.target.value))}
+                className="ios-dark-select"
+                style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6, color: '#fff', fontSize: 10, padding: '2px 6px', cursor: 'pointer', minWidth: 48 }}
+              >
+                <option value="0.5" style={{ background: '#1e1e2e', color: '#fff' }}>0.5x</option>
+                <option value="0.75" style={{ background: '#1e1e2e', color: '#fff' }}>0.75x</option>
+                <option value="1" style={{ background: '#1e1e2e', color: '#fff' }}>1x</option>
+                <option value="1.5" style={{ background: '#1e1e2e', color: '#fff' }}>1.5x</option>
+                <option value="2" style={{ background: '#1e1e2e', color: '#fff' }}>2x</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 3. 右侧属性面板（上下文驱动 + 编辑/导出模式切换） */}
+          <div className="glass-panel" style={{ width: 350, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="panel-header-ios" style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="header-title" style={{ fontSize: 12 }}>
+                {showGlobalDefaults ? '⚙️ 全局默认设置' : showExportPanel ? '🚀 导出设置' : (
+                  selectedIds.size > 1 ? `🎨 批量编辑 (${selectedIds.size}项)` :
+                  selectedIds.size === 1 ? '🎨 照片属性' :
+                  selectedAudioIds.size > 0 ? '🎵 音频属性' :
+                  '💡 项目信息'
+                )}
+              </span>
+              {(showGlobalDefaults || showExportPanel) && <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 6px', borderRadius: 4, color: 'rgba(255,255,255,0.5)' }} onClick={() => { setShowGlobalDefaults(false); setShowExportPanel(false); setActiveTab('effects'); }}>← 返回</button>}
+            </div>
+            <div style={{ flex: 1, padding: '12px', overflowY: 'auto', scrollBehavior: 'smooth' }}>
+              {/* ═══ 全局默认设置面板 (任务6) ═══ */}
+              {showGlobalDefaults ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 40 }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', lineHeight: 1.6 }}>
+                    修改全局默认值将自动应用到所有<strong style={{ color: 'rgba(255,255,255,0.65)' }}>未手动覆盖</strong>的图片。单独修改过的图片参数旁会显示 ✏️ 标记。
+                  </div>
+                  <div className="ios-prop-group">
+                    <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⏱ 基础参数</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>默认时长: {globalDefaults.duration}s</span>
+                        <ProSlider min={0.5} max={10} step={0.1} value={globalDefaults.duration} onChange={d => {
+                          const v = Math.round(d * 10) / 10;
+                          setGlobalDefaults(p => ({ ...p, duration: v }));
+                          setTimeline(prev => prev.map(t => !(t.overrides?.includes('duration')) ? { ...t, duration: v } : t));
+                        }} />
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">默认片段转场</label>
+                        <IosSelect
+                          value={globalDefaults.transition}
+                          onChange={v => {
+                            setGlobalDefaults(p => ({ ...p, transition: v }));
+                            setTimeline(prev => prev.map(t => !(t.overrides?.includes('transition')) ? { ...t, transition: v } : t));
+                          }}
+                          style={{ height: 36 }}
+                          options={[
+                            { value: 'none', label: '直接切入 (Cut)' },
+                            { value: 'fade', label: '经典叠化 (Dissolve)' },
+                            { value: 'white', label: '模糊闪白 (Dip to White)' },
+                            { value: 'iris', label: '中心扩散 (Iris)' },
+                            { value: 'slide', label: '平滑推入 (Push)' },
+                            { value: 'zoom', label: '专业缩放 (Zoom)' }
+                          ]}
+                        />
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">默认照片动效 (入场)</label>
+                        <IosSelect
+                          value={globalDefaults.animation || 'none'}
+                          onChange={v => {
+                            setGlobalDefaults(p => ({ ...p, animation: v }));
+                            setTimeline(prev => prev.map(t => {
+                              if (t.overrides?.includes('animation')) return t;
+                              const animPool = favAnims.length > 0 ? favAnims : ['anim-img-fadeIn', 'anim-img-slideLeft', 'anim-img-slideRight', 'anim-img-slideUp', 'anim-img-slideDown', 'anim-img-zoomIn', 'anim-img-zoomOut', 'anim-img-panLeft', 'anim-img-panRight'];
+                              const finalAnim = v === 'random' ? animPool[Math.floor(Math.random() * animPool.length)] : v;
+                              return { ...t, animation: finalAnim, overrides: v === 'random' ? [...(t.overrides || []), 'animation'] : (t.overrides || []) };
+                            }));
+                          }}
+                          style={{ height: 36 }}
+                          options={[
+                            { value: 'none', label: '无动效 (None)' },
+                            { value: 'random', label: '🎲 照片随机分配 (Random)' },
+                            { value: 'anim-img-fadeIn', label: '平滑淡入 (Fade In)' },
+                            { value: 'anim-img-slideLeft', label: '从右滑入 (Slide Left)' },
+                            { value: 'anim-img-slideRight', label: '从左滑入 (Slide Right)' },
+                            { value: 'anim-img-slideUp', label: '向上浮现 (Slide Up)' },
+                            { value: 'anim-img-slideDown', label: '向下降落 (Slide Down)' },
+                            { value: 'anim-img-zoomIn', label: '缓慢放大 (Zoom In)' },
+                            { value: 'anim-img-zoomOut', label: '缓慢缩小 (Zoom Out)' },
+                            { value: 'anim-img-panLeft', label: '向左推移 (Pan Left)' },
+                            { value: 'anim-img-panRight', label: '向右推移 (Pan Right)' }
+                          ]}
+                          favSet={favAnims}
+                          onToggleFav={toggleFavAnim}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="ios-prop-group">
+                    <div className="ios-text" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 8, display: 'block' }}>🌓 影像参数默认值</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {([
+                        ['exposure', '曝光', 0.0, 3.0, 0.01], 
+                        ['brilliance', '鲜明度', 0.0, 3.0, 0.01],
+                        ['highlights', '高光', 0.0, 3.0, 0.01],
+                        ['shadows', '阴影', 0.0, 3.0, 0.01],
+                        ['whites', '白色色阶', 0.0, 3.0, 0.01],
+                        ['blacks', '黑色色阶', 0.0, 3.0, 0.01],
+                        ['contrast', '对比度', 0.0, 3.0, 0.01], 
+                        ['saturation', '饱和度', 0.0, 3.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #EF4444)'],
+                        ['vibrance', '自然饱和度', 0.0, 3.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #818CF8, #F472B6)'],
+                        ['temp', '色温', -100, 100, 1, 'linear-gradient(90deg, #60A5FA, #E5E7EB, #FBBF24)'], 
+                        ['tint', '色调', -100, 100, 1, 'linear-gradient(90deg, #34D399, #E5E7EB, #C084FC)'],
+                        ['sharpness', '清晰度', -3.0, 3.0, 0.01],
+                        ['fade', '褪色', 0.0, 1.0, 0.01],
+                        ['vignette', '暗角', -1.0, 1.0, 0.01],
+                        ['grain', '颗粒', 0.0, 1.0, 0.01]
+                      ] as any).map(([key, label, min, max, step, gradient]: any) => {
+                        const isCentered = (key === 'temp' || key === 'tint' || key === 'sharpness' || key === 'vignette');
+                        const defaultVal = globalDefaults[key as keyof GlobalDefaults] as number;
+                        return (
+                          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>{label}</span>
+                              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+                                {isCentered ? defaultVal : defaultVal.toFixed(2)}
+                              </span>
+                            </div>
+                            <div style={{ width: '100%', minWidth: 0, display: 'flex', alignItems: 'center' }}>
+                              <ProSlider gradient={gradient} isCentered={isCentered} style={{ width: '100%', maxWidth: '100%' }} min={min} max={max} step={step} value={defaultVal} onChange={d => {
+                                setGlobalDefaults(p => ({ ...p, [key]: d }));
+                                setTimeline(prev => prev.map(t => !(t.overrides?.includes(key)) ? { ...t, [key]: d } : t));
+                              }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <button className="ios-button ios-button-subtle" style={{ marginTop: 8, borderRadius: 10, height: 36, fontSize: 12, color: '#FF3B30', border: '1px solid rgba(255,59,48,0.2)' }} onClick={() => {
+                    commitSnapshotNow();
+                    setGlobalDefaults(GLOBAL_DEFAULTS_INIT);
+                    setTimeline(prev => prev.map(t => {
+                      const clean: any = { ...t };
+                      Object.keys(GLOBAL_DEFAULTS_INIT).forEach(k => {
+                        if (!(t.overrides?.includes(k))) clean[k] = (GLOBAL_DEFAULTS_INIT as any)[k];
+                      });
+                      return clean;
+                    }));
+                    setStatusMsg('🔄 已重置所有全局参数为默认值'); setTimeout(() => setStatusMsg(''), 1500);
+                  }}>
+                    🔄 重置全部为默认
+                  </button>
+                </div>
+              ) :
+              activeTab === 'effects' ? (
+                (selectedIds.size > 0 || selectedAudioIds.size > 0) ? (
+                  selectedIds.size > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 40, minHeight: '100%' }}>
+
+                      {/* ======= 胶囊切换栏 ======= */}
+                      <div style={{
+                        display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '24px', padding: 4, 
+                        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.05)', marginBottom: 8
+                      }}>
+                        {[
+                          { id: 'presets', label: '一键滤镜' },
+                          { id: 'color', label: '影像色彩' },
+                          { id: 'text', label: '文字工坊' },
+                          { id: 'transform', label: '位置形变' }
+                        ].map(t => (
+                          <div 
+                            key={t.id}
+                            onClick={() => setPropertyTab(t.id as any)}
+                            style={{
+                              flex: 1, textAlign: 'center', padding: '6px 0', fontSize: 12, borderRadius: 20, cursor: 'pointer',
+                              fontWeight: propertyTab === t.id ? 'bold' : 'normal',
+                              color: propertyTab === t.id ? '#10B981' : 'rgba(255,255,255,0.5)',
+                              background: propertyTab === t.id ? 'rgba(16,185,129,0.1)' : 'transparent',
+                              boxShadow: propertyTab === t.id ? '0 2px 8px rgba(0,0,0,0.2)' : 'none',
+                              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+                            }}
+                          >
+                            {t.label}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 滤镜预设 */}
+                      <div className="ios-prop-group" style={{ display: propertyTab === 'presets' ? 'block' : 'none' }}>
+                        <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>🎨 一键滤镜预设</div>
+                        <div className="filter-preset-scroll" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, maxHeight: 'none', paddingRight: 14, marginLeft: -4 }}>
+                          {FILTER_PRESETS.map((preset) => (
+                            <div
+                              key={preset.name}
+                              className="filter-preset-card"
+                              style={{ padding: '8px 0px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              onClick={() => {
+                                commitSnapshotNow();
+                                setTimeline(prev => prev.map(t => selectedIds.has(t.id) ? {
+                                  ...t, exposure: preset.exposure, contrast: preset.contrast, saturation: preset.saturation, temp: preset.temp, tint: preset.tint, brilliance: preset.brilliance
+                                } : t));
+                                setStatusMsg(`✨ 已应用${preset.name}预设`); setTimeout(() => setStatusMsg(''), 1500);
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <span style={{ flexShrink: 0, fontSize: 13, marginRight: 6 }}>{preset.icon}</span>
+                                <span style={{ width: 42, display: 'flex', justifyContent: 'space-between', fontSize: 11, whiteSpace: 'nowrap', fontWeight: 500 }}>
+                                  {preset.name.split('').map((c, i) => <span key={i}>{c}</span>)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* GROUP 1: 影像与色彩 (合并) */}
+                      <div className="ios-prop-group" style={{ display: propertyTab === 'color' ? 'block' : 'none' }}>
+                        <div className="ios-text" style={{ color: 'var(--ios-indigo)', fontSize: 11, marginBottom: 2, display: 'block' }}>🎨 影像与色彩 {selectedIds.size > 1 && <span style={{ fontSize: 9, opacity: 0.5, fontWeight: 400 }}>({selectedIds.size} 项)</span>}</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+                          
+                          {/* 动效/入场 */}
+                          <div className="ios-field" >
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><label className="ios-field-label">画面填充 (Fill Mode)</label>
+                              <span>照片动效/入场</span>
+                              {selectedItem && <span onClick={() => selectedItem && (isOverridden(selectedItem, 'animation') ? restoreInheritance(selectedItem.id, 'animation') : null)} style={{ cursor: isOverridden(selectedItem, 'animation') ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, 'animation') ? '点击恢复继承全局默认' : '正在继承全局默认'}>{isOverridden(selectedItem, 'animation') ? '✏️' : '🔗'}</span>}
+                            </span>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <IosSelect
+                                value={(selectedItem as any)?.animation || 'none'}
+                                onChange={val => {
+                                  commitSnapshotNow();
+                                  updateSelectedProperty('animation', val);
+                                }}
+                                style={{ flex: 1, height: 32 }}
+                                options={[
+                                  { value: 'none', label: '无动效 (None)' },
+                                  { value: 'anim-img-fadeIn', label: '平滑淡入 (Fade In)' },
+                                  { value: 'anim-img-slideLeft', label: '从右滑入 (Slide Left)' },
+                                  { value: 'anim-img-slideRight', label: '从左滑入 (Slide Right)' },
+                                  { value: 'anim-img-slideUp', label: '向上浮现 (Slide Up)' },
+                                  { value: 'anim-img-slideDown', label: '向下降落 (Slide Down)' },
+                                  { value: 'anim-img-zoomIn', label: '缓慢放大 (Zoom In)' },
+                                  { value: 'anim-img-zoomOut', label: '缓慢缩小 (Zoom Out)' },
+                                  { value: 'anim-img-panLeft', label: '向左推移 (Pan Left)' },
+                                  { value: 'anim-img-panRight', label: '向右推移 (Pan Right)' }
+                                ]}
+                              />
+                              <div
+                                title="为时间线所有照片随机分配不同动效"
+                                className="ios-hover-scale"
+                                style={{
+                                  height: 32, width: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.4)', cursor: 'pointer', fontSize: 16,
+                                  boxShadow: '0 2px 8px rgba(99,102,241,0.2)', transition: 'all 0.2s cubic-bezier(0.23, 1, 0.32, 1)', flexShrink: 0
+                                }}
+                                onClick={() => {
+                                  commitSnapshotNow();
+                                  setTimeline(prev => prev.map(t => {
+                                    const isImage = resourceMap.get(t.resourceId)?.type === 'image';
+                                    if (isImage) {
+                                      const randAnim = ANIMATION_PRESETS[Math.floor(Math.random() * ANIMATION_PRESETS.length)];
+                                      const ov = new Set(t.overrides || []);
+                                      ov.add('animation');
+                                      return { ...t, animation: randAnim, overrides: Array.from(ov) };
+                                    }
+                                    return t;
+                                  }));
+                                  setStatusMsg('🎲 已为所有照片随机生成新动效！'); setTimeout(() => setStatusMsg(''), 2000);
+                                }}
+                              >🎲</div>
+                            </div>
+                          </div>
+
+                          <div className="ios-field" >
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span>{`时长: ${localDuration !== null ? localDuration : (selectedItem?.duration || 3)}s`}</span>
+                              {selectedItem && <span onClick={() => selectedItem && (isOverridden(selectedItem, 'duration') ? restoreInheritance(selectedItem.id, 'duration') : null)} style={{ cursor: isOverridden(selectedItem, 'duration') ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, 'duration') ? '点击恢复继承全局默认' : '正在继承全局默认'}>{isOverridden(selectedItem, 'duration') ? '✏️' : '🔗'}</span>}
+                            </span>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <div style={{ flex: 1, minWidth: 0 }} onMouseUp={() => { if (localDuration !== null) { commitSnapshotNow(); updateSelectedProperty('duration', localDuration); setLocalDuration(null); } }}>
+                                <ProSlider min={0.1} max={10} step={0.1} value={localDuration !== null ? localDuration : (selectedItem?.duration || 3)} onChange={d => setLocalDuration(Math.round(d * 10) / 10)} style={{ width: '100%', maxWidth: '100%' }} />
+                              </div>
+                              <div
+                                title="为所有照片的时长随机波动上下20%"
+                                className="ios-hover-scale"
+                                style={{
+                                  height: 32, width: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.4)', cursor: 'pointer', fontSize: 16,
+                                  boxShadow: '0 2px 8px rgba(99,102,241,0.2)', transition: 'all 0.2s cubic-bezier(0.23, 1, 0.32, 1)', flexShrink: 0
+                                }}
+                                onClick={() => {
+                                  const baseDuration = localDuration !== null ? localDuration : (selectedItem?.duration || 3);
+                                  commitSnapshotNow();
+                                  setTimeline(prev => prev.map(t => {
+                                    if (resourceMap.get(t.resourceId)?.type === 'image') {
+                                      const factor = 0.8 + Math.random() * 0.4;
+                                      const newDur = Math.max(0.1, Math.round(baseDuration * factor * 10) / 10);
+                                      const ov = new Set(t.overrides || []);
+                                      ov.add('duration');
+                                      return { ...t, duration: newDur, overrides: Array.from(ov) };
+                                    }
+                                    return t;
+                                  }));
+                                  setStatusMsg(`🎲 已基于 ${baseDuration}s 为全轨重新随机分配时长！`); setTimeout(() => setStatusMsg(''), 2000);
+                                }}
+                              >🎲</div>
+                            </div>
+                          </div>
+                          {([
+                            ['exposure', '曝光', 0.0, 2.0, 0.01], 
+                            ['brilliance', '鲜明度', 0.0, 2.0, 0.01],
+                            ['highlights', '高光', 0.0, 2.0, 0.01],
+                            ['shadows', '阴影', 0.0, 2.0, 0.01],
+                            ['whites', '白色色阶', 0.0, 2.0, 0.01],
+                            ['blacks', '黑色色阶', 0.0, 2.0, 0.01],
+                            ['contrast', '对比度', 0.0, 2.0, 0.01], 
+                            ['saturation', '饱和度', 0.0, 2.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #EF4444)'],
+                            ['vibrance', '自然饱和度', 0.0, 2.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #818CF8, #F472B6)'],
+                            ['temp', '色温', -100, 100, 1, 'linear-gradient(90deg, #60A5FA, #E5E7EB, #FBBF24)'], 
+                            ['tint', '色调', -100, 100, 1, 'linear-gradient(90deg, #34D399, #E5E7EB, #C084FC)'],
+                            ['sharpness', '清晰度', -3.0, 3.0, 0.01],
+                            ['fade', '褪色', 0.0, 1.0, 0.01],
+                            ['vignette', '暗角', -1.0, 1.0, 0.01],
+                            ['grain', '颗粒', 0.0, 1.0, 0.01]
+                          ] as any).map(([key, label, min, max, step, gradient]: any) => {
+                            const isCentered = !['fade', 'grain'].includes(key);
+                            const centerValue = ['temp', 'tint', 'sharpness', 'vignette'].includes(key) ? 0 : 1.0;
+                            return (
+                              <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty(key, centerValue); }} style={{ cursor: 'pointer', fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }} title="双击重置">
+                                    {label}
+                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
+                                      {isCentered && centerValue === 0 ? ((selectedItem as any)?.[key] || 0) : ((selectedItem as any)?.[key] as number)?.toFixed(2) || ((GLOBAL_DEFAULTS_INIT as any)[key] as number).toFixed(2)}
+                                    </span>
+                                    {selectedItem && isOverridden(selectedItem, key) && (
+                                      <span onClick={(e) => { e.stopPropagation(); restoreInheritance(selectedItem.id, key); }} style={{ cursor: 'pointer', fontSize: 12, opacity: 0.9, color: '#10B981', userSelect: 'none', marginLeft: 2 }} title='恢复继承全局默认'>•</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div style={{ width: '100%', minWidth: 0, display: 'flex', alignItems: 'center' }}>
+                                  <ProSlider gradient={gradient} isCentered={isCentered} centerValue={centerValue} style={{ width: '100%', maxWidth: '100%' }} min={min} max={max} step={step} value={isCentered && centerValue === 0 ? ((selectedItem as any)?.[key] || 0) : ((selectedItem as any)?.[key] || (GLOBAL_DEFAULTS_INIT as any)[key])} onChange={d => updatePropertyWithUndo(key, d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                          <button className="ios-button ios-button-subtle" style={{ width: '100%', marginTop: 12, borderRadius: 8, height: 36, color: 'rgba(255,255,255,0.7)', border: '1px dashed rgba(255,255,255,0.15)', transition: 'all 0.15s' }} onClick={() => {
+                            commitSnapshotNow();
+                            setTimeline(prev => prev.map(t => {
+                              if (!selectedIds.has(t.id)) return t;
+                              const overrides = (t.overrides || []).filter(o => !['exposure','brilliance','highlights','shadows','whites','blacks','contrast','saturation','vibrance','temp','tint','sharpness','fade','vignette','grain'].includes(o));
+                              return {
+                                ...t, overrides,
+                                exposure: GLOBAL_DEFAULTS_INIT.exposure, brilliance: GLOBAL_DEFAULTS_INIT.brilliance,
+                                highlights: GLOBAL_DEFAULTS_INIT.highlights, shadows: GLOBAL_DEFAULTS_INIT.shadows,
+                                whites: GLOBAL_DEFAULTS_INIT.whites, blacks: GLOBAL_DEFAULTS_INIT.blacks,
+                                contrast: GLOBAL_DEFAULTS_INIT.contrast, saturation: GLOBAL_DEFAULTS_INIT.saturation,
+                                vibrance: GLOBAL_DEFAULTS_INIT.vibrance, temp: GLOBAL_DEFAULTS_INIT.temp,
+                                tint: GLOBAL_DEFAULTS_INIT.tint, sharpness: GLOBAL_DEFAULTS_INIT.sharpness,
+                                fade: GLOBAL_DEFAULTS_INIT.fade, vignette: GLOBAL_DEFAULTS_INIT.vignette, grain: GLOBAL_DEFAULTS_INIT.grain
+                              };
+                            }));
+                            setStatusMsg('✨ 已全部重置为全局默认参数'); setTimeout(() => setStatusMsg(''), 1500);
+                          }}>
+                            ↺ 一键重置全部色彩参数
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 批量操作按钮组 */}
+                      <div style={{ display: propertyTab === 'presets' ? 'flex' : 'none', flexDirection: 'row', gap: 8, marginTop: 'auto' }}>
+                        <button className="ios-button ios-button-primary" style={{ flex: 1, borderRadius: 10, background: 'var(--ios-indigo)', height: 38, fontWeight: 600, fontSize: 11, padding: '0 4px' }} onClick={applyAllToTimeline}>
+                          ✨ 一键分发至全轨
+                        </button>
+                        <button className="ios-button ios-button-subtle" style={{ flex: 1, borderRadius: 10, height: 38, fontWeight: 500, fontSize: 11, padding: '0 4px', border: '1px solid rgba(255,255,255,0.1)' }} onClick={() => {
+                              commitSnapshotNow();
+                              const validFilters = FILTER_PRESETS.slice(1);
+                              setTimeline(prev => prev.map(t => {
+                                if (resourceMap.get(t.resourceId)?.type === 'image') {
+                                  const r = Math.pow(Math.random(), 1.6);
+                                  const preset = validFilters[Math.floor(r * validFilters.length)];
+                                  return { ...t, exposure: preset.exposure, contrast: preset.contrast, saturation: preset.saturation, temp: preset.temp, tint: preset.tint, brilliance: preset.brilliance };
+                                }
+                                return t;
+                              }));
+                              setStatusMsg(`🎨 已为全轨照片根据权重随机分配滤镜`); setTimeout(() => setStatusMsg(''), 2000);
+                        }}>
+                          🎨 智能化随机全轨滤镜
+                        </button>
+                        {audioItems.length > 0 && timeline.length > 0 && (
+                          <button className="ios-button ios-button-subtle" style={{ borderRadius: 10, height: 34, fontWeight: 500, fontSize: 12, border: '1px solid rgba(255,255,255,0.1)' }}
+                            onClick={() => {
+                              const totalAudioDur = Math.max(...audioItems.map(a => a.timelineStart + a.duration));
+                              if (totalAudioDur <= 0 || timeline.length === 0) return;
+                              commitSnapshotNow();
+                              const perItemDur = totalAudioDur / timeline.length;
+                              setTimeline(prev => prev.map(t => ({ ...t, duration: Math.round(perItemDur * 10) / 10 })));
+                              setStatusMsg(`🎵 已将 ${timeline.length} 张图片均匀分配到 ${totalAudioDur.toFixed(1)}s 音乐时长`);
+                              setTimeout(() => setStatusMsg(''), 2000);
+                            }}>
+                            🎵 自动适配音乐时长
+                          </button>
+                        )}
+                      </div>
+
+                      {/* GROUP 2: 文字工坊 - 影视级重构版 */}
+                      <div className="ios-prop-group" style={{ display: propertyTab === 'text' ? 'flex' : 'none', flexDirection: 'column', gap: 16, padding: '0', background: 'transparent', border: 'none' }}>
+                        
+                        {/* 模块一：基础排版区域 */}
+                        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1 }}>基础排版</span>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button className="ios-hover-scale" style={{ minWidth: 0, padding: '0 12px', height: 26, fontSize: 12, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600, boxShadow: '0 2px 8px rgba(99,102,241,0.4)' }} onClick={() => {
+                                if (!selectedItem) return;
+                                commitSnapshotNow();
+                                const newId = `txt_${Date.now()}_${Math.random().toString(36).substr(2,4)}`;
+                                setTimeline(prev => prev.map(t => {
+                                  if (!selectedIds.has(t.id)) return t;
+                                  return {
+                                    ...t,
+                                    textOverlays: [...(t.textOverlays || []), { id: newId, text: '新建文本层', fontSize: Math.floor(Math.random()*15)+20, fontColor: '#ffffff', fontFamily: 'sans-serif', textX: 50 + (Math.random()*10 - 5), textY: 50 + (Math.random()*10 - 5), textAlign: 'center' }]
+                                  };
+                                }));
+                                setSelectedTextIds(new Set([newId]));
+                              }}>✨ 插入文本图层</button>
+                            </div>
+                          </div>
+
+                          {(() => {
+                            const getActiveTextProp = (key: string, defVal: any) => {
+                              if (!selectedItem) return defVal;
+                              if (selectedTextIds.size > 0) {
+                                const activeOverlays = (selectedItem.textOverlays || []).filter(o => selectedTextIds.has(o.id));
+                                if (activeOverlays.length > 0) {
+                                  let k = key;
+                                  if (key === 'overlayText') k = 'text';
+                                  return (activeOverlays[0] as any)[k] !== undefined ? (activeOverlays[0] as any)[k] : defVal;
+                                }
+                              }
+                              return (selectedItem as any)[key] !== undefined ? (selectedItem as any)[key] : defVal;
+                            };
+
+                            const activeOverlays = (selectedItem?.textOverlays || []).filter(o => selectedTextIds.has(o.id));
+                            const displayVal = activeOverlays.length > 0 ? (activeOverlays.every(o => o.text === activeOverlays[0].text) ? activeOverlays[0].text : '(多选状态 - 分别保留原文本)') : (selectedItem?.overlayText || '');
+                            
+                            return (
+                              <>
+                                <textarea 
+                                  value={displayVal} 
+                                  onChange={(e) => updateSelectedProperty('overlayText', e.target.value)} 
+                                  placeholder={activeOverlays.length > 0 ? "输入选中文本..." : "输入片头字幕、标题或解说（全局备用）..."} 
+                                  style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '12px 14px', width: '100%', boxSizing: 'border-box', fontSize: 13, color: '#fff', outline: 'none', resize: 'vertical', minHeight: 70, fontFamily: 'inherit', lineHeight: 1.5 }} 
+                                />
+
+                                {/* 极简色盘挂载：字色 */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 0' }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>文字主色 (Font Color)</span>
+                                  {renderPremiumColorPicker('fontColor', getActiveTextProp('fontColor', '#FFFFFF'), '#FFFFFF')}
+                                </div>
+
+                          {/* 字体配置 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <ProFontSelect
+                              value={selectedItem?.fontFamily || 'sans-serif'}
+                              onChange={v => updateSelectedProperty('fontFamily', v)}
+                              optGroups={[
+                                { label: '✨ 系统预装', options: [
+                                  { label: '默认黑体', value: 'sans-serif' },
+                                  { label: '微软雅黑', value: "'Microsoft YaHei', sans-serif" },
+                                  { label: '黑体 SimHei', value: "'SimHei', sans-serif" },
+                                  { label: '宋体 SimSun', value: "'SimSun', serif" },
+                                  { label: '楷体 KaiTi', value: "'KaiTi', serif" },
+                                  { label: '华文行楷', value: "'STXingkai', cursive" },
+                                  { label: '华文隶书', value: "'STLiti', serif" },
+                                  { label: '华文彩云', value: "'STCaiyun', cursive" },
+                                  { label: '幼圆', value: "'YouYuan', sans-serif" },
+                                ]},
+                                { label: '🖌️ 云端书法 (免安装即用)', options: [
+                                  { label: '志莽行书 · 行草奔放', value: "'Zhi Mang Xing', cursive" },
+                                  { label: '马善政楷书 · 端庄大气', value: "'Ma Shan Zheng', cursive" },
+                                  { label: '龙藏体 · 古朴苍劲', value: "'Long Cang', cursive" },
+                                  { label: '流建毛草 · 飘逸草书', value: "'Liu Jian Mao Cao', cursive" },
+                                  { label: '站酷庆科黄油体', value: "'ZCOOL QingKe HuangYou', cursive" },
+                                  { label: '站酷快乐体', value: "'ZCOOL KuaiLe', cursive" },
+                                  { label: '站酷小薇体', value: "'ZCOOL XiaoWei', serif" },
+                                ]},
+                                { label: '🎨 西文艺术', options: [
+                                  { label: 'Impact 海报体', value: "'Impact', sans-serif" },
+                                  { label: 'Georgia 优雅衬线', value: "'Georgia', serif" },
+                                  { label: 'Courier 打字机', value: "'Courier New', monospace" },
+                                  { label: 'Comic Sans 手写', value: "'Comic Sans MS', cursive" },
+                                ]}
+                              ]}
+                            />
+
+                            {/* 对齐与格式控制栏 */}
+                            <div style={{ display: 'flex', gap: 6, background: 'rgba(0,0,0,0.2)', padding: 6, borderRadius: 10 }}>
+                              <div onClick={() => updateSelectedProperty('fontWeight', selectedItem?.fontWeight === 'bold' ? 'normal' : 'bold')} style={{ flex: 1, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selectedItem?.fontWeight === 'bold' ? 'rgba(99,102,241,0.2)' : 'transparent', color: selectedItem?.fontWeight === 'bold' ? '#fff' : 'rgba(255,255,255,0.6)', fontWeight: 800, fontSize: 13, transition: '0.2s' }}>B</div>
+                              <div onClick={() => updateSelectedProperty('fontWeight', selectedItem?.fontWeight === 'italic' ? 'normal' : 'italic')} style={{ flex: 1, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: selectedItem?.fontWeight === 'italic' ? 'rgba(99,102,241,0.2)' : 'transparent', color: selectedItem?.fontWeight === 'italic' ? '#fff' : 'rgba(255,255,255,0.6)', fontStyle: 'italic', fontSize: 13, transition: '0.2s' }}>I</div>
+                              <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)', alignSelf: 'center', margin: '0 4px' }} />
+                              {(['left', 'center', 'right'] as const).map(a => (
+                                <div key={a} onClick={() => updateSelectedProperty('textAlign', a)} style={{ flex: 1, height: 28, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: (selectedItem?.textAlign || 'center') === a ? 'rgba(255,255,255,0.1)' : 'transparent', color: (selectedItem?.textAlign || 'center') === a ? '#fff' : 'rgba(255,255,255,0.5)', fontSize: 11, transition: '0.2s' }}>
+                                  {a === 'left' ? '←' : a === 'center' ? '—' : '→'}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                                {/* 专业排版无极滑块矩阵 */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 8 }}>
+                                  {([
+                                    ['fontSize', '字号', 8, 200, 1, 36],
+                                    ['textLetterSpacing', '字偶距', -10, 50, 1, 0],
+                                    ['textLineHeight', '行间距', 0.5, 3.0, 0.1, 1.2],
+                                    ['textOpacity', '不透明度', 0, 1, 0.05, 1],
+                                    ['textRotation', '旋转轴向', -180, 180, 1, 0]
+                                  ]).map(([key, label, min, max, step, defVal]: any) => {
+                                    const val = getActiveTextProp(key, defVal);
+                                    return (
+                                      <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)' }}>{label}</span>
+                                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.9)', fontVariantNumeric: 'tabular-nums' }}>{Number(val).toFixed(step < 1 ? 1 : 0)}</span>
+                                        </div>
+                                        <ProSlider min={min} max={max} step={step} value={val} isCentered={key === 'textRotation' || key === 'textLetterSpacing'} centerValue={0} onChange={d => updatePropertyWithUndo(key, d)} onMouseUp={finalizeSliderUndo} />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+
+                        {/* 模块二：场控动效（入场时间线）调至排版之下 */}
+                        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1 }}>🎬 入场时间线</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                            {([
+                              ['none', '🚫 刚性瞬间'], ['fadeIn', '☁️ 电影淡入'], ['slideUp', '↑ 稳重上升'],
+                              ['typewriter', '⌨️ 原型打字'], ['zoom', '🔍 夸张冲刺'], ['bounce', '⬆ 俏皮弹跳'],
+                              ['slideLeft', '→ 左侧划入'], ['slideRight', '← 右侧划入'], ['rotateIn', '🌀 炫酷旋入'],
+                              ['flipInX', '🔁 翻转入场'], ['zoomInDown', '🛸 空降缩放'], ['jackInTheBox', '📦 魔盒弹出']
+                            ] as [string, string][]).map(([val, label]) => (
+                              <div
+                                key={val}
+                                onClick={() => updateSelectedProperty('textAnimation', val)}
+                                style={{
+                                  padding: '8px 4px', borderRadius: 8, cursor: 'pointer', textAlign: 'center',
+                                  fontSize: 10, fontWeight: (selectedItem?.textAnimation || 'none') === val ? 700 : 500,
+                                  color: (selectedItem?.textAnimation || 'none') === val ? '#fff' : 'rgba(255,255,255,0.5)',
+                                  background: (selectedItem?.textAnimation || 'none') === val ? 'rgba(99,102,241,0.3)' : 'rgba(0,0,0,0.2)',
+                                  border: `1px solid ${(selectedItem?.textAnimation || 'none') === val ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.03)'}`,
+                                  transition: '0.2s'
+                                }}
+                              >{label}</div>
+                            ))}
+                          </div>
+                          {(selectedItem?.textAnimation && selectedItem.textAnimation !== 'none') && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>动效行进总时长</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{(selectedItem?.textAnimDuration ?? 0.6).toFixed(1)}s</span></div>
+                              <ProSlider min={0.1} max={5.0} step={0.1} value={selectedItem?.textAnimDuration ?? 0.6} onChange={d => updatePropertyWithUndo('textAnimDuration', d)} onMouseUp={finalizeSliderUndo} />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 模块三：特效涂装系统（发光、阴影、描边、底板高度定制） */}
+                        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1, marginBottom: 4 }}>高阶特效容器</span>
+
+                          {/* 涂装子模块：发光 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateSelectedProperty('textGlow', !selectedItem?.textGlow)}>
+                              <span style={{ fontSize: 12, color: selectedItem?.textGlow ? '#6EE7B7' : 'rgba(255,255,255,0.6)', fontWeight: selectedItem?.textGlow ? 600 : 400 }}>✨ 霓虹发光 (Glow)</span>
+                              <div style={{ width: 36, height: 20, borderRadius: 10, background: selectedItem?.textGlow ? '#34D399' : 'rgba(255,255,255,0.1)', position: 'relative' }}>
+                                <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: selectedItem?.textGlow ? 18 : 2, transition: '0.2s' }} />
+                              </div>
+                            </div>
+                            {selectedItem?.textGlow && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>发光光谱色</span>
+                                  {renderPremiumColorPicker('textGlowColor', selectedItem?.textGlowColor || selectedItem?.fontColor || '#FFFFFF', selectedItem?.fontColor || '#FFFFFF')}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>扩散半径</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{selectedItem?.textGlowRadius ?? 20}</span></div>
+                                  <ProSlider min={0} max={100} step={1} value={selectedItem?.textGlowRadius ?? 20} onChange={d => updatePropertyWithUndo('textGlowRadius', d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 涂装子模块：阴影 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateSelectedProperty('textShadowColor', selectedItem?.textShadowColor ? '' : 'rgba(0,0,0,0.8)')}>
+                              <span style={{ fontSize: 12, color: selectedItem?.textShadowColor ? '#A78BFA' : 'rgba(255,255,255,0.6)', fontWeight: selectedItem?.textShadowColor ? 600 : 400 }}>🌑 物理投影 (Shadow)</span>
+                              <div style={{ width: 36, height: 20, borderRadius: 10, background: selectedItem?.textShadowColor ? '#8B5CF6' : 'rgba(255,255,255,0.1)', position: 'relative' }}>
+                                <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: selectedItem?.textShadowColor ? 18 : 2, transition: '0.2s' }} />
+                              </div>
+                            </div>
+                            {selectedItem?.textShadowColor && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>阴影深度色</span>
+                                  {renderPremiumColorPicker('textShadowColor', selectedItem?.textShadowColor?.length === 7 ? selectedItem.textShadowColor : '#000000', '#000000')}
+                                </div>
+                                {([['textShadowBlur', '柔焦模糊度', 0, 50, 1, 8], ['textShadowOffsetX', '水平光偏 X', -50, 50, 1, 2], ['textShadowOffsetY', '垂直光偏 Y', -50, 50, 1, 2]] as any).map(([key, label, min, max, step, defVal]: any) => (
+                                  <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{label}</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{((selectedItem as any)?.[key] ?? defVal)}</span></div>
+                                    <ProSlider min={min} max={max} step={step} value={(selectedItem as any)?.[key] ?? defVal} isCentered={min < 0} centerValue={0} onChange={d => updatePropertyWithUndo(key, d)} onMouseUp={finalizeSliderUndo} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 涂装子模块：描边 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateSelectedProperty('textStrokeColor', selectedItem?.textStrokeColor ? '' : '#000000')}>
+                              <span style={{ fontSize: 12, color: selectedItem?.textStrokeColor ? '#F472B6' : 'rgba(255,255,255,0.6)', fontWeight: selectedItem?.textStrokeColor ? 600 : 400 }}>🔲 坚实描边 (Stroke)</span>
+                              <div style={{ width: 36, height: 20, borderRadius: 10, background: selectedItem?.textStrokeColor ? '#EC4899' : 'rgba(255,255,255,0.1)', position: 'relative' }}>
+                                <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: selectedItem?.textStrokeColor ? 18 : 2, transition: '0.2s' }} />
+                              </div>
+                            </div>
+                            {selectedItem?.textStrokeColor && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>边界色彩</span>
+                                  {renderPremiumColorPicker('textStrokeColor', selectedItem?.textStrokeColor || '#000000', '#000000')}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>边界粗细</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{selectedItem?.textStrokeWidth ?? 1}px</span></div>
+                                  <ProSlider min={0.5} max={15} step={0.5} value={selectedItem?.textStrokeWidth ?? 1} onChange={d => updatePropertyWithUndo('textStrokeWidth', d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 涂装子模块：底板 */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => updateSelectedProperty('textBg', selectedItem?.textBg && selectedItem.textBg !== 'transparent' ? 'transparent' : 'rgba(0,0,0,0.5)')}>
+                              <span style={{ fontSize: 12, color: (selectedItem?.textBg && selectedItem.textBg !== 'transparent') ? '#60A5FA' : 'rgba(255,255,255,0.6)', fontWeight: (selectedItem?.textBg && selectedItem.textBg !== 'transparent') ? 600 : 400 }}>◼ 遮罩底板 (Plate)</span>
+                              <div style={{ width: 36, height: 20, borderRadius: 10, background: (selectedItem?.textBg && selectedItem.textBg !== 'transparent') ? '#3B82F6' : 'rgba(255,255,255,0.1)', position: 'relative' }}>
+                                <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: (selectedItem?.textBg && selectedItem.textBg !== 'transparent') ? 18 : 2, transition: '0.2s' }} />
+                              </div>
+                            </div>
+                            {(selectedItem?.textBg && selectedItem.textBg !== 'transparent') && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>填充材质色</span>
+                                  {renderPremiumColorPicker('textBg', selectedItem?.textBg?.length === 7 ? selectedItem.textBg : '#1A1A1A', '#1A1A1A')}
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>容器内边距</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{selectedItem?.textBgPadding ?? 12}px</span></div>
+                                  <ProSlider min={0} max={60} step={1} value={selectedItem?.textBgPadding ?? 12} onChange={d => updatePropertyWithUndo('textBgPadding', d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>裁剪圆角</span><span style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{selectedItem?.textBgRadius ?? 8}px</span></div>
+                                  <ProSlider min={0} max={100} step={1} value={selectedItem?.textBgRadius ?? 8} onChange={d => updatePropertyWithUndo('textBgRadius', d)} onMouseUp={finalizeSliderUndo} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 模块四：艺术字材质预设（展示全部平铺态） */}
+                        <div style={{ background: 'rgba(255,255,255,0.025)', borderRadius: 16, padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, border: '1px solid rgba(255,255,255,0.06)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#F3F4F6', letterSpacing: 1 }}>一键应用画廊</span>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 6 }}>
+                            {([
+                              { label: '清除', color: '#FFFFFF', shadow: '', stroke: '', glow: false, font: 'sans-serif' },
+                              { label: '浪漫霓虹', color: '#00FFFF', shadow: '#00FFFF', stroke: '', glow: true, font: 'sans-serif' },
+                              { label: '重金属', color: '#FFD700', shadow: '#B8860B', stroke: '#DAA520', glow: false, font: "'Impact', sans-serif" },
+                              { label: '国风水墨', color: '#2F2F2F', shadow: 'rgba(0,0,0,0.3)', stroke: '', glow: false, font: "'STXingkai', cursive" },
+                              { label: '赛博朋克', color: '#FF00FF', shadow: '#FF00FF', stroke: '#00FF00', glow: true, font: "'Impact', sans-serif" },
+                              { label: '烈焰红玫', color: '#FF6B35', shadow: '#FF0000', stroke: '#FFD700', glow: true, font: "'SimHei', sans-serif" },
+                              { label: '高冷极冰', color: '#E0F4FF', shadow: '#4FC3F7', stroke: '#81D4FA', glow: true, font: 'serif' },
+                              { label: '古典碑帖', color: '#8B7355', shadow: '#5C4033', stroke: '#DEB887', glow: false, font: "'STLiti', serif" },
+                              { label: '毒液侵袭', color: '#9D00FF', shadow: '#4A00E0', stroke: '#00B4DB', glow: true, font: "'Impact', sans-serif" },
+                              { label: '血金王座', color: '#8B0000', shadow: '#3E0000', stroke: '#FFD700', glow: false, font: "'Microsoft YaHei', sans-serif" },
+                              { label: '纯享豆沙', color: '#D9B8B5', shadow: '', stroke: '', glow: false, font: "'KaiTi', serif" },
+                            ]).map(preset => (
+                              <div
+                                key={preset.label}
+                                onClick={() => {
+                                  commitSnapshotNow();
+                                  setTimeline(p => p.map(t => selectedIds.has(t.id) ? {
+                                    ...t,
+                                    fontColor: preset.color,
+                                    textShadowColor: preset.shadow,
+                                    textStrokeColor: preset.stroke,
+                                    textGlow: preset.glow,
+                                    fontFamily: preset.font,
+                                  } : t));
+                                }}
+                                style={{ padding: '6px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', textAlign: 'center', fontSize: 13, color: preset.color, fontWeight: 800, textShadow: preset.shadow ? `0 0 8px ${preset.shadow}` : 'none', letterSpacing: 1 }}
+                              >{preset.label}</div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* GROUP 4: 几何与时间 */}
+                      <div className="ios-prop-group" style={{ display: propertyTab === 'transform' ? 'block' : 'none' }}>
+                        <div className="ios-text" style={{ color: '#F87171', fontSize: 13, marginBottom: 8, display: 'block' }}>📐 几何、时间与转场</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button className="ios-button-small ios-button" style={{ flex: 1 }} onClick={() => updateSelectedProperty('rotation', (selectedItem!.rotation + 90) % 360)}>↺ 旋转 90°</button>
+                            <button className={`ios-button ios-button-small ${isCropping ? 'ios-button-primary' : 'ios-button-outline'}`}
+                              style={{ flex: 1 }}
+                              onClick={() => {
+                                if (isCropping) { updateSelectedProperty('cropPos', crop); setIsCropping(false); }
+                                else { setCrop({ unit: '%', width: 50, height: 50, x: 25, y: 25 }); setIsCropping(true); }
+                              }}
+                            >{isCropping ? '确认裁剪' : '自由裁剪'}</button>
+                          </div>
+                          <div className="ios-field" >
+                             <IosSelect
+                               value={selectedItem?.fillMode || 'cover'}
+                               onChange={val => {
+                                 commitSnapshotNow();
+                                 updateSelectedProperty('fillMode', val);
+                               }}
+                               style={{ height: 32 }}
+                               options={[
+                                 { value: 'cover', label: '智能匹配 (Cover)' },
+                                 { value: 'contain', label: '适应比例 (Contain)' },
+                               ]}
+                             />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>缩放: {selectedItem?.zoom?.toFixed(2) || '1.0'}</span>
+                            <ProSlider min={1.0} max={3.0} step={0.1} value={selectedItem?.zoom || 1.0} onChange={d => updateSelectedProperty('zoom', d)} />
+                          </div>
+                          <div className="ios-field" >
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><label className="ios-field-label">封装格式</label>
+                              <span>转场方式</span>
+                              {selectedItem && <span onClick={() => selectedItem && (isOverridden(selectedItem, 'transition') ? restoreInheritance(selectedItem.id, 'transition') : null)} style={{ cursor: isOverridden(selectedItem, 'transition') ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, 'transition') ? '点击恢复继承' : '继承全局默认'}>{isOverridden(selectedItem, 'transition') ? '✏️' : '🔗'}</span>}
+                            </span>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <IosSelect
+                                value={selectedItem?.transition || 'none'}
+                                onChange={val => {
+                                  commitSnapshotNow();
+                                  updateSelectedProperty('transition', val);
+                                }}
+                                style={{ flex: 1, height: 32 }}
+                                options={[
+                                  { value: 'none', label: '直接切入 (Cut)' },
+                                  { value: 'fade', label: '经典叠化 (Dissolve)' },
+                                  { value: 'white', label: '模糊闪白 (Dip to White)' },
+                                  { value: 'iris', label: '中心扩散 (Iris)' },
+                                  { value: 'slide', label: '平滑推入 (Push)' },
+                                  { value: 'slide_up', label: '垂直推开 (Slide Up)' },
+                                  { value: 'zoom', label: '专业缩放 (Zoom)' },
+                                  { value: 'wipe', label: '硬核擦除 (Wipe)' },
+                                  { value: 'cube', label: '立体旋转 (Cube)' },
+                                  { value: 'glitch', label: '故障艺术 (Glitch)' },
+                                  { value: 'flip', label: '水平翻转 (Flip)' }
+                                ]}
+                                favSet={favTrans}
+                                onToggleFav={toggleFavTrans}
+                              />
+                               <div
+                                 title="为时间线所有片段随机分配转场（仅来自收藏）"
+                                 className="ios-hover-scale"
+                                 style={{
+                                   height: 32, width: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                   background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.4)', cursor: 'pointer', fontSize: 16,
+                                   boxShadow: '0 2px 8px rgba(99,102,241,0.2)', transition: 'all 0.2s cubic-bezier(0.23, 1, 0.32, 1)', flexShrink: 0
+                                 }}
+                                 onClick={() => {
+                                   commitSnapshotNow();
+                                   const transPool = favTrans.length > 0 ? favTrans : ['none', 'fade', 'white', 'iris', 'slide', 'slide_up', 'zoom', 'wipe', 'cube', 'glitch', 'flip'];
+                                   setTimeline(prev => prev.map(t => {
+                                     const randTrans = transPool[Math.floor(Math.random() * transPool.length)];
+                                     const ov = new Set(t.overrides || []);
+                                     ov.add('transition');
+                                     return { ...t, transition: randTrans, overrides: Array.from(ov) };
+                                   }));
+                                   setStatusMsg('🎲 已为全轨随机分配新转场！'); setTimeout(() => setStatusMsg(''), 2000);
+                                 }}
+                               >🎲</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                      <div className="ios-text" style={{ color: '#C084FC', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>🎵 音频实验室</span>
+                        {selectedAudioIds.size > 1 && (
+                          <span style={{ fontSize: 11, background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 12, cursor: 'pointer', boxShadow: '0 2px 8px rgba(16,185,129,0.3)', transition: 'all 0.2s' }} className="ios-hover-scale" onClick={stitchSelectedAudioGaps}>🧲 缝合所选残片</span>
+                        )}
+                      </div>
+                      <div className="ios-prop-group" style={{ padding: '16px', borderRadius: 16, background: 'rgba(139,92,246,0.05)', border: '1px solid rgba(139,92,246,0.1)', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>播放音量: {Math.round((audioItems.find(a => selectedAudioIds.has(a.id))?.volume || 1) * 100)}%</span>
+                          <ProSlider min={0} max={2} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.volume || 1} onChange={d => selectedAudioIds.forEach(id => updateAudioItem(id, { volume: d }))} />
+                        </div>
+                        {/* 淡入淡出控制 (任务7) */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>淡入: {(audioItems.find(a => selectedAudioIds.has(a.id))?.fadeIn || 0).toFixed(1)}s</span>
+                          <ProSlider min={0} max={5} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.fadeIn || 0} onChange={d => selectedAudioIds.forEach(id => updateAudioItem(id, { fadeIn: d }))} />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>淡出: {(audioItems.find(a => selectedAudioIds.has(a.id))?.fadeOut || 0).toFixed(1)}s</span>
+                          <ProSlider min={0} max={5} step={0.1} value={audioItems.find(a => selectedAudioIds.has(a.id))?.fadeOut || 0} onChange={d => selectedAudioIds.forEach(id => updateAudioItem(id, { fadeOut: d }))} />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+                          <button className={`ios-button ios-button-small ${isEditingAudio ? "ios-button-primary" : "ios-button-outline"}`}
+                            style={{ height: 34, borderRadius: 8, fontSize: 12 }}
+                            onClick={() => setIsEditingAudio(!isEditingAudio)}
+                            disabled={selectedAudioIds.size > 1}
+                          >
+                            {isEditingAudio ? "✅ 正在剪辑" : "✂️ 剪辑模式"}
+                          </button>
+                          {(isEditingAudio && selectedAudioIds.size === 1) && (
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button className="ios-button-small ios-button" style={{ flex: 1 }} onClick={() => {
+                                const id = Array.from(selectedAudioIds)[0];
+                                const item = audioItems.find(a => a.id === id);
+                                if (item) {
+                                  const boundaries = [0, ...(item.cutPoints || []).sort((a, b) => a - b), item.duration];
+                                  const allIndices = boundaries.slice(0, -1).map((_, i) => i);
+                                  const selected = new Set(item.selectedRegions || []);
+                                  updateAudioItem(id, { selectedRegions: allIndices.filter(i => !selected.has(i)) });
+                                }
+                              }}>反选</button>
+                              <button className="ios-button-small ios-button ios-button-subtle" style={{ flex: 1 }} onClick={() => executeAudioCut(Array.from(selectedAudioIds)[0])}>确认剪除</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <button className="ios-button ios-button-primary" style={{ marginTop: 20, background: 'rgba(255,59,48,0.15)', color: '#FF453A', border: '1px solid rgba(255,59,48,0.3)', borderRadius: 10, height: 44, fontWeight: 600, transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(255,59,48,0.1)' }} onClick={() => { setAudioItems(p => p.filter(a => !selectedAudioIds.has(a.id))); setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set()); setIsEditingAudio(false); }}>🗑️ 从项目彻底移除选定音频</button>
+                    </div>
+                  )
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16, paddingTop: 20, alignItems: 'center' }}>
+                    <div style={{ fontSize: 36, opacity: 0.15 }}>📷</div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', textAlign: 'center', lineHeight: 1.8 }}>
+                      在轨道中选择片段获取效果选项
+                    </div>
+                    {timeline.length === 0 && (
+                      <div style={{ marginTop: 8, padding: '10px 16px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 10, width: '100%', boxSizing: 'border-box' }}>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8 }}>
+                          💡 <strong style={{ color: 'rgba(255,255,255,0.7)' }}>快速开始</strong><br/>
+                          1. 左侧 《照片》 Tab 导入素材<br/>
+                          2. 单击卡片 → 添加到轨道<br/>
+                          3. 直接拖放文件到窗口也可导入
+                        </div>
+                        <div
+                          style={{ marginTop: 10, padding: '6px 0', textAlign: 'center', fontSize: 11, color: 'var(--ios-indigo)', cursor: 'pointer', fontWeight: 600 }}
+                          onClick={() => { setShowGlobalDefaults(true); setShowExportPanel(false); }}
+                        >⚙️ 配置全局默认参数</div>
+                      </div>
+                    )}
+                  </div>
+                )
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
+
+                  {/* 一键导出预设 */}
+                  <div className="ios-prop-group">
+                    <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⚡ 快捷导出预设</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {[
+                        { name: '📱 抖音/快手', fmt: 'mp4', res: '1080p', fps: '60', codec: 'h264', quality: 'high' as const },
+                        { name: '🅱️ B站高清', fmt: 'mp4', res: '1080p', fps: '60', codec: 'h264', quality: 'high' as const },
+                        { name: '🎬 Apple ProRes', fmt: 'mov', res: 'original', fps: '60', codec: 'h265', quality: 'lossless' as const },
+                        { name: '📺 4K HDR', fmt: 'mp4', res: '4k', fps: '60', codec: 'h265', quality: 'lossless' as const },
+                      ].map(preset => (
+                        <div
+                          key={preset.name}
+                          className="filter-preset-card"
+                          onClick={() => {
+                            setExportFormat(preset.fmt as any);
+                            setExportResolution(preset.res as any);
+                            setExportFps(preset.fps as any);
+                            setExportCodec(preset.codec as any);
+                            setExportQuality(preset.quality);
+                            if (preset.codec === 'h265' && preset.name.includes('HDR')) setExportHdr(true);
+                            setStatusMsg(`✅ 已应用「${preset.name}」预设`); setTimeout(() => setStatusMsg(''), 1500);
+                          }}
+                        >{preset.name}</div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="ios-prop-group" style={{ marginTop: 0 }}>
+                    <div className="ios-text" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 12, display: 'block' }}>🎬 输出格式与帧率</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="ios-field" >
+                        <select className="ios-dark-select" value={exportFormat} onChange={e => setExportFormat(e.target.value as any)}>
+                          <option value="mp4">MP4 (通用媒体容器)</option>
+                          <option value="mov">MOV (Apple 专业容器)</option>
+                        </select>
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">编码标准 (Codec)</label>
+                        <select className="ios-dark-select" value={exportCodec} onChange={e => setExportCodec(e.target.value as any)}>
+                          <option value="h264">H.264 / AVC (最强兼容性)</option>
+                          <option value="h265">H.265 / HEVC (极致压缩 & 4K 推荐)</option>
+                        </select>
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">HDR 10-bit & 杜比色彩空间 (只支持 H.265)</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                          <input
+                            type="checkbox"
+                            checked={exportHdr}
+                            disabled={exportCodec !== 'h265'}
+                            onChange={e => setExportHdr(e.target.checked)}
+                            style={{ width: 18, height: 18, accentColor: 'var(--ios-indigo)', cursor: exportCodec === 'h265' ? 'pointer' : 'not-allowed' }}
+                          />
+                          <div className="ios-text" style={{ fontSize: 13, opacity: exportCodec === 'h265' ? 0.8 : 0.3 }}>
+                            开启高动态范围 (BT.2020 PQ) {exportCodec !== 'h265' && "(请先切换编码为 H.265)"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">帧速率 (FPS)</label>
+                        <select className="ios-dark-select" value={exportFps} onChange={e => setExportFps(e.target.value as any)}>
+                          <option value="30">30 FPS (标准电影感)</option>
+                          <option value="60">60 FPS (丝滑高刷无拖影)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="ios-prop-group">
+                    <div className="ios-text" style={{ color: '#F59E0B', fontSize: 13, marginBottom: 12, display: 'block' }}>👁️‍🗨️ 画质极限控制</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div className="ios-field" ><label className="ios-field-label">输出分辨率</label>
+                        <select className="ios-dark-select" value={exportResolution} onChange={e => setExportResolution(e.target.value as any)}>
+                          <option value="original">🔰 原尺寸装配 (100% 不缩放超清)</option>
+                          <option value="4k">4K 标准 (3840x2160)</option>
+                          <option value="1080p">1080P 全高清 (1920x1080)</option>
+                        </select>
+                      </div>
+                      <div className="ios-field" ><label className="ios-field-label">渲染画质 (CRF Engine)</label>
+                        <select className="ios-dark-select" value={exportQuality} onChange={e => setExportQuality(e.target.value as any)}>
+                          <option value="lossless">💎 无损直出 (-crf 10, 体积大极清晰)</option>
+                          <option value="high">✨ 专业高画质 (-crf 15, 清晰度优先)</option>
+                          <option value="medium">📱 互联网传播 (-crf 23, 体积最优)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button className="ios-button ios-button-primary ios-hover-scale"
+                    style={{
+                      marginTop: 16, height: 48, borderRadius: 12,
+                      background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+                      boxShadow: '0 8px 20px rgba(79, 70, 229, 0.3), inset 0 1px 1px rgba(255,255,255,0.2)',
+                      fontWeight: 600, fontSize: 13, border: 'none',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onClick={handleGenerate}
+                    disabled={isGenerating}
+                  >
+                    {isGenerating ? '正在拼尽全力导出...' : '开始执行极速渲染'}
+                  </button>
+
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* BOTTOM ZONE */}
+        <div className="glass-panel ios-timeline">
+          <div
+            className="panel-header-ios"
+            style={{ height: 30, padding: '0 12px', background: 'rgba(0,0,0,0.1)', cursor: 'pointer' }}
+            onDoubleClick={() => { setPlayTime(0); setIsPlaying(false); setStatusMsg(' ⏮ 跳至开头'); setTimeout(() => setStatusMsg(''), 1000); }}
+            onClick={handleTripleClickZone}
+            title="双击归零"
+          >
+            <span style={{ fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>
+              {playTime.toFixed(2)}s / {maxPlayTime.toFixed(2)}s
+            </span>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); setPlayTime(0); setIsPlaying(false); setIsJumping(true); setTimeout(() => setIsJumping(false), 350); setStatusMsg('⏮ 已回到起点'); setTimeout(() => setStatusMsg(''), 1200); }} title="回到起点">⏮</button>
+              <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
+              <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); splitAtPlayhead(); }} title="Ctrl+B 分割">✂️</button>
+              <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
+              <div className="zoom-control" onClick={e => e.stopPropagation()}>
+                <span>🔍</span>
+                <input type="range" min={8} max={120} value={pps} onChange={e => setPps(Number(e.target.value))} />
+                <span>{Math.round(pps / 24 * 100)}%</span>
+              </div>
+              <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
+              <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); commitSnapshotNow(); setTimeline([]); setAudioItems([]); }}>清空</button>
+            </div>
+          </div>
+
+          <div
+            ref={timelineScrollRef}
+            style={{
+              flex: 1,
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              position: 'relative',
+              cursor: 'default',
+              background: 'rgba(0,0,0,0.2)'
+            }}
+            onMouseMove={handleTimelineMouseMove}
+            onMouseUp={handleTimelineMouseUp}
+            onMouseLeave={handleTimelineMouseUp}
+            onWheel={handleTimelineWheel}
+          >
+            {/* 1. 时间刻度尺 (Time Ruler) - 专用导航区 */}
+            <div
+              className="ios-time-ruler"
+              style={{ width: timelineWidth }}
+              onMouseDown={(e) => {
+                e.stopPropagation(); // 阻止背景框选触发
+                seekToX(e.clientX);
+                setIsDraggingHead(true);
+                const onMove = (me: MouseEvent) => seekToX(me.clientX);
+                const onUp = () => {
+                  setIsDraggingHead(false);
+                  window.removeEventListener('mousemove', onMove);
+                  window.removeEventListener('mouseup', onUp);
+                };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+              }}
+              onDoubleClick={(e) => {
+                // 需求③：双击刻度 → 跳到该时间点 + 暂停
+                e.stopPropagation();
+                seekToX(e.clientX);
+                setIsPlaying(false);
+                setIsJumping(true);
+                setTimeout(() => setIsJumping(false), 350);
+              }}
+            >
+              {/* 渲染刻度线 - 自适应密度 */}
+              {(() => {
+                // 根据 pps 动态选择刻度间距
+                let tickStep = 1;
+                if (pps < 15) tickStep = 5;
+                else if (pps < 30) tickStep = 2;
+                else if (pps > 80) tickStep = 0.5;
+                const totalTicks = Math.ceil(maxPlayTime / tickStep) + 1;
+                // 精确计算每个刻度的像素位置（考虑 gap）
+                const getTickX = (time: number) => {
+                  let accDur = 0, accX = 0;
+                  for (let i = 0; i < timeline.length; i++) {
+                    const d = timeline[i].duration;
+                    if (time <= accDur + d) {
+                      return 60 + accX + (time - accDur) * pps;
+                    }
+                    accDur += d;
+                    accX += d * pps;
+                  }
+                  return 60 + accX + (time - accDur) * pps;
+                };
+                return Array.from({ length: totalTicks }).map((_, i) => {
+                  const t = i * tickStep;
+                  if (t > maxPlayTime + tickStep) return null;
+                  const x = getTickX(t);
+                  const isMajor = t % (tickStep >= 1 ? 5 : 1) === 0;
+                  return (
+                    <div key={i} style={{ position: 'relative' }}>
+                      <div
+                        className={`ruler-tick ${isMajor ? 'major' : ''}`}
+                        style={{ left: x }}
+                      />
+                      {isMajor && (
+                        <div className="ruler-label" style={{ left: x }}>
+                          {t >= 60 ? `${Math.floor(t/60)}:${(t%60).toString().padStart(2,'0')}` : `${t}s`}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* 播放指针 (三角形拓展抓手 + 加大热区) */}
+            <div
+              ref={playheadRef}
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                width: 1,
+                zIndex: 800,
+                transform: `translateX(${playLineLeft}px)`,
+                transition: isJumping ? 'transform 0.3s ease-out' : ((isPlaying || isDraggingHead) ? 'none' : 'transform 0.1s linear'),
+                pointerEvents: 'none',
+              }}
+            >
+              {/* 三角形头部抓手 */}
+              <div style={{
+                position: 'absolute', top: -2, left: '50%', transform: 'translateX(-50%)',
+                width: 0, height: 0,
+                borderLeft: '7px solid transparent', borderRight: '7px solid transparent',
+                borderTop: '10px solid var(--ios-indigo)',
+                filter: 'drop-shadow(0 2px 4px rgba(99,102,241,0.5))',
+                pointerEvents: 'auto', cursor: 'grab',
+                zIndex: 810,
+              }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setIsDraggingHead(true);
+                  document.body.style.cursor = 'grabbing';
+                  document.body.style.userSelect = 'none';
+                  const onMove = (me: MouseEvent) => { me.preventDefault(); seekToX(me.clientX); };
+                  const onUp = () => {
+                    setIsDraggingHead(false);
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                  };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                }}
+              />
+              {/* 竖线 */}
+              <div style={{
+                position: 'absolute', top: 8, bottom: 0, left: '50%', transform: 'translateX(-50%)',
+                width: 2, background: 'var(--ios-indigo)',
+                boxShadow: '0 0 8px var(--ios-indigo-glow)',
+                borderRadius: 1,
+              }} />
+              {/* 透明宽热区 (20px 宽可点击拖拽) */}
+              <div style={{
+                position: 'absolute', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)',
+                width: 20, cursor: 'grab', pointerEvents: 'auto',
+              }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setIsDraggingHead(true);
+                  document.body.style.cursor = 'grabbing';
+                  document.body.style.userSelect = 'none';
+                  const onMove = (me: MouseEvent) => { me.preventDefault(); seekToX(me.clientX); };
+                  const onUp = () => {
+                    setIsDraggingHead(false);
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                  };
+                  window.addEventListener('mousemove', onMove);
+                  window.addEventListener('mouseup', onUp);
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                width: timelineWidth,
+                padding: '10px 0 10px 0',
+                position: 'relative',
+                marginTop: 0
+              }}
+              onMouseDown={(e) => {
+                // 只有点击背景（非元素）时才触发框选
+                if (e.button === 0 && e.currentTarget === e.target) {
+                  if (e.ctrlKey) {
+                    const rect = timelineScrollRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      const startX = e.clientX - rect.left + timelineScrollRef.current!.scrollLeft;
+                      setSelectionBox({ x1: startX, x2: startX, y: 0, h: 370 });
+                    }
+                  } else {
+                    setSelectedIds(new Set());
+                    setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set());
+                    setSelectedVoiceoverIds(new Set());
+                  }
+                }
+              }}
+            >
+              {selectionBox && (
+                <div
+                  className="ios-selection-box"
+                  style={{
+                    left: Math.min(selectionBox.x1, selectionBox.x2),
+                    width: Math.abs(selectionBox.x2 - selectionBox.x1),
+                    top: 10,
+                    height: 250
+                  }}
+                />
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', height: 210, marginBottom: 8 }}>
+                <div style={{ width: 60, flexShrink: 0, textAlign: 'center', fontSize: 11, fontWeight: 900, opacity: 0.5 }}>图片</div>
+                {timeline.length === 0 && (
+                  <div style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'rgba(255,255,255,0.18)', fontSize: 12, border: '1.5px dashed rgba(255,255,255,0.07)', borderRadius: 12, margin: '0 4px', userSelect: 'none' }}>
+                    <span style={{ fontSize: 24, opacity: 0.5 }}>📷</span>
+                    <span>将照片/视频拖入此处，或在左侧导入并点击卡片添加</span>
+                  </div>
+                )}
+                <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToParentElement, restrictToHorizontalAxis]} onDragEnd={(e) => {
+                  const { active, over } = e;
+                  // 拖动后自动标记为手动排序
+                  if (over && active.id !== over.id && sortMode !== 'manual') {
+                    setSortMode('manual');
+                    setStatusMsg('✋ 拖动后已切换为手动排序'); setTimeout(() => setStatusMsg(''), 1500);
+                  }
+                  if (over && active.id !== over.id) setTimeline(items => arrayMove(items, items.findIndex(i => i.id === active.id), items.findIndex(i => i.id === over.id)));
+                }}>
+                  <div style={{ display: 'flex', gap: 0, height: '100%' }}>
+                    <SortableContext items={timeline.map(t => t.id)} strategy={horizontalListSortingStrategy}>
+                      {timeline.map((item, _idx) => {
+                        const isMulti = selectedIds.size > 1 && selectedIds.has(item.id);
+                        // 计算多选序号（在选中集合中的出现顺序）
+                        const multiIdx = isMulti ? Array.from(selectedIds).indexOf(item.id) : undefined;
+                        return (
+                        <SortableImageCard
+                          key={item.id} item={item} resource={resourceMap.get(item.resourceId)}
+                          isSelected={selectedIds.has(item.id)}
+                          isMultiSelected={isMulti}
+                          multiSelectIndex={multiIdx}
+                          onSelect={handleTimelineSelect}
+                          onRemove={handleTimelineRemove}
+                          pps={pps} previewUrl={previewCache[resourceMap.get(item.resourceId)?.path || '']}
+                          onContextMenu={(e) => handleTimelineContextMenu(e, item.id)}
+                          onTrimDuration={handleTimelineTrim}
+                          onDoubleClickCard={() => handleTimelineDoubleClick(item.id)}
+                        />
+                        );
+                      })}
+                    </SortableContext>
+                  </div>
+                </DndContext>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', height: 50, marginTop: 0 }}>
+                <div style={{ width: 60, flexShrink: 0, textAlign: 'center', fontSize: 11, fontWeight: 900, opacity: 0.5 }}>音频</div>
+                <div style={{ position: 'relative', flex: 1, height: 50, overflow: 'visible' }}>
+                  {audioItems.map(item => {
+                    const isItPlaying = isPlaying && playTime >= item.timelineStart && playTime < (item.timelineStart + item.duration);
+                    return (
+                      <AudioTrackItem
+                        key={item.id}
+                        item={item}
+                        resource={resourceMap.get(item.resourceId)}
+                        isSelected={selectedAudioIds.has(item.id)}
+                        onSelect={handleAudioSelect}
+                        pps={pps}
+                        isPlaying={isItPlaying}
+                        editingMode={isEditingAudio && selectedAudioIds.has(item.id)}
+                        onUpdateItem={updateAudioItem}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 配音轨 (绿色主题) */}
+              <div style={{ display: 'flex', alignItems: 'center', height: 50, marginTop: 0 }}>
+                <div style={{ width: 60, flexShrink: 0, textAlign: 'center', fontSize: 11, fontWeight: 900, opacity: 0.5, color: '#10B981' }}>配音</div>
+                <div style={{ position: 'relative', flex: 1, height: 50, overflow: 'visible' }}>
+                  {voiceoverClips.map((clip: any) => {
+                    const left = clip.timelineStart * pps;
+                    const width = clip.duration * pps;
+                    const isActive = isPlaying && playTime >= clip.timelineStart && playTime < (clip.timelineStart + clip.duration);
+                    return (
+                      <div key={clip.id} 
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             setSelectedVoiceoverIds(new Set([clip.id]));
+                             setSelectedIds(new Set());
+                             setSelectedAudioIds(new Set());
+                           }}
+                           style={{
+                        position: 'absolute', left, width, height: 40, top: 5, boxSizing: 'border-box',
+                        background: isActive ? 'rgba(16,185,129,0.25)' : 'rgba(16,185,129,0.1)',
+                        border: selectedVoiceoverIds.has(clip.id) ? '2px solid #34d399' : '1px solid rgba(16,185,129,0.4)', 
+                        borderRadius: 8,
+                        boxShadow: selectedVoiceoverIds.has(clip.id) ? '0 0 12px rgba(52,211,153,0.5)' : 'none',
+                        display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px',
+                        cursor: 'pointer', transition: 'all 0.2s', overflow: 'hidden',
+                        zIndex: selectedVoiceoverIds.has(clip.id) ? 10 : 1,
+                      }}>
+                        <span style={{ fontSize: 12 }}>🎙️</span>
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ fontSize: 10, fontWeight: 500, color: '#10B981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clip.name || '配音'}</div>
+                          <div style={{ fontSize: 8, color: 'rgba(16,185,129,0.6)' }}>{clip.duration.toFixed(1)}s</div>
+                        </div>
+                        <div onClick={(e) => { e.stopPropagation(); setVoiceoverClips((prev: any[]) => prev.filter((v: any) => v.id !== clip.id)); }} style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+export default App;

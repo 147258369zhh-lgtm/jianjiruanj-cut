@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { invoke } from '@tauri-apps/api/core';
 import { getMediaDuration } from '../utils/mediaUtils';
 import { ResourceCardItem } from './ResourceCardItem';
+import './LeftPanel.css';
 
 export const LeftPanel: React.FC = () => {
   const {

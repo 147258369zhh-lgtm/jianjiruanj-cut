@@ -1,6 +1,8 @@
+import React from 'react';
 import { useAppContext } from '../hooks/useAppContext';
 import { useStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
+import './ContextMenuWidget.css';
 
 export const ContextMenuWidget: React.FC = () => {
   const {
