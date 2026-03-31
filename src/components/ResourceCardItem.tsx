@@ -1,7 +1,7 @@
 import React, { memo, useState, useMemo, useRef, useEffect } from 'react';
 import { Button } from "@fluentui/react-components";
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { useThumbnail } from '../hooks/useThumbnail';
+// import { useThumbnail } from '../hooks/useThumbnail';
 
 const HoverMarqueeText = memo(({ text, isHovered, style }: { text: string; isHovered: boolean; style?: React.CSSProperties }) => {
   const containerRef = useRef<HTMLDivElement>(null);

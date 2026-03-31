@@ -10,7 +10,7 @@ import './LeftPanel.css';
 
 export const LeftPanel: React.FC = () => {
   const {
-    resources, setResources, getEffectiveSrc, globalDefaultsRef, commitSnapshotNow, setTimeline, setAudioItems, removeFromLibrary, handleLibToggle, handleLibSelectPreview, handleLibAdd, handleConvertDNG, handleRevealInExplorer, previewCache, handleImport, setVoiceoverClips, addedResourceIds, playTimeRef
+    resources, setResources: _setResources, getEffectiveSrc: _getEffectiveSrc, globalDefaultsRef: _globalDefaultsRef, commitSnapshotNow, setTimeline, setAudioItems, removeFromLibrary, handleLibToggle, handleLibSelectPreview, handleLibAdd: _handleLibAdd, handleConvertDNG, handleRevealInExplorer, previewCache, handleImport, setVoiceoverClips, addedResourceIds, playTimeRef
   } = useAppContext();
   const {
     leftTab, setLeftTab,

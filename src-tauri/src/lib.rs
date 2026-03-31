@@ -35,6 +35,40 @@ pub struct TimelineItem {
     crop_pos: Option<CropPos>,
     #[serde(rename = "fillMode")]
     fill_mode: Option<String>,
+    animation: Option<String>,
+    
+    // 文字涂装高阶属性
+    #[serde(rename = "fontColor")]
+    font_color: Option<String>,
+    #[serde(rename = "fontSize")]
+    font_size: Option<f32>,
+    #[serde(rename = "textAlign")]
+    text_align: Option<String>,
+    #[serde(rename = "textShadow")]
+    text_shadow: Option<bool>,
+    #[serde(rename = "textShadowColor")]
+    text_shadow_color: Option<String>,
+    #[serde(rename = "textStroke")]
+    text_stroke: Option<bool>,
+    #[serde(rename = "textStrokeColor")]
+    text_stroke_color: Option<String>,
+    #[serde(rename = "textStrokeWidth")]
+    text_stroke_width: Option<f32>,
+    #[serde(rename = "textBgEnable")]
+    text_bg_enable: Option<bool>,
+    #[serde(rename = "textBg")]
+    text_bg: Option<String>,
+    #[serde(rename = "textBgPadX")]
+    text_bg_padx: Option<f32>,
+    #[serde(rename = "textBgPadY")]
+    text_bg_pady: Option<f32>,
+
+    #[serde(rename = "flipX")]
+    flip_x: Option<bool>,
+    #[serde(rename = "flipY")]
+    flip_y: Option<bool>,
+    #[serde(rename = "blendMode")]
+    blend_mode: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -59,6 +93,8 @@ pub struct VideoPayload {
     quality: String,
     codec: String,
     hdr: bool,
+    #[serde(rename = "outputPath")]
+    output_path: Option<String>,
     #[serde(rename = "autoOpen")]
     auto_open: bool,
     #[serde(rename = "resourcePaths")]
@@ -402,9 +438,16 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
         // === 第一阶段: 像素级处理 (仅处理1帧原图) ===
         match item.rotation.unwrap_or(0) {
             90 => vf_chain.push("transpose=1".to_string()),
-            180 => vf_chain.push("hflip,vflip".to_string()),
+            180 => vf_chain.push("hflip,vflip".to_string()), // 暂留，但会被 flipX/Y 补充或覆盖
             270 => vf_chain.push("transpose=2".to_string()),
             _ => {}
+        }
+        
+        if item.flip_x.unwrap_or(false) {
+            vf_chain.push("hflip".to_string());
+        }
+        if item.flip_y.unwrap_or(false) {
+            vf_chain.push("vflip".to_string());
         }
 
         let contrast = item.contrast.unwrap_or(1.0);
@@ -419,7 +462,39 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
         if let Some(text) = &item.overlay_text {
             if !text.trim().is_empty() {
                 let safe_text = text.replace(":", "\\:").replace("'", "\\'");
-                vf_chain.push(format!("drawtext=fontfile='C\\:/Windows/Fonts/msyh.ttc':text='{}':fontcolor=white:fontsize=80:x=(w-text_w)/2:y=h-th-100:borderw=4:bordercolor=black", safe_text));
+                let font_size = item.font_size.unwrap_or(80.0) * 1.5; // 按比例缩放为视频字号
+                let font_color = item.font_color.as_deref().unwrap_or("white").replace("#", "0x");
+                
+                // 定位
+                let align = item.text_align.as_deref().unwrap_or("center");
+                let (x_expr, y_expr) = match align {
+                    "left" => ("100", "h-th-100"),
+                    "right" => ("w-text_w-100", "h-th-100"),
+                    _ => ("(w-text_w)/2", "h-th-100") // center
+                };
+
+                let mut dt = format!("drawtext=fontfile='C\\:/Windows/Fonts/msyh.ttc':text='{}':fontcolor='{}':fontsize={}:x={}:y={}", safe_text, font_color, font_size, x_expr, y_expr);
+
+                // 描边效果
+                if item.text_stroke.unwrap_or(false) {
+                    let stroke_color = item.text_stroke_color.as_deref().unwrap_or("black").replace("#", "0x");
+                    let stroke_w = item.text_stroke_width.unwrap_or(4.0);
+                    dt.push_str(&format!(":borderw={}:bordercolor='{}'", stroke_w, stroke_color));
+                }
+
+                // 阴影效果
+                if item.text_shadow.unwrap_or(false) {
+                    let shadow_color = item.text_shadow_color.as_deref().unwrap_or("black").replace("#", "0x") + "80"; // 半透明阴影
+                    dt.push_str(&format!(":shadowx=6:shadowy=6:shadowcolor='{}'", shadow_color));
+                }
+                
+                // 遮罩底板
+                if item.text_bg_enable.unwrap_or(false) {
+                    let bg_color = item.text_bg.as_deref().unwrap_or("black").replace("#", "0x") + "B3"; // 70% 不透明度
+                    dt.push_str(&format!(":box=1:boxcolor='{}':boxborderw={}", bg_color, item.text_bg_padx.unwrap_or(20.0)));
+                }
+
+                vf_chain.push(dt);
             }
         }
 
@@ -436,11 +511,40 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
             vf_chain.push(format!("scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p,setsar=1", res_w, res_h, res_w, res_h));
         }
 
-        // === 第二阶段: 时间轴生成 (复制已处理帧，几乎零开销) ===
-        vf_chain.push("loop=loop=-1:size=1:start=0".to_string());
-        vf_chain.push(format!("fps={}", fps));
-        vf_chain.push(format!("trim=duration={}", item.duration));
-        vf_chain.push("setpts=PTS-STARTPTS".to_string());
+        // === 第二阶段: 时间轴生成 ===
+        let anim = item.animation.as_deref().unwrap_or("none");
+        let dur_frames = (item.duration * fps as f32) as u32;
+        
+        if anim == "none" {
+            // 静态零开销优化
+            vf_chain.push("loop=loop=-1:size=1:start=0".to_string());
+            vf_chain.push(format!("fps={}", fps));
+            vf_chain.push(format!("trim=duration={}", item.duration));
+            vf_chain.push("setpts=PTS-STARTPTS".to_string());
+        } else {
+            // 动态逐帧动画渲染分支
+            if anim.contains("zoomIn") {
+                vf_chain.push(format!("zoompan=z='min(pzoom+0.0015,1.5)':d={}:s={}x{}", dur_frames, res_w, res_h));
+            } else if anim.contains("zoomOut") {
+                vf_chain.push(format!("zoompan=z='max(1.5-0.0015*in,1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}", dur_frames, res_w, res_h));
+            } else if anim.contains("panRight") {
+                vf_chain.push(format!("zoompan=z=1.1:x='min(x+2,iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}", dur_frames, res_w, res_h));
+            } else if anim.contains("panLeft") {
+                vf_chain.push(format!("zoompan=z=1.1:x='max(iw-iw/zoom-in*2,0)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}", dur_frames, res_w, res_h));
+            } else {
+                // 回退到普通平展
+                vf_chain.push("loop=loop=-1:size=1:start=0".to_string());
+                vf_chain.push(format!("fps={}", fps));
+                vf_chain.push(format!("trim=duration={}", item.duration));
+            }
+            
+            // 补充出入场 Fade
+            if anim.contains("fadeIn") || anim.contains("slide") {
+                // 由于用 slide 模拟在 ffmpeg 中较复杂，统一降级为淡入处理保证美感
+                vf_chain.push("fade=t=in:st=0:d=1.0".to_string());
+            }
+            vf_chain.push("setpts=PTS-STARTPTS".to_string());
+        }
 
         script.push_str(&format!("[{}:v]{}[v{}];\n", i, vf_chain.join(","), i));
     }
@@ -568,14 +672,17 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
     let want_h265 = codec == "h265";
     let (encoder_name, encoder_family) = detect_best_encoder(&ffmpeg_path, want_h265);
 
-    let final_output = app
-        .path()
-        .desktop_dir()
-        .map_err(|e| e.to_string())?
-        .join(format!(
-            "output_{}.mp4",
-            chrono::Local::now().format("%Y%m%d_%H%M%S")
-        ));
+    let final_output = if let Some(path) = &payload.output_path {
+        std::path::PathBuf::from(path)
+    } else {
+        app.path()
+            .desktop_dir()
+            .map_err(|e| e.to_string())?
+            .join(format!(
+                "output_{}.mp4",
+                chrono::Local::now().format("%Y%m%d_%H%M%S")
+            ))
+    };
 
     // 预处理所有图片路径 (DNG 转换 - 启用 Rayon 并行风暴)
     use rayon::prelude::*;
@@ -596,8 +703,8 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
     }).collect();
 
     // 决定并行分段数 (防止线程风暴与显卡Session并发溢出)
-    // 硬件编码器 (NVENC/AMF) 只能忍受极少的并发，大量并发会导致 GPU 0% 且 CPU 100% 锁死。
-    let max_segments = if encoder_family == "cpu" { (cpu_count / 4).max(1).min(4) } else { 1 };
+    // 硬件编码器 (NVENC/AMF) 只能忍受极少的并发，大量并发会导致 GPU 0% 且 CPU 100% 锁死。但 1 太慢，提升至 2
+    let max_segments = if encoder_family == "cpu" { (cpu_count / 4).max(1).min(4) } else { 2 };
     let num_segments = if items.len() <= 6 { 1 } else { (items.len() / 8).min(max_segments).max(1) };
     let total_duration: f32 = items.iter().map(|item| item.duration).sum();
 
@@ -746,13 +853,42 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
                     270 => vf.push("transpose=2".to_string()),
                     _ => {}
                 }
+                if item.flip_x.unwrap_or(false) { vf.push("hflip".to_string()); }
+                if item.flip_y.unwrap_or(false) { vf.push("vflip".to_string()); }
+                
                 let c = item.contrast.unwrap_or(1.0);
                 let s = item.saturation.unwrap_or(1.0);
                 if c != 1.0 || s != 1.0 { vf.push(format!("eq=contrast={}:saturation={}", c, s)); }
                 if let Some(text) = &item.overlay_text {
                     if !text.trim().is_empty() {
-                        let safe = text.replace(":", "\\:").replace("'", "\\'");
-                        vf.push(format!("drawtext=fontfile='C\\:/Windows/Fonts/msyh.ttc':text='{}':fontcolor=white:fontsize=80:x=(w-text_w)/2:y=h-th-100:borderw=4:bordercolor=black", safe));
+                        let safe_text = text.replace(":", "\\:").replace("'", "\\'");
+                        let font_size = item.font_size.unwrap_or(80.0) * 1.5;
+                        let font_color = item.font_color.as_deref().unwrap_or("white").replace("#", "0x");
+                        
+                        let align = item.text_align.as_deref().unwrap_or("center");
+                        let (x_expr, y_expr) = match align {
+                            "left" => ("100", "h-th-100"),
+                            "right" => ("w-text_w-100", "h-th-100"),
+                            _ => ("(w-text_w)/2", "h-th-100") // center
+                        };
+
+                        let mut dt = format!("drawtext=fontfile='C\\:/Windows/Fonts/msyh.ttc':text='{}':fontcolor='{}':fontsize={}:x={}:y={}", safe_text, font_color, font_size, x_expr, y_expr);
+
+                        if item.text_stroke.unwrap_or(false) {
+                            let stroke_color = item.text_stroke_color.as_deref().unwrap_or("black").replace("#", "0x");
+                            let stroke_w = item.text_stroke_width.unwrap_or(4.0);
+                            dt.push_str(&format!(":borderw={}:bordercolor='{}'", stroke_w, stroke_color));
+                        }
+                        if item.text_shadow.unwrap_or(false) {
+                            let shadow_color = item.text_shadow_color.as_deref().unwrap_or("black").replace("#", "0x") + "80";
+                            dt.push_str(&format!(":shadowx=6:shadowy=6:shadowcolor='{}'", shadow_color));
+                        }
+                        if item.text_bg_enable.unwrap_or(false) {
+                            let bg_color = item.text_bg.as_deref().unwrap_or("black").replace("#", "0x") + "B3";
+                            dt.push_str(&format!(":box=1:boxcolor='{}':boxborderw={}", bg_color, item.text_bg_padx.unwrap_or(20.0)));
+                        }
+
+                        vf.push(dt);
                     }
                 }
                 if let Some(cp) = &item.crop_pos {
@@ -764,9 +900,31 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
                 } else {
                     vf.push(format!("scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:color=black,format=yuv420p,setsar=1", res_w, res_h, res_w, res_h));
                 }
-                vf.push("loop=loop=-1:size=1:start=0".to_string());
-                vf.push(format!("fps={}", fps));
-                vf.push(format!("trim=duration={}", item.duration));
+                
+                let anim = item.animation.as_deref().unwrap_or("none");
+                let dur_frames = (item.duration * fps as f32) as u32;
+                if anim == "none" {
+                    vf.push("loop=loop=-1:size=1:start=0".to_string());
+                    vf.push(format!("fps={}", fps));
+                    vf.push(format!("trim=duration={}", item.duration));
+                } else {
+                    if anim.contains("zoomIn") {
+                        vf.push(format!("zoompan=z='min(pzoom+0.0015,1.5)':d={}:s={}x{}", dur_frames, res_w, res_h));
+                    } else if anim.contains("zoomOut") {
+                        vf.push(format!("zoompan=z='max(1.5-0.0015*in,1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}", dur_frames, res_w, res_h));
+                    } else if anim.contains("panRight") {
+                        vf.push(format!("zoompan=z=1.1:x='min(x+2,iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}", dur_frames, res_w, res_h));
+                    } else if anim.contains("panLeft") {
+                        vf.push(format!("zoompan=z=1.1:x='max(iw-iw/zoom-in*2,0)':y='ih/2-(ih/zoom/2)':d={}:s={}x{}", dur_frames, res_w, res_h));
+                    } else {
+                        vf.push("loop=loop=-1:size=1:start=0".to_string());
+                        vf.push(format!("fps={}", fps));
+                        vf.push(format!("trim=duration={}", item.duration));
+                    }
+                    if anim.contains("fadeIn") || anim.contains("slide") {
+                        vf.push("fade=t=in:st=0:d=1.0".to_string());
+                    }
+                }
                 vf.push("setpts=PTS-STARTPTS".to_string());
                 seg_script.push_str(&format!("[{}:v]{}[v{}];\n", local_i, vf.join(","), local_i));
             }

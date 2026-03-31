@@ -81,7 +81,7 @@ export const ColorCurvePanel: React.FC<ColorCurvePanelProps> = ({
     onChange(activeChannel, newPoints);
   };
 
-  const handlePointerUp = (idx: number, e: React.PointerEvent) => {
+  const handlePointerUp = (_idx: number, e: React.PointerEvent) => {
     if (draggingIdx !== null) {
       const el = e.target as Element;
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
@@ -152,19 +152,19 @@ export const ColorCurvePanel: React.FC<ColorCurvePanelProps> = ({
       {/* 25% 刻度参考线 */}
       {[0.25, 0.5, 0.75].map(v => (
         <React.Fragment key={v}>
-          <line x1={v * 100} y1="0" x2={v * 100} y2="100" stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" />
-          <line x1="0" y1={v * 100} x2="100" y2={v * 100} stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" />
+          <line x1={v * 100} y1="0" x2={v * 100} y2="100" stroke="rgba(255,255,255,0.08)" strokeWidth="0.3" />
+          <line x1="0" y1={v * 100} x2="100" y2={v * 100} stroke="rgba(255,255,255,0.08)" strokeWidth="0.3" />
         </React.Fragment>
       ))}
       {/* 12.5% 细格参考线 (让画面更具专业感) */}
       {[0.125, 0.375, 0.625, 0.875].map(v => (
         <React.Fragment key={v}>
-          <line x1={v * 100} y1="0" x2={v * 100} y2="100" stroke="rgba(255,255,255,0.03)" strokeWidth="0.25" />
-          <line x1="0" y1={v * 100} x2="100" y2={v * 100} stroke="rgba(255,255,255,0.03)" strokeWidth="0.25" />
+          <line x1={v * 100} y1="0" x2={v * 100} y2="100" stroke="rgba(255,255,255,0.03)" strokeWidth="0.15" />
+          <line x1="0" y1={v * 100} x2="100" y2={v * 100} stroke="rgba(255,255,255,0.03)" strokeWidth="0.15" />
         </React.Fragment>
       ))}
       {/* 对角参考线 */}
-      <line x1="0" y1="100" x2="100" y2="0" stroke="rgba(255,255,255,0.2)" strokeWidth="0.5" strokeDasharray="3,3" />
+      <line x1="0" y1="100" x2="100" y2="0" stroke="rgba(255,255,255,0.2)" strokeWidth="0.3" strokeDasharray="3,3" />
     </g>
   );
 
@@ -221,7 +221,7 @@ export const ColorCurvePanel: React.FC<ColorCurvePanelProps> = ({
           })}
 
           {/* Main Curve */}
-          <path d={getPathD(points)} fill="none" stroke={colors[activeChannel]} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: 'none' }} />
+          <path d={getPathD(points)} fill="none" stroke={colors[activeChannel]} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ pointerEvents: 'none' }} />
 
           {/* 控制节点 */}
           {points.map((pt, i) => (
@@ -229,10 +229,10 @@ export const ColorCurvePanel: React.FC<ColorCurvePanelProps> = ({
               key={i}
               cx={pt.x * 100}
               cy={(1 - pt.y) * 100}
-              r={draggingIdx === i ? 4.5 : 3.5}
+              r={draggingIdx === i ? 3 : 2.5}
               fill={draggingIdx === i ? '#FFF' : '#1A1A1A'}
               stroke={colors[activeChannel]}
-              strokeWidth={1.2}
+              strokeWidth={0.8}
               style={{ cursor: i === 0 || i === points.length - 1 ? 'ns-resize' : 'grab', transition: 'r 0.1s, fill 0.2s', outline: 'none' }}
               onPointerDown={(e) => handlePointerDown(i, e)}
               onPointerMove={handlePointerMove}

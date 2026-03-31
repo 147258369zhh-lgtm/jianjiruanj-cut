@@ -73,6 +73,8 @@ export function RightPanel() {
       <div style={{ flex: 1, padding: '12px', overflowY: 'auto', scrollBehavior: 'smooth' }}>
         {showGlobalDefaults ? (
           <GlobalDefaultsPanel favAnims={favAnims} toggleFavAnim={toggleFavAnim} commitSnapshotNow={commitSnapshotNow} />
+        ) : showExportPanel ? (
+          <ExportPanel handleGenerate={handleGenerate} />
         ) :
           activeTab === 'effects' ? (
             (() => {

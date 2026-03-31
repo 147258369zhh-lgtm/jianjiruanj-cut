@@ -1,0 +1,14 @@
+﻿src/components/ColorCurvePanel.tsx(84,28): error TS6133: 'idx' is declared but its value is never read.
+src/components/FilterPresetGrid.tsx(20,3): error TS6133: 'selectedItem' is declared but its value is never read.
+src/components/ImagePropertyPanel.tsx(4,59): error TS6133: 'GLOBAL_DEFAULTS_INIT' is declared but its value is never read.
+src/components/ImagePropertyPanel.tsx(4,81): error TS6133: 'ANIMATION_PRESETS' is declared but its value is never read.
+src/components/ImagePropertyPanel.tsx(384,213): error TS18048: 'selectedItem' is possibly 'undefined'.
+src/components/LeftPanel.tsx(13,16): error TS6133: 'setResources' is declared but its value is never read.
+src/components/LeftPanel.tsx(13,30): error TS6133: 'getEffectiveSrc' is declared but its value is never read.
+src/components/LeftPanel.tsx(13,47): error TS6133: 'globalDefaultsRef' is declared but its value is never read.
+src/components/LeftPanel.tsx(13,173): error TS6133: 'handleLibAdd' is declared but its value is never read.
+src/components/MonitorPanel.tsx(13,76): error TS6133: 'resourceMap' is declared but its value is never read.
+src/components/ProjectToolbar.tsx(21,5): error TS6133: 'statusMsg' is declared but its value is never read.
+src/components/ResourceCardItem.tsx(4,1): error TS6133: 'useThumbnail' is declared but its value is never read.
+src/components/VideoPropertyPanel.tsx(95,9): error TS6133: 'resetKeys' is declared but its value is never read.
+src/components/VideoPropertyPanel.tsx(409,213): error TS18048: 'selectedItem' is possibly 'undefined'.

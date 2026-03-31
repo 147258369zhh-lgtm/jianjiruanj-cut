@@ -18,13 +18,17 @@ export const ProjectToolbar: React.FC = () => {
     loadProject,
   } = useAppContext();
   const {
-    statusMsg, setStatusMsg,
+    statusMsg: _statusMsg, setStatusMsg,
     showSortMenu, setShowSortMenu,
     showMoreMenu, setShowMoreMenu,
     isEditingProjectName, setIsEditingProjectName,
     theme, setTheme,
     showExportPanel, setShowExportPanel,
-    setShowGlobalDefaults
+    setShowGlobalDefaults,
+    isGenerating,
+    exportProgress,
+    exportMinimized,
+    setExportMinimized
   } = useStore(useShallow(state => ({
     statusMsg: state.statusMsg, setStatusMsg: state.setStatusMsg,
     showSortMenu: state.showSortMenu, setShowSortMenu: state.setShowSortMenu,
@@ -32,7 +36,11 @@ export const ProjectToolbar: React.FC = () => {
     isEditingProjectName: state.isEditingProjectName, setIsEditingProjectName: state.setIsEditingProjectName,
     theme: state.theme, setTheme: state.setTheme,
     showExportPanel: state.showExportPanel, setShowExportPanel: state.setShowExportPanel,
-    setShowGlobalDefaults: state.setShowGlobalDefaults
+    setShowGlobalDefaults: state.setShowGlobalDefaults,
+    isGenerating: state.isGenerating,
+    exportProgress: state.exportProgress,
+    exportMinimized: state.exportMinimized,
+    setExportMinimized: state.setExportMinimized
   })));
 
   const {
@@ -206,8 +214,40 @@ export const ProjectToolbar: React.FC = () => {
             </div>
           )}
         </div>
-        <button className="ios-button-small ios-button ios-button-primary" style={{ borderRadius: 6, background: '#10B981', fontWeight: 600, fontSize: 12, padding: '0 16px', height: 30, border: 'none' }} onClick={() => { setShowExportPanel(!showExportPanel); setShowGlobalDefaults(false); }}>
-          🚀 导出
+        <button 
+          className="ios-button-small ios-button ios-button-primary" 
+          style={{ 
+            borderRadius: 6, 
+            background: isGenerating ? 'linear-gradient(90deg, #10B981, #6366F1)' : '#10B981', 
+            fontWeight: 600, 
+            fontSize: 12, 
+            padding: '0 16px', 
+            height: 30, 
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }} 
+          onClick={() => { 
+            if (isGenerating && exportMinimized) {
+              setExportMinimized(false);
+            } else {
+              setShowExportPanel(!showExportPanel); 
+              setShowGlobalDefaults(false); 
+            }
+          }}
+        >
+          {isGenerating && exportMinimized ? (
+            <>
+              <svg width="14" height="14" viewBox="0 0 24 24" style={{ animation: 'spin 2s linear infinite' }}>
+                <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3" fill="none" />
+                <path d="M12 2 a10 10 0 0 1 10 10" stroke="#fff" strokeWidth="3" fill="none" strokeLinecap="round" />
+              </svg>
+              <span>渲染中 {Math.round(exportProgress)}%</span>
+            </>
+          ) : (
+            <>🚀 导出</>
+          )}
         </button>
       </div>
 

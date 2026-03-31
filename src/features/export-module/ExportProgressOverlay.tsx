@@ -2,53 +2,71 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppContext } from '../../hooks/useAppContext';
+import { listen } from '@tauri-apps/api/event';
 import './ExportProgressOverlay.css';
 
 export const ExportProgressOverlay: React.FC = () => {
-  const { isGenerating } = useStore(useShallow(state => ({
-    isGenerating: state.isGenerating
+  const { isGenerating, exportMinimized, setExportMinimized, exportProgress, setExportProgress } = useStore(useShallow(state => ({
+    isGenerating: state.isGenerating,
+    exportMinimized: state.exportMinimized,
+    setExportMinimized: state.setExportMinimized,
+    exportProgress: state.exportProgress,
+    setExportProgress: state.setExportProgress
   })));
 
   const { timeline } = useAppContext();
 
-  const [progress, setProgress] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [showSuccess, setShowSuccess] = useState(false);
   const startTimeRef = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 当 isGenerating 变化时启停计时器
+  // Listen to accurate progress from Rust backend
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    const setupListener = async () => {
+      unlisten = await listen<{ progress: number }>('export-progress', (e) => {
+        setExportProgress(e.payload.progress);
+      });
+    };
+    
+    setupListener();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [setExportProgress]);
+
+  // Manage elapsed time timer and completion state
   useEffect(() => {
     if (isGenerating) {
-      setProgress(0);
       setElapsedSec(0);
+      setExportProgress(0);
+      setShowSuccess(false);
       startTimeRef.current = Date.now();
-
-      // 前端模拟进度：基于轨道时长估算渲染速度 (~2x 实时)
-      const totalDuration = timeline.reduce((acc, t) => acc + t.duration, 0);
-      const estimatedTotalMs = Math.max(totalDuration * 500, 5000); // 粗估总耗时
 
       intervalRef.current = setInterval(() => {
         const elapsed = Date.now() - startTimeRef.current;
         setElapsedSec(Math.floor(elapsed / 1000));
-
-        // 使用 ease-out 曲线模拟进度（永远不到100%，等真正完成再跳满）
-        const rawProgress = Math.min(elapsed / estimatedTotalMs, 0.95);
-        const easedProgress = 1 - Math.pow(1 - rawProgress, 3); // ease-out cubic
-        setProgress(Math.min(easedProgress * 100, 95));
-      }, 200);
+      }, 1000);
     } else {
-      // 完成时短暂显示100%
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      
+      // If we were generating but now stopped, show success if progress reached 100%
       if (startTimeRef.current > 0) {
-        setProgress(100);
+        setExportProgress(100);
+        setShowSuccess(true);
         const timer = setTimeout(() => {
-          setProgress(0);
+          setShowSuccess(false);
+          setExportProgress(0);
           setElapsedSec(0);
           startTimeRef.current = 0;
-        }, 1500);
+          setExportMinimized(false);
+        }, 2000);
         return () => clearTimeout(timer);
       }
     }
@@ -59,13 +77,14 @@ export const ExportProgressOverlay: React.FC = () => {
         intervalRef.current = null;
       }
     };
-  }, [isGenerating, timeline]);
+  }, [isGenerating, setExportProgress, setExportMinimized]);
 
-  // 不显示（未在导出 且 进度归零）
-  if (!isGenerating && progress === 0) return null;
+  // Hide if not generating and not showing success, OR if minimized
+  if ((!isGenerating && !showSuccess) || (exportMinimized && !showSuccess)) return null;
 
   const circumference = 2 * Math.PI * 62;
-  const dashOffset = circumference * (1 - progress / 100);
+  const clampedProgress = Math.max(0, Math.min(100, exportProgress));
+  const dashOffset = circumference * (1 - clampedProgress / 100);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -73,24 +92,37 @@ export const ExportProgressOverlay: React.FC = () => {
     return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
   };
 
-  const estimatedRemaining = progress > 5
-    ? Math.max(0, Math.round(elapsedSec * (100 - progress) / progress))
+  const estimatedRemaining = clampedProgress > 5 && clampedProgress < 100
+    ? Math.max(0, Math.round(elapsedSec * (100 - clampedProgress) / clampedProgress))
     : null;
 
   return (
     <div className="export-overlay">
       <div className="export-progress-card">
+        {/* Minimize Action Header */}
+        <div className="export-card-header">
+          <div className="export-minimize-btn" onClick={() => setExportMinimized(true)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 14 10 14 10 20" />
+              <polyline points="20 10 14 10 14 4" />
+              <line x1="14" y1="10" x2="21" y2="3" />
+              <line x1="3" y1="21" x2="10" y2="14" />
+            </svg>
+            <span>最小化后台</span>
+          </div>
+        </div>
+
         <div className="export-title">
-          {progress >= 100 ? '✅ 渲染完成！' : '正在极速渲染中'}
-          {progress < 100 && (
+          {showSuccess ? '✅ 渲染完成！' : '正在极速渲染中'}
+          {!showSuccess && (
             <span className="export-dots">
               <span /><span /><span />
             </span>
           )}
         </div>
-        <div className="export-subtitle">请勿关闭窗口，后台正在全速运转</div>
+        <div className="export-subtitle">后端硬件编码进行中，可后台执行</div>
 
-        {/* 环形进度 */}
+        {/* Circular Progress Ring */}
         <div className="export-ring-wrap">
           <svg className="export-ring-svg" viewBox="0 0 140 140">
             <defs>
@@ -108,11 +140,11 @@ export const ExportProgressOverlay: React.FC = () => {
             />
           </svg>
           <div className="export-percent">
-            {Math.round(progress)}<span>%</span>
+            {Math.round(clampedProgress)}<span>%</span>
           </div>
         </div>
 
-        {/* 信息行 */}
+        {/* Info rows */}
         <div className="export-info">
           <div className="export-info-row">
             <span className="export-info-key">已用时间</span>
@@ -121,12 +153,16 @@ export const ExportProgressOverlay: React.FC = () => {
           {estimatedRemaining !== null && (
             <div className="export-info-row">
               <span className="export-info-key">预估剩余</span>
-              <span className="export-info-val">≈ {formatTime(estimatedRemaining)}</span>
+              <span className="export-info-val" style={{ color: '#10B981' }}>≈ {formatTime(estimatedRemaining)}</span>
             </div>
           )}
           <div className="export-info-row">
-            <span className="export-info-key">轨道片段</span>
-            <span className="export-info-val">{timeline.length} 张</span>
+            <span className="export-info-key">渲染片段总数</span>
+            <span className="export-info-val">{timeline.length} 张图片</span>
+          </div>
+          <div className="export-info-row">
+            <span className="export-info-key">后台状态</span>
+            <span className="export-info-val">稳定编码中...</span>
           </div>
         </div>
       </div>

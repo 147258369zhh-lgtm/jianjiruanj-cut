@@ -62,16 +62,34 @@ export function computeTextStyles(item: any): React.CSSProperties {
   if (!item) return {};
   let shadows: string[] = [];
   
-  if (item.textShadowColor) {
-    shadows.push(`${item.textShadowOffsetX ?? 2}px ${item.textShadowOffsetY ?? 2}px ${item.textShadowBlur ?? 8}px ${item.textShadowColor}`);
-  } else if (!item.textGlow) {
-    shadows.push('0 4px 16px rgba(0,0,0,0.5)');
-  }
-  
+  // 1. 发光优先 (外发光效果更好叠加)
   if (item.textGlow) {
     const gc = item.textGlowColor || item.fontColor || '#fff';
     const gr = item.textGlowRadius ?? 20;
     shadows.push(`0 0 ${gr}px ${gc}`, `0 0 ${gr * 2}px ${gc}80`);
+  }
+
+  // 2. 物理阴影叠加
+  if (item.textShadow) {
+    const sc = item.textShadowColor || '#000000';
+    const ox = item.textShadowOffsetX ?? 4;
+    const oy = item.textShadowOffsetY ?? 4;
+    const bl = item.textShadowBlur ?? 10;
+    shadows.push(`${ox}px ${oy}px ${bl}px ${sc}`);
+  } else if (!item.textGlow && item.textShadow !== false) {
+    // 如果都没有开启，默认给出一点点柔和阴影以便看清白字
+    shadows.push('0 4px 16px rgba(0,0,0,0.5)');
+  }
+  
+  // 3. 背景遮罩计算
+  let bgProps: any = { background: 'transparent', padding: 0 };
+  if (item.textBgEnable) {
+    bgProps.background = item.textBg || '#1A1A1A';
+    // padding 取 X 和 Y
+    const px = item.textBgPadX ?? 20;
+    const py = item.textBgPadY ?? 12; // 遗留字段 textBgPadding 迁移或者统一使用默认 12
+    bgProps.padding = `${py}px ${px}px`;
+    bgProps.borderRadius = item.textBgRadius ?? 8;
   }
 
   return {
@@ -81,10 +99,8 @@ export function computeTextStyles(item: any): React.CSSProperties {
     fontWeight: item.fontWeight === 'bold' ? 700 : 400,
     fontFamily: item.fontFamily && item.fontFamily !== '默认' ? item.fontFamily : 'sans-serif',
     textShadow: shadows.length > 0 ? shadows.join(', ') : 'none',
-    WebkitTextStroke: item.textStrokeColor ? `${item.textStrokeWidth ?? 1}px ${item.textStrokeColor}` : undefined,
-    background: item.textBg || 'transparent',
-    padding: item.textBg && item.textBg !== 'transparent' ? `${item.textBgPadding ?? 12}px ${item.textBgPadding ? item.textBgPadding * 2 : 24}px` : 0,
-    borderRadius: item.textBgRadius ?? 8,
+    WebkitTextStroke: item.textStroke ? `${item.textStrokeWidth ?? 2}px ${item.textStrokeColor || '#000'}` : undefined,
+    ...bgProps,
     letterSpacing: `${item.textLetterSpacing ?? 0}px`,
     lineHeight: item.textLineHeight ?? 1.2,
     opacity: item.textOpacity ?? 1,

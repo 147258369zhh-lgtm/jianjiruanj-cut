@@ -98,10 +98,15 @@ export interface TimelineItem {
   textBg?: string;     // 文字背景色 (rgba)
   textBgPadding?: number; // 文字底板内边距
   textBgRadius?: number; // 文字底板圆角
+  textBgEnable?: boolean; // 文字底板开关
+  textBgPadX?: number; // 文字底板 X padding
+  textBgPadY?: number; // 文字底板 Y padding
+  textShadow?: boolean;      // 文字阴影开关
   textShadowColor?: string;  // 文字阴影颜色
   textShadowBlur?: number;   // 文字阴影模糊半径
   textShadowOffsetX?: number; // 文字阴影 X 偏移
   textShadowOffsetY?: number; // 文字阴影 Y 偏移
+  textStroke?: boolean;      // 文字描边开关
   textStrokeColor?: string;  // 文字描边颜色
   textStrokeWidth?: number;  // 文字描边宽度
   textGlow?: boolean;        // 文字发光开关

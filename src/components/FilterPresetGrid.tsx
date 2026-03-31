@@ -17,7 +17,7 @@ export const FilterPresetGrid: React.FC<FilterPresetGridProps> = ({
   setTimeline,
   commitSnapshotNow,
   setStatusMsg,
-  selectedItem
+  selectedItem: _selectedItem
 }) => {
   const { customFilters, hiddenFilterNames, setCustomFilters, setHiddenFilterNames } = useStore(useShallow(s => ({
     customFilters: s.customFilters,

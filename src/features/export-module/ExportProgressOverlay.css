@@ -28,6 +28,36 @@
   align-items: center;
   gap: 32px;
   box-shadow: 0 40px 80px rgba(0, 0, 0, 0.6);
+  position: relative;
+}
+
+/* --- Action Header --- */
+.export-card-header {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+}
+
+.export-minimize-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.export-minimize-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
 }
 
 /* ─── Circular Progress Ring ─── */

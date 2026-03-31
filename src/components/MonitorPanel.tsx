@@ -10,7 +10,7 @@ import './MonitorPanel.css';
 
 export const MonitorPanel: React.FC = () => {
   const {
-    playTime, maxPlayTime, isPlaying, togglePlay, setPlayTime, monitorSrc, resourceMap,
+    playTime, maxPlayTime, isPlaying, togglePlay, setPlayTime, monitorSrc, resourceMap: _resourceMap,
     selectedIds, selectedTextIds, setSelectedTextIds, setTimeline, playbackSpeed,
     setPlaybackSpeed, timeTextRef, monitorVideoRef
   } = useAppContext();
@@ -104,6 +104,14 @@ export const MonitorPanel: React.FC = () => {
     return item?.cropPos ? `inset(${item.cropPos.y}% ${100 - item.cropPos.x - item.cropPos.width}% ${100 - item.cropPos.y - item.cropPos.height}% ${item.cropPos.x}%)` : 'none';
   };
 
+  const buildMediaAnimation = (item: any) => {
+    if (!item?.animation || item.animation === 'none') return 'none';
+    const isPan = item.animation.includes('pan');
+    const dur = isPan ? (item.duration || 3) + 's' : '1.2s';
+    const timing = isPan ? 'linear' : 'cubic-bezier(0.16,1,0.3,1)';
+    return `${item.animation} ${dur} ${timing} forwards`;
+  };
+
   const buildTextAnimation = (txt: any, totalDur: number) => {
     const anims = [];
     if (txt.textAnimation && txt.textAnimation !== 'none') {
@@ -184,6 +192,7 @@ export const MonitorPanel: React.FC = () => {
                     transform: `translate(${monitorSrc.currentItem?.posX || 0}%, ${monitorSrc.currentItem?.posY || 0}%) rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
                     opacity: monitorSrc.currentItem?.opacity ?? 1,
                     mixBlendMode: (monitorSrc.currentItem?.blendMode as any) || 'normal',
+                    animation: buildMediaAnimation(monitorSrc.currentItem),
                     transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)'
                   }}>
                     <video ref={monitorVideoRef} src={monitorSrc.src} style={{
@@ -213,6 +222,7 @@ export const MonitorPanel: React.FC = () => {
                     transform: `translate(${monitorSrc.currentItem?.posX || 0}%, ${monitorSrc.currentItem?.posY || 0}%) rotate(${monitorSrc.currentItem?.rotation || 0}deg) scale(${monitorSrc.currentItem?.zoom || 1})`,
                     opacity: monitorSrc.currentItem?.opacity ?? 1,
                     mixBlendMode: (monitorSrc.currentItem?.blendMode as any) || 'normal',
+                    animation: buildMediaAnimation(monitorSrc.currentItem),
                     transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)'
                   }}>
                     <img src={monitorSrc.src} alt="" style={{

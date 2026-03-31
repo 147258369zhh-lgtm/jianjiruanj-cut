@@ -8,6 +8,9 @@ export interface UiSlice {
   propertyTab: 'presets' | 'color' | 'text' | 'transform';
   libTab: 'image' | 'audio' | 'video';
   leftTab: 'photo' | 'music' | 'video';
+  panelOrderImage: string[];
+  panelOrderText: string[];
+  panelCollapsed: Record<string, boolean>;
   
   // 自定义与折叠滤镜
   customFilters: FilterPreset[];
@@ -23,6 +26,9 @@ export interface UiSlice {
   isEditingProjectName: boolean;
   isDragOver: boolean;
   isGenerating: boolean;
+  exportMinimized: boolean;
+  exportEstimatedTime: number | null;
+  exportProgress: number;
   contextMenu: { x: number; y: number; type: 'image' | 'audio'; targetId: string } | null;
   selectionBox: { x1: number; x2: number; y: number; h: number } | null;
   
@@ -52,6 +58,9 @@ export interface UiSlice {
   setPropertyTab: (v: 'presets' | 'color' | 'text' | 'transform') => void;
   setLibTab: (v: 'image' | 'audio' | 'video') => void;
   setLeftTab: (v: 'photo' | 'music' | 'video') => void;
+  setPanelOrderImage: (v: string[]) => void;
+  setPanelOrderText: (v: string[]) => void;
+  togglePanelCollapsed: (id: string) => void;
   setCustomFilters: (v: FilterPreset[]) => void;
   setHiddenFilterNames: (v: string[]) => void;
   setStatusMsg: (v: string) => void;
@@ -63,6 +72,9 @@ export interface UiSlice {
   setIsEditingProjectName: (v: boolean) => void;
   setIsDragOver: (v: boolean) => void;
   setIsGenerating: (v: boolean) => void;
+  setExportMinimized: (v: boolean) => void;
+  setExportEstimatedTime: (v: number | null) => void;
+  setExportProgress: (v: number) => void;
   setContextMenu: (v: UiSlice['contextMenu']) => void;
   setSelectionBox: (v: UiSlice['selectionBox'] | ((prev: UiSlice['selectionBox']) => UiSlice['selectionBox'])) => void;
   setCrop: (v: Crop | undefined) => void;
@@ -92,6 +104,9 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   propertyTab: 'presets',
   libTab: 'image',
   leftTab: 'photo',
+  panelOrderImage: (() => { try { return JSON.parse(localStorage.getItem('__editor_panel_order_image__') as string) || ["base", "light", "color", "texture", "curves"]; } catch { return ["base", "light", "color", "texture", "curves"]; } })(),
+  panelOrderText: (() => { try { return JSON.parse(localStorage.getItem('__editor_panel_order_text__') as string) || ["text-base", "text-anim", "text-effects", "text-presets"]; } catch { return ["text-base", "text-anim", "text-effects", "text-presets"]; } })(),
+  panelCollapsed: (() => { try { return JSON.parse(localStorage.getItem('__editor_panel_collapsed__') as string) || {}; } catch { return {}; } })(),
   customFilters: loadCustomFilters(),
   hiddenFilterNames: loadHiddenFilters(),
   statusMsg: '',
@@ -103,6 +118,9 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   isEditingProjectName: false,
   isDragOver: false,
   isGenerating: false,
+  exportMinimized: false,
+  exportEstimatedTime: null,
+  exportProgress: 0,
   contextMenu: null,
   selectionBox: null,
   crop: undefined,
@@ -123,6 +141,19 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   setPropertyTab: (v) => set({ propertyTab: v }),
   setLibTab: (v) => set({ libTab: v }),
   setLeftTab: (v) => set({ leftTab: v }),
+  setPanelOrderImage: (v) => {
+    localStorage.setItem('__editor_panel_order_image__', JSON.stringify(v));
+    set({ panelOrderImage: v });
+  },
+  setPanelOrderText: (v) => {
+    localStorage.setItem('__editor_panel_order_text__', JSON.stringify(v));
+    set({ panelOrderText: v });
+  },
+  togglePanelCollapsed: (id) => set(s => {
+    const next = { ...s.panelCollapsed, [id]: !s.panelCollapsed[id] };
+    localStorage.setItem('__editor_panel_collapsed__', JSON.stringify(next));
+    return { panelCollapsed: next };
+  }),
   setCustomFilters: (v) => { localStorage.setItem('__editor_custom_filters__', JSON.stringify(v)); set({ customFilters: v }); },
   setHiddenFilterNames: (v) => { localStorage.setItem('__editor_hidden_filters__', JSON.stringify(v)); set({ hiddenFilterNames: v }); },
   setStatusMsg: (v) => set({ statusMsg: v }),
@@ -134,6 +165,9 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   setIsEditingProjectName: (v) => set({ isEditingProjectName: v }),
   setIsDragOver: (v) => set({ isDragOver: v }),
   setIsGenerating: (v) => set({ isGenerating: v }),
+  setExportMinimized: (v) => set({ exportMinimized: v }),
+  setExportEstimatedTime: (v) => set({ exportEstimatedTime: v }),
+  setExportProgress: (v) => set({ exportProgress: v }),
   setContextMenu: (v) => set({ contextMenu: v }),
   setSelectionBox: (v) => set(s => ({ selectionBox: typeof v === 'function' ? v(s.selectionBox) : v })),
   setCrop: (v) => set({ crop: v }),
