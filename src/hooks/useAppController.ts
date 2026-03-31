@@ -74,7 +74,13 @@ export function useAppController() {
     exportFps,
     exportQuality,
     exportCodec,
-    exportHdr
+    exportHdr,
+    exportEncodingPreset,
+    exportBitrateMode,
+    exportTargetBitrate,
+    exportDeband,
+    exportForceCpu,
+    exportMasterAudio
   } = useStore(useShallow((state: any) => ({
     activeTab: state.activeTab, setActiveTab: state.setActiveTab,
     propertyTab: state.propertyTab, setPropertyTab: state.setPropertyTab,
@@ -102,7 +108,13 @@ export function useAppController() {
     exportFps: state.exportFps, setExportFps: state.setExportFps,
     exportQuality: state.exportQuality, setExportQuality: state.setExportQuality,
     exportCodec: state.exportCodec, setExportCodec: state.setExportCodec,
-    exportHdr: state.exportHdr, setExportHdr: state.setExportHdr
+    exportHdr: state.exportHdr, setExportHdr: state.setExportHdr,
+    exportEncodingPreset: state.exportEncodingPreset, setExportEncodingPreset: state.setExportEncodingPreset,
+    exportBitrateMode: state.exportBitrateMode, 
+    exportTargetBitrate: state.exportTargetBitrate, 
+    exportDeband: state.exportDeband, 
+    exportForceCpu: state.exportForceCpu, 
+    exportMasterAudio: state.exportMasterAudio
   })));
 
   const {
@@ -401,7 +413,7 @@ export function useAppController() {
     isDraggingHead, setIsDraggingHead,
     selectionBox, setSelectionBox,
     selectedIds, setSelectedIds, setSelectedAudioIds, setSelectedVoiceoverIds,
-    commitSnapshotNow, setContextMenu, layout
+    commitSnapshotNow, setContextMenu, layout, setActiveTab
   });
 
 
@@ -743,6 +755,12 @@ export function useAppController() {
           quality: exportQuality,
           codec: exportCodec,
           hdr: exportHdr,
+          exportEncodingPreset,
+          exportBitrateMode,
+          exportTargetBitrate,
+          exportDeband,
+          exportForceCpu,
+          exportMasterAudio,
           autoOpen: true
         }
       });
@@ -837,6 +855,12 @@ export function useAppController() {
     exportQuality,
     exportCodec,
     exportHdr,
+    exportEncodingPreset,
+    exportBitrateMode,
+    exportTargetBitrate,
+    exportDeband,
+    exportForceCpu,
+    exportMasterAudio,
     sortMode,
     setSortMode,
     globalDefaults,

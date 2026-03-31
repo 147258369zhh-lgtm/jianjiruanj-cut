@@ -32,6 +32,7 @@ interface UseTimelineActionsArgs {
   commitSnapshotNow: () => void;
   setContextMenu: Dispatch<SetStateAction<any>>;
   layout: TimelineLayout;
+  setActiveTab: (tab: 'effects' | 'export') => void;
 }
 
 export function useTimelineActions({
@@ -42,7 +43,7 @@ export function useTimelineActions({
   isDraggingHead, setIsDraggingHead,
   selectionBox, setSelectionBox,
   selectedIds, setSelectedIds, setSelectedAudioIds, setSelectedVoiceoverIds,
-  commitSnapshotNow, setContextMenu, layout
+  commitSnapshotNow, setContextMenu, layout, setActiveTab
 }: UseTimelineActionsArgs) {
 
   const lastScrubTimeRef = useRef<number>(0);
@@ -139,7 +140,9 @@ export function useTimelineActions({
         scrollEl.scrollTo({ left: Math.max(0, (visualX - 60) - scrollEl.clientWidth / 3), behavior: 'smooth' });
       }
     }
-  }, [setSelectedIds, setSelectedAudioIds, setSelectedVoiceoverIds, setIsPlaying, timelineRef, setPlayTime, setIsJumping, timelineScrollRef, ppsRef]);
+    
+    setActiveTab('effects');
+  }, [setSelectedIds, setSelectedAudioIds, setSelectedVoiceoverIds, setIsPlaying, timelineRef, setPlayTime, setIsJumping, timelineScrollRef, ppsRef, layout, setActiveTab]);
 
   const handleTimelineRemove = useCallback((id: string) => {
     commitSnapshotNow();
@@ -168,7 +171,8 @@ export function useTimelineActions({
       return next;
     });
     setSelectedIds(new Set());
-  }, [setSelectedAudioIds, setSelectedIds]);
+    setActiveTab('effects');
+  }, [setSelectedAudioIds, setSelectedIds, setActiveTab]);
 
   const handleTimelineDoubleClick = useCallback((id: string) => {
     const tl = timelineRef.current;

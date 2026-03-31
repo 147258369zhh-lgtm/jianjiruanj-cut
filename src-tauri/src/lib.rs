@@ -93,6 +93,18 @@ pub struct VideoPayload {
     quality: String,
     codec: String,
     hdr: bool,
+    #[serde(rename = "exportEncodingPreset")]
+    preset: Option<String>,
+    #[serde(rename = "exportBitrateMode")]
+    bitrate_mode: Option<String>,
+    #[serde(rename = "exportTargetBitrate")]
+    target_bitrate: Option<u32>,
+    #[serde(rename = "exportDeband")]
+    deband: Option<bool>,
+    #[serde(rename = "exportForceCpu")]
+    force_cpu: Option<bool>,
+    #[serde(rename = "exportMasterAudio")]
+    master_audio: Option<bool>,
     #[serde(rename = "outputPath")]
     output_path: Option<String>,
     #[serde(rename = "autoOpen")]
@@ -403,9 +415,15 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
     let items = payload.items;
     let fps = payload.fps;
     let res = payload.resolution;
-    let quality = payload.quality;
-    let codec = payload.codec;
+    let quality = payload.quality.clone();
+    let codec = payload.codec.clone();
     let hdr = payload.hdr;
+    let encode_preset = payload.preset.clone().unwrap_or_else(|| "speed".to_string());
+    let bitrate_mode = payload.bitrate_mode.clone().unwrap_or_else(|| "crf".to_string());
+    let target_bitrate = payload.target_bitrate.unwrap_or(20);
+    let deband = payload.deband.unwrap_or(false);
+    let force_cpu = payload.force_cpu.unwrap_or(false);
+    let master_audio = payload.master_audio.unwrap_or(false);
 
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let preview_dir = app_data_dir.join("previews");
@@ -554,10 +572,15 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
         concat_inputs.push_str(&format!("[v{}]", i));
     }
     script.push_str(&format!(
-        "{}concat=n={}:v=1:a=0[outv];\n",
+        "{}concat=n={}:v=1:a=0[outv_pre];\n",
         concat_inputs,
         items.len()
     ));
+    if deband {
+        script.push_str("[outv_pre]deband[outv];\n");
+    } else {
+        script.push_str("[outv_pre]copy[outv];\n");
+    }
     let mut precalc_audio_count = 0;
     for clip in &payload.audio_clips {
         if payload.resource_paths.iter().any(|r| r.id == clip.resource_id) {
@@ -670,7 +693,11 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
     // ==========================================
     let cpu_count = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
     let want_h265 = codec == "h265";
-    let (encoder_name, encoder_family) = detect_best_encoder(&ffmpeg_path, want_h265);
+    let (encoder_name, encoder_family) = if force_cpu {
+        if want_h265 { ("libx265".to_string(), "cpu".to_string()) } else { ("libx264".to_string(), "cpu".to_string()) }
+    } else {
+        detect_best_encoder(&ffmpeg_path, want_h265)
+    };
 
     let final_output = if let Some(path) = &payload.output_path {
         std::path::PathBuf::from(path)
@@ -703,9 +730,13 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
     }).collect();
 
     // 决定并行分段数 (防止线程风暴与显卡Session并发溢出)
-    // 硬件编码器 (NVENC/AMF) 只能忍受极少的并发，大量并发会导致 GPU 0% 且 CPU 100% 锁死。但 1 太慢，提升至 2
     let max_segments = if encoder_family == "cpu" { (cpu_count / 4).max(1).min(4) } else { 2 };
-    let num_segments = if items.len() <= 6 { 1 } else { (items.len() / 8).min(max_segments).max(1) };
+    let mut num_segments = if items.len() <= 6 { 1 } else { (items.len() / 8).min(max_segments).max(1) };
+    
+    // 特殊格式强制单进程防崩溃
+    let is_gif = payload.output_path.as_ref().map(|p| p.to_lowercase().ends_with(".gif")).unwrap_or(false)
+              || payload.output_path.as_ref().map(|p| p.to_lowercase().ends_with(".webp")).unwrap_or(false);
+    if is_gif { num_segments = 1; }
     let total_duration: f32 = items.iter().map(|item| item.duration).sum();
 
     if num_segments <= 1 {
@@ -751,43 +782,83 @@ async fn generate_video(app: tauri::AppHandle, payload: VideoPayload) -> Result<
             .arg("-map").arg("[outv]");
         if total_audio > 0 { cmd.arg("-map").arg("[outa]"); }
 
-        cmd.arg("-c:v").arg(&encoder_name);
-        if want_h265 && hdr {
-            cmd.arg("-pix_fmt").arg("yuv420p10le")
-                .arg("-color_primaries").arg("bt2020")
-                .arg("-color_trc").arg("smpte2084")
-                .arg("-colorspace").arg("bt2020nc");
-            if encoder_family == "cpu" {
-                cmd.arg("-x265-params").arg("hdr10=1:repeat-headers=1:color-range=pc");
+        if final_output.to_string_lossy().to_lowercase().ends_with(".gif") {
+            cmd.arg("-c:v").arg("gif").arg("-loop").arg("0");
+        } else if final_output.to_string_lossy().to_lowercase().ends_with(".webp") {
+            cmd.arg("-c:v").arg("libwebp").arg("-loop").arg("0").arg("-lossless").arg(if quality == "lossless" { "1" } else { "0" });
+        } else {
+            cmd.arg("-c:v").arg(&encoder_name);
+            if want_h265 && hdr {
+                cmd.arg("-pix_fmt").arg("yuv420p10le")
+                    .arg("-color_primaries").arg("bt2020")
+                    .arg("-color_trc").arg("smpte2084")
+                    .arg("-colorspace").arg("bt2020nc");
+                if encoder_family == "cpu" {
+                    cmd.arg("-x265-params").arg("hdr10=1:repeat-headers=1:color-range=pc");
+                }
+            }
+            match encoder_family.as_str() {
+                "nvenc" => {
+                    let cq = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
+                    let preset_flag = if encode_preset == "quality" {
+                        if quality == "lossless" { "p7" } else if quality == "high" { "p6" } else { "p5" }
+                    } else {
+                        if quality == "lossless" { "p5" } else if quality == "high" { "p4" } else { "p2" }
+                    };
+                    cmd.arg("-preset").arg(preset_flag);
+                    if bitrate_mode == "vbr" {
+                        cmd.arg("-rc").arg("vbr").arg("-b:v").arg(format!("{}M", target_bitrate)).arg("-maxrate").arg(format!("{}M", target_bitrate + 10));
+                    } else {
+                        cmd.arg("-rc").arg("vbr").arg("-cq").arg(cq).arg("-b:v").arg("0");
+                    }
+                    cmd.arg("-spatial-aq").arg("1").arg("-temporal-aq").arg("1");
+                }
+                "amf" => {
+                    let qp = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
+                    let spd = if encode_preset == "quality" {
+                        if quality == "lossless" { "quality" } else if quality == "high" { "quality" } else { "balanced" }
+                    } else {
+                        if quality == "lossless" { "balanced" } else if quality == "high" { "balanced" } else { "speed" }
+                    };
+                    cmd.arg("-quality").arg(spd);
+                    if bitrate_mode == "vbr" {
+                        cmd.arg("-rc").arg("vbr_peak").arg("-b:v").arg(format!("{}M", target_bitrate)).arg("-maxrate").arg(format!("{}M", target_bitrate + 10));
+                    } else {
+                        cmd.arg("-rc").arg("cqp").arg("-qp_i").arg(qp).arg("-qp_p").arg(qp);
+                    }
+                }
+                "qsv" => {
+                    let qp = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
+                    let preset_flag = if encode_preset == "quality" {
+                        if quality == "lossless" { "veryslow" } else if quality == "high" { "slower" } else { "slow" }
+                    } else {
+                        if quality == "lossless" { "medium" } else if quality == "high" { "fast" } else { "faster" }
+                    };
+                    cmd.arg("-preset").arg(preset_flag).arg("-look_ahead").arg("1");
+                    if bitrate_mode == "vbr" {
+                        cmd.arg("-b:v").arg(format!("{}M", target_bitrate)).arg("-maxrate").arg(format!("{}M", target_bitrate + 10));
+                    } else {
+                        cmd.arg("-q").arg(qp);
+                    }
+                }
+                _ => {
+                    let crf = if quality == "lossless" { "15" } else if quality == "high" { "18" } else { "24" };
+                    let preset_flag = if encode_preset == "quality" { "slower" } else { "faster" };
+                    cmd.arg("-preset").arg(preset_flag);
+                    if bitrate_mode == "vbr" {
+                        cmd.arg("-b:v").arg(format!("{}M", target_bitrate)).arg("-maxrate").arg(format!("{}M", target_bitrate * 2)).arg("-bufsize").arg(format!("{}M", target_bitrate * 4));
+                    } else {
+                        cmd.arg("-crf").arg(crf);
+                    }
+                }
             }
         }
-        match encoder_family.as_str() {
-            "nvenc" => {
-                let cq = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
-                let preset = if quality == "lossless" { "p7" } else if quality == "high" { "p4" } else { "p2" };
-                cmd.arg("-preset").arg(preset)
-                   .arg("-rc").arg("vbr")
-                   .arg("-cq").arg(cq)
-                   .arg("-b:v").arg("0")
-                   .arg("-spatial-aq").arg("1")
-                   .arg("-temporal-aq").arg("1");
-            }
-            "amf" => {
-                let qp = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
-                let spd = if quality == "lossless" { "quality" } else if quality == "high" { "balanced" } else { "speed" };
-                cmd.arg("-quality").arg(spd).arg("-rc").arg("cqp").arg("-qp_i").arg(qp).arg("-qp_p").arg(qp);
-            }
-            "qsv" => {
-                let qp = if quality == "lossless" { "14" } else if quality == "high" { "18" } else { "24" };
-                let preset = if quality == "lossless" { "veryslow" } else if quality == "high" { "medium" } else { "fast" };
-                cmd.arg("-preset").arg(preset).arg("-look_ahead").arg("1").arg("-q").arg(qp);
-            }
-            _ => {
-                let (crf, preset) = if quality == "lossless" { ("15", "faster") } else if quality == "high" { ("18", "faster") } else { ("24", "superfast") };
-                cmd.arg("-crf").arg(crf).arg("-preset").arg(preset);
+        if total_audio > 0 { 
+            cmd.arg("-c:a").arg("aac").arg("-shortest"); 
+            if master_audio {
+                cmd.arg("-b:a").arg("320k").arg("-ar").arg("48000");
             }
         }
-        if total_audio > 0 { cmd.arg("-c:a").arg("aac").arg("-shortest"); }
         cmd.arg(&final_output);
         cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 

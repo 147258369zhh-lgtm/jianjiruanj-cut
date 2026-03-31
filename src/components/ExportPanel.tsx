@@ -6,6 +6,27 @@ interface ExportPanelProps {
   handleGenerate: () => void;
 }
 
+// 可复用的紧凑分段控制器 (替代原生 Select)
+const SegmentedControl = ({ value, onChange, options, disabled = false }: { value: any, onChange: (v: any) => void, options: { label: string | React.ReactNode, value: any }[], disabled?: boolean }) => (
+  <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: 6, padding: 2, gap: 2, opacity: disabled ? 0.3 : 1, pointerEvents: disabled ? 'none' : 'auto' }}>
+    {options.map(opt => (
+      <div 
+        key={opt.value}
+        onClick={() => onChange(opt.value)}
+        style={{
+          flex: 1, textAlign: 'center', padding: '4px 2px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+          background: value === opt.value ? 'rgba(255,255,255,0.15)' : 'transparent',
+          color: value === opt.value ? '#fff' : 'rgba(255,255,255,0.5)',
+          transition: 'all 0.2s', fontWeight: value === opt.value ? 500 : 400,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4
+        }}
+      >
+        {opt.label}
+      </div>
+    ))}
+  </div>
+);
+
 export const ExportPanel: React.FC<ExportPanelProps> = ({ handleGenerate }) => {
   const {
     exportFormat, setExportFormat,
@@ -14,6 +35,12 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ handleGenerate }) => {
     exportQuality, setExportQuality,
     exportCodec, setExportCodec,
     exportHdr, setExportHdr,
+    exportEncodingPreset, setExportEncodingPreset,
+    exportBitrateMode, setExportBitrateMode,
+    exportTargetBitrate, setExportTargetBitrate,
+    exportDeband, setExportDeband,
+    exportForceCpu, setExportForceCpu,
+    exportMasterAudio, setExportMasterAudio,
     isGenerating, setStatusMsg
   } = useStore(useShallow(state => ({
     exportFormat: state.exportFormat, setExportFormat: state.setExportFormat,
@@ -22,108 +49,184 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ handleGenerate }) => {
     exportQuality: state.exportQuality, setExportQuality: state.setExportQuality,
     exportCodec: state.exportCodec, setExportCodec: state.setExportCodec,
     exportHdr: state.exportHdr, setExportHdr: state.setExportHdr,
+    exportEncodingPreset: state.exportEncodingPreset, setExportEncodingPreset: state.setExportEncodingPreset,
+    exportBitrateMode: state.exportBitrateMode, setExportBitrateMode: state.setExportBitrateMode,
+    exportTargetBitrate: state.exportTargetBitrate, setExportTargetBitrate: state.setExportTargetBitrate,
+    exportDeband: state.exportDeband, setExportDeband: state.setExportDeband,
+    exportForceCpu: state.exportForceCpu, setExportForceCpu: state.setExportForceCpu,
+    exportMasterAudio: state.exportMasterAudio, setExportMasterAudio: state.setExportMasterAudio,
     isGenerating: state.isGenerating, setStatusMsg: state.setStatusMsg
   })));
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, paddingBottom: 40 }}>
-      {/* 一键导出预设 */}
-      <div className="ios-prop-group">
-        <div className="ios-text" style={{ color: '#10B981', fontSize: 13, marginBottom: 8, display: 'block' }}>⚡ 快捷导出预设</div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {[
-            { name: '📱 抖音/快手', fmt: 'mp4', res: '1080p', fps: '60', codec: 'h264', quality: 'high' as const },
-            { name: '🅱️ B站高清', fmt: 'mp4', res: '1080p', fps: '60', codec: 'h264', quality: 'high' as const },
-            { name: '🎬 Apple ProRes', fmt: 'mov', res: 'original', fps: '60', codec: 'h265', quality: 'lossless' as const },
-            { name: '📺 4K HDR', fmt: 'mp4', res: '4k', fps: '60', codec: 'h265', quality: 'lossless' as const },
-          ].map(preset => (
-            <div
-              key={preset.name}
-              className="filter-preset-card"
-              onClick={() => {
-                setExportFormat(preset.fmt as any);
-                setExportResolution(preset.res as any);
-                setExportFps(preset.fps as any);
-                setExportCodec(preset.codec as any);
-                setExportQuality(preset.quality);
-                if (preset.codec === 'h265' && preset.name.includes('HDR')) setExportHdr(true);
-                setStatusMsg(`✅ 已应用「${preset.name}」预设`); setTimeout(() => setStatusMsg(''), 1500);
-              }}
-            >{preset.name}</div>
-          ))}
-        </div>
-      </div>
-
-      <div className="ios-prop-group" style={{ marginTop: 0 }}>
-        <div className="ios-text" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 12, display: 'block' }}>🎬 输出格式与帧率</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="ios-field" >
-            <select className="ios-dark-select" value={exportFormat} onChange={e => setExportFormat(e.target.value as any)}>
-              <option value="mp4">MP4 (通用媒体容器)</option>
-              <option value="mov">MOV (Apple 专业容器)</option>
-            </select>
-          </div>
-          <div className="ios-field" ><label className="ios-field-label">编码标准 (Codec)</label>
-            <select className="ios-dark-select" value={exportCodec} onChange={e => setExportCodec(e.target.value as any)}>
-              <option value="h264">H.264 / AVC (最强兼容性)</option>
-              <option value="h265">H.265 / HEVC (极致压缩 & 4K 推荐)</option>
-            </select>
-          </div>
-          <div className="ios-field" ><label className="ios-field-label">HDR 10-bit & 杜比色彩空间 (只支持 H.265)</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-              <input
-                type="checkbox"
-                checked={exportHdr}
-                disabled={exportCodec !== 'h265'}
-                onChange={e => setExportHdr(e.target.checked)}
-                style={{ width: 18, height: 18, accentColor: 'var(--ios-indigo)', cursor: exportCodec === 'h265' ? 'pointer' : 'not-allowed' }}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 10 }}>
+      {/* 核心引擎设置 */}
+      <div className="ios-prop-group" style={{ padding: '8px 10px' }}>
+        <div style={{ color: 'var(--ios-indigo)', fontSize: 12, marginBottom: 6, fontWeight: 500 }}>📦 容器与前置编码</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>封装格式</span>
+            <div style={{ width: 220 }}>
+              <SegmentedControl 
+                value={exportFormat} onChange={setExportFormat} 
+                options={[{label: 'MP4', value: 'mp4'}, {label: 'MOV', value: 'mov'}, {label: 'WebP', value: 'webp'}, {label: 'GIF', value: 'gif'}]} 
               />
-              <div className="ios-text" style={{ fontSize: 13, opacity: exportCodec === 'h265' ? 0.8 : 0.3 }}>
-                开启高动态范围 (BT.2020 PQ) {exportCodec !== 'h265' && "(请先切换编码为 H.265)"}
-              </div>
             </div>
           </div>
-          <div className="ios-field" ><label className="ios-field-label">帧速率 (FPS)</label>
-            <select className="ios-dark-select" value={exportFps} onChange={e => setExportFps(e.target.value as any)}>
-              <option value="30">30 FPS (标准电影感)</option>
-              <option value="60">60 FPS (丝滑高刷无拖影)</option>
-            </select>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>帧速率 (FPS)</span>
+            <div style={{ width: 170 }}>
+              <SegmentedControl 
+                value={exportFps} onChange={setExportFps} 
+                options={[{label: '30 电影感', value: '30'}, {label: '60 高刷', value: '60'}]} 
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>硬编解码器</span>
+            <div style={{ width: 170 }}>
+              <SegmentedControl 
+                value={exportCodec} onChange={(v) => { setExportCodec(v); if(v === 'h264') setExportHdr(false); }} 
+                options={[{label: 'H.264', value: 'h264'}, {label: 'H.265 (HEVC)', value: 'h265'}]} 
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: exportCodec === 'h265' ? 1 : 0.4 }}>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{exportCodec === 'h265' ? '开启 10-bit HDR (BT.2020)' : 'HDR 激活 (请先选 H.265)'}</span>
+            <input
+              type="checkbox"
+              checked={exportHdr}
+              disabled={exportCodec !== 'h265'}
+              onChange={e => setExportHdr(e.target.checked)}
+              style={{ width: 16, height: 16, accentColor: 'var(--ios-indigo)', cursor: exportCodec === 'h265' ? 'pointer' : 'not-allowed', margin: 0 }}
+            />
           </div>
         </div>
       </div>
 
-      <div className="ios-prop-group">
-        <div className="ios-text" style={{ color: '#F59E0B', fontSize: 13, marginBottom: 12, display: 'block' }}>👁️‍🗨️ 画质极限控制</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="ios-field" ><label className="ios-field-label">输出分辨率</label>
-            <select className="ios-dark-select" value={exportResolution} onChange={e => setExportResolution(e.target.value as any)}>
-              <option value="original">🔰 原尺寸装配 (100% 不缩放超清)</option>
-              <option value="4k">4K 标准 (3840x2160)</option>
-              <option value="1080p">1080P 全高清 (1920x1080)</option>
-            </select>
+      {/* 码率发电机区块 */}
+      <div className="ios-prop-group" style={{ padding: '8px 10px' }}>
+        <div style={{ color: '#F59E0B', fontSize: 12, marginBottom: 6, fontWeight: 500 }}>🎛️ 码率发电机</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          
+           <div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+               <span>输出分辨率</span>
+             </div>
+            <SegmentedControl 
+              value={exportResolution} onChange={setExportResolution} 
+              options={[{label: '📐 原比例', value: 'original'}, {label: '🖥️ 4K', value: '4k'}, {label: '📱 1080P', value: '1080p'}]} 
+            />
           </div>
-          <div className="ios-field" ><label className="ios-field-label">渲染画质 (CRF Engine)</label>
-            <select className="ios-dark-select" value={exportQuality} onChange={e => setExportQuality(e.target.value as any)}>
-              <option value="lossless">💎 无损直出 (-crf 10, 体积大极清晰)</option>
-              <option value="high">✨ 专业高画质 (-crf 15, 清晰度优先)</option>
-              <option value="medium">📱 互联网传播 (-crf 23, 体积最优)</option>
-            </select>
+
+          <div>
+             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+               <span>体积流场引擎</span>
+               {exportBitrateMode === 'crf' ? <span style={{ color: '#F59E0B', fontSize: 11 }}>画质最优锁</span> : <span style={{ color: '#3B82F6', fontSize: 11 }}>防越界拦截</span>}
+             </div>
+             <SegmentedControl 
+              value={exportBitrateMode} onChange={setExportBitrateMode} 
+              options={[
+                {label: '智能流 CRF', value: 'crf'}, 
+                {label: '锁死极限 VBR', value: 'vbr'}
+              ]} 
+            />
           </div>
+
+          {exportBitrateMode === 'crf' ? (
+             <div style={{ padding: '10px 0 4px', borderTop: '1px dashed rgba(255,255,255,0.1)' }}>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 8 }}>画质浮动档位</div>
+              <SegmentedControl 
+                value={exportQuality} onChange={setExportQuality} 
+                options={[
+                  {label: '无损', value: 'lossless'}, 
+                  {label: '超清', value: 'high'}, 
+                  {label: '压缩', value: 'medium'}
+                ]} 
+              />
+            </div>
+          ) : (
+            <div style={{ padding: '10px 0 4px', borderTop: '1px dashed rgba(255,255,255,0.1)' }}>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                <span>目标强制码率 (Mbps)</span>
+                <span style={{ fontWeight: 600 }}>{exportTargetBitrate} Mbps</span>
+              </div>
+              <input 
+                type="range" min="1" max="100" step="1" 
+                value={exportTargetBitrate} onChange={e => setExportTargetBitrate(Number(e.target.value))}
+                style={{ width: '100%', accentColor: '#3B82F6' }}
+              />
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginTop: 4, display: 'flex', justifyContent: 'space-between' }}>
+                <span>1M(极小)</span><span>一分钟约占 {((exportTargetBitrate || 1) * 60 / 8).toFixed(1)} MB</span><span>100M(顶配)</span>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+
+      {/* 影院级特效挂载 */}
+      <div className="ios-prop-group" style={{ padding: '8px 10px' }}>
+        <div style={{ color: '#10B981', fontSize: 12, marginBottom: 6, fontWeight: 500 }}>✨ 影院级包装</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          
+           <div>
+             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+               <span>封装暗部演算</span>
+               {exportEncodingPreset === 'quality' && <span style={{ color: '#A855F7', fontSize: 11 }}>启用算力换取平滑</span>}
+             </div>
+             <SegmentedControl 
+              value={exportEncodingPreset} onChange={setExportEncodingPreset} 
+              options={[
+                {label: '极速预扫', value: 'speed'}, 
+                {label: 'Slower 极限压制', value: 'quality'}
+              ]} 
+            />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 6 }}>
+            <div style={{ flex: 1, paddingRight: 10 }}>
+              <div style={{ fontSize: 12, color: '#FCD34D' }}>消除色彩阶梯断层 (Deband)</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>注入无感素描点抹平色带(耗时+30%)</div>
+            </div>
+            <input type="checkbox" checked={exportDeband} onChange={e => setExportDeband(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#FCD34D', margin: 0, flexShrink: 0 }} />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 6 }}>
+            <div style={{ flex: 1, paddingRight: 10 }}>
+              <div style={{ fontSize: 12, color: '#34D399' }}>母带级无损音频</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>锁定 48000Hz 320kbps 顶配立体声封装引擎</div>
+            </div>
+            <input type="checkbox" checked={exportMasterAudio} onChange={e => setExportMasterAudio(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#34D399', margin: 0, flexShrink: 0 }} />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 6 }}>
+            <div style={{ flex: 1, paddingRight: 10 }}>
+              <div style={{ fontSize: 12, color: '#EF4444' }}>强制关闭硬件加速 (禁 GPU)</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>纯以 x265 软编死磕极致画质</div>
+            </div>
+            <input type="checkbox" checked={exportForceCpu} onChange={e => setExportForceCpu(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#EF4444', margin: 0, flexShrink: 0 }} />
+          </div>
+
         </div>
       </div>
 
       <button className="ios-button ios-button-primary ios-hover-scale"
         style={{
-          marginTop: 16, height: 48, borderRadius: 12,
+          marginTop: 4, height: 36, borderRadius: 8,
           background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
-          boxShadow: '0 8px 20px rgba(79, 70, 229, 0.3), inset 0 1px 1px rgba(255,255,255,0.2)',
-          fontWeight: 600, fontSize: 13, border: 'none',
-          transition: 'all 0.3s ease'
+          boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3), inset 0 1px 1px rgba(255,255,255,0.2)',
+          fontWeight: 600, fontSize: 12, border: 'none',
+          transition: 'all 0.3s ease', letterSpacing: 1
         }}
         onClick={handleGenerate}
         disabled={isGenerating}
       >
-        {isGenerating ? '正在拼尽全力导出...' : '开始执行极速渲染'}
+        {isGenerating ? '正在渲染并处理封装...' : '🚀 开始执行极速渲染'}
       </button>
 
     </div>

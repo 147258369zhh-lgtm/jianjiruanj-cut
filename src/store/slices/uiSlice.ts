@@ -46,12 +46,18 @@ export interface UiSlice {
   theme: 'ios' | 'win11' | 'harmony';
   
   // 导出设置
-  exportFormat: 'mp4' | 'mov';
+  exportFormat: 'mp4' | 'mov' | 'webp' | 'gif';
   exportResolution: '1080p' | '4k' | 'original';
   exportFps: '30' | '60';
   exportQuality: 'medium' | 'high' | 'lossless';
   exportCodec: 'h264' | 'h265';
   exportHdr: boolean;
+  exportEncodingPreset: 'speed' | 'quality';
+  exportBitrateMode: 'crf' | 'vbr';
+  exportTargetBitrate: number;
+  exportDeband: boolean;
+  exportForceCpu: boolean;
+  exportMasterAudio: boolean;
   
   // Setters
   setActiveTab: (v: 'effects' | 'export') => void;
@@ -84,12 +90,18 @@ export interface UiSlice {
   setIsJumping: (v: boolean) => void;
   setLocalDuration: (v: number | null) => void;
   setTheme: (v: 'ios' | 'win11' | 'harmony') => void;
-  setExportFormat: (v: 'mp4' | 'mov') => void;
+  setExportFormat: (v: 'mp4' | 'mov' | 'webp' | 'gif') => void;
   setExportResolution: (v: '1080p' | '4k' | 'original') => void;
   setExportFps: (v: '30' | '60') => void;
   setExportQuality: (v: 'medium' | 'high' | 'lossless') => void;
   setExportCodec: (v: 'h264' | 'h265') => void;
   setExportHdr: (v: boolean) => void;
+  setExportEncodingPreset: (v: 'speed' | 'quality') => void;
+  setExportBitrateMode: (v: 'crf' | 'vbr') => void;
+  setExportTargetBitrate: (v: number) => void;
+  setExportDeband: (v: boolean) => void;
+  setExportForceCpu: (v: boolean) => void;
+  setExportMasterAudio: (v: boolean) => void;
 }
 
 const loadCustomFilters = (): FilterPreset[] => {
@@ -136,6 +148,12 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   exportQuality: 'lossless',
   exportCodec: 'h264',
   exportHdr: false,
+  exportEncodingPreset: 'speed',
+  exportBitrateMode: 'crf',
+  exportTargetBitrate: 20,
+  exportDeband: false,
+  exportForceCpu: false,
+  exportMasterAudio: false,
   
   setActiveTab: (v) => set({ activeTab: v }),
   setPropertyTab: (v) => set({ propertyTab: v }),
@@ -183,4 +201,10 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   setExportQuality: (v) => set({ exportQuality: v }),
   setExportCodec: (v) => set({ exportCodec: v }),
   setExportHdr: (v) => set({ exportHdr: v }),
+  setExportEncodingPreset: (v) => set({ exportEncodingPreset: v }),
+  setExportBitrateMode: (v) => set({ exportBitrateMode: v }),
+  setExportTargetBitrate: (v) => set({ exportTargetBitrate: v }),
+  setExportDeband: (v) => set({ exportDeband: v }),
+  setExportForceCpu: (v) => set({ exportForceCpu: v }),
+  setExportMasterAudio: (v) => set({ exportMasterAudio: v }),
 });
