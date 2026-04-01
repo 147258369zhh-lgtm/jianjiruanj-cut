@@ -28,3 +28,4 @@ export const useTimeline = () => useStore(s => s.timeline);
 export const useResources = () => useStore(s => s.resources);
 export const usePlayback = () => useStore(s => ({ isPlaying: s.isPlaying, playTime: s.playTime, playbackSpeed: s.playbackSpeed }));
 export const useSelectedIds = () => useStore(s => s.selectedIds);
+export const useHoveredPreviewPreset = () => useStore(s => s.hoveredPreviewPreset);

@@ -34,19 +34,28 @@ export const GlobalDefaultsPanel: React.FC<GlobalDefaultsPanelProps> = ({
 
       <div className="ios-prop-group preset-group">
         <div className="ios-text" style={{ color: '#A855F7', fontSize: 13, marginBottom: 12, display: 'block', fontWeight: 600 }}>✨ 专属预设 (一键工作流)</div>
-        <div className="preset-cards-container" style={{ display: 'flex', overflowX: 'auto', gap: 12, paddingBottom: 8 }}>
+        <div className="preset-cards-container custom-media-scroll" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, paddingBottom: 8, maxHeight: 240, overflowY: 'auto' }}>
           {WORKFLOW_PRESETS.map(preset => (
             <div 
               key={preset.id}
-              className="preset-card"
+              className="preset-card ios-hover-scale"
               style={{ 
-                flex: '0 0 148px', 
                 background: 'rgba(255,255,255,0.04)', 
-                border: `1px solid ${preset.color}40`,
+                border: `1px solid ${preset.color}30`,
                 borderRadius: 14, 
                 padding: '12px', 
                 cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
                 transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.background = `linear-gradient(135deg, rgba(255,255,255,0.08), ${preset.color}15)`;
+                (e.currentTarget as HTMLElement).style.borderColor = `${preset.color}80`;
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)';
+                (e.currentTarget as HTMLElement).style.borderColor = `${preset.color}30`;
               }}
               onClick={() => {
                 commitSnapshotNow();
@@ -56,7 +65,6 @@ export const GlobalDefaultsPanel: React.FC<GlobalDefaultsPanelProps> = ({
                 // 覆盖未手动修改的时间轴元素
                 setTimeline((prev: any[]) => prev.map(t => {
                    const next: any = { ...t };
-                   // 如果预设设置中定义了 animation为 random，那么每次点击都需要触发真正的随机赋予！
                    Object.keys(preset.settings).forEach(k => {
                       if (!next.overrides?.includes(k)) {
                          let val = (preset.settings as any)[k];
@@ -64,7 +72,7 @@ export const GlobalDefaultsPanel: React.FC<GlobalDefaultsPanelProps> = ({
                             const pool = favAnims.length > 0 ? favAnims : ['anim-img-fadeIn', 'anim-img-slideLeft', 'anim-img-slideRight', 'anim-img-slideUp', 'anim-img-slideDown', 'anim-img-zoomIn', 'anim-img-zoomOut', 'anim-img-panLeft', 'anim-img-panRight'];
                             val = pool[Math.floor(Math.random() * pool.length)];
                             if (!next.overrides) next.overrides = [];
-                            next.overrides.push('animation'); // marking it as overridden so it holds its random value permanently
+                            next.overrides.push('animation');
                          }
                          next[k] = val;
                       }
@@ -75,9 +83,9 @@ export const GlobalDefaultsPanel: React.FC<GlobalDefaultsPanelProps> = ({
                 setTimeout(() => setStatusMsg(''), 2500);
               }}
             >
-              <div style={{ fontSize: 28, marginBottom: 8, filter: `drop-shadow(0 0 10px ${preset.color}60)` }}>{preset.icon}</div>
+              <div style={{ fontSize: 28, marginBottom: 8, filter: `drop-shadow(0 0 12px ${preset.color}60)` }}>{preset.icon}</div>
               <div style={{ fontSize: 13, fontWeight: 700, color: preset.color, marginBottom: 6 }}>{preset.name}</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', lineHeight: 1.4 }}>{preset.description}</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', lineHeight: 1.4, flex: 1 }}>{preset.description}</div>
             </div>
           ))}
         </div>
@@ -143,47 +151,7 @@ export const GlobalDefaultsPanel: React.FC<GlobalDefaultsPanelProps> = ({
           </div>
         </div>
       </div>
-      <div className="ios-prop-group">
-        <div className="ios-text" style={{ color: 'var(--ios-indigo)', fontSize: 13, marginBottom: 8, display: 'block' }}>🌓 影像参数默认值</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {([
-            ['exposure', '曝光', 0.0, 3.0, 0.01],
-            ['brilliance', '鲜明度', 0.0, 3.0, 0.01],
-            ['highlights', '高光', 0.0, 3.0, 0.01],
-            ['shadows', '阴影', 0.0, 3.0, 0.01],
-            ['whites', '白色色阶', 0.0, 3.0, 0.01],
-            ['blacks', '黑色色阶', 0.0, 3.0, 0.01],
-            ['contrast', '对比度', 0.0, 3.0, 0.01],
-            ['saturation', '饱和度', 0.0, 3.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #EF4444)'],
-            ['vibrance', '自然饱和度', 0.0, 3.0, 0.01, 'linear-gradient(90deg, #9CA3AF, #818CF8, #F472B6)'],
-            ['temp', '色温', -100, 100, 1, 'linear-gradient(90deg, #60A5FA, #E5E7EB, #FBBF24)'],
-            ['tint', '色调', -100, 100, 1, 'linear-gradient(90deg, #34D399, #E5E7EB, #C084FC)'],
-            ['sharpness', '清晰度', -3.0, 3.0, 0.01],
-            ['fade', '褪色', 0.0, 1.0, 0.01],
-            ['vignette', '暗角', -1.0, 1.0, 0.01],
-            ['grain', '颗粒', 0.0, 1.0, 0.01]
-          ] as any).map(([key, label, min, max, step, gradient]: any) => {
-            const isCentered = (key === 'temp' || key === 'tint' || key === 'sharpness' || key === 'vignette');
-            const defaultVal = globalDefaults[key as keyof GlobalDefaults] as number;
-            return (
-              <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>{label}</span>
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>
-                    {isCentered ? defaultVal : defaultVal.toFixed(2)}
-                  </span>
-                </div>
-                <div style={{ width: '100%', minWidth: 0, display: 'flex', alignItems: 'center' }}>
-                  <ProSlider gradient={gradient} isCentered={isCentered} style={{ width: '100%', maxWidth: '100%' }} min={min} max={max} step={step} value={defaultVal} onChange={d => {
-                    setGlobalDefaults(p => ({ ...p, [key]: d }));
-                    setTimeline(prev => prev.map(t => !(t.overrides?.includes(key)) ? { ...t, [key]: d } : t));
-                  }} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {/* Deleted Image Parameters */}
       <button className="ios-button ios-button-subtle" style={{ marginTop: 8, borderRadius: 10, height: 36, fontSize: 12, color: '#FF3B30', border: '1px solid rgba(255,59,48,0.2)' }} onClick={() => {
         commitSnapshotNow();
         setGlobalDefaults(GLOBAL_DEFAULTS_INIT);

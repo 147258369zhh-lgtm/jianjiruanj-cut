@@ -106,3 +106,29 @@ export function computeTextStyles(item: any): React.CSSProperties {
     opacity: item.textOpacity ?? 1,
   };
 }
+
+/**
+ * 计算 色阶映射表 (Levels) 256 位离散值
+ * 供 SVG <feComponentTransfer type="table"> 使用
+ */
+export function computeLevelsTable(black: number = 0, gamma: number = 1.0, white: number = 255): string {
+  if (black === 0 && white === 255 && Math.abs(gamma - 1.0) < 0.01) return '';
+  
+  const b = Math.max(0, Math.min(253, black));
+  const w = Math.max(b + 2, Math.min(255, white));
+  const g = Math.max(0.1, Math.min(9.99, gamma));
+  
+  const invGamma = 1 / g;
+  const range = w - b;
+  
+  const table = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    // 线性归一化到黑白点之间
+    let val = (i - b) / range;
+    val = Math.max(0, Math.min(1, val)); // 截断黑白场
+    // 应用 Gamma 核心曲线
+    val = Math.pow(val, invGamma);
+    table[i] = val.toFixed(4);
+  }
+  return table.join(' ');
+}

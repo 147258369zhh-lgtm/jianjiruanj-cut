@@ -19,14 +19,16 @@ export const FilterPresetGrid: React.FC<FilterPresetGridProps> = ({
   setStatusMsg,
   selectedItem: _selectedItem
 }) => {
-  const { customFilters, hiddenFilterNames, setCustomFilters, setHiddenFilterNames } = useStore(useShallow(s => ({
+  const { customFilters, hiddenFilterNames, setCustomFilters, setHiddenFilterNames, setHoveredPreviewPreset } = useStore(useShallow(s => ({
     customFilters: s.customFilters,
     hiddenFilterNames: s.hiddenFilterNames,
     setCustomFilters: s.setCustomFilters,
-    setHiddenFilterNames: s.setHiddenFilterNames
+    setHiddenFilterNames: s.setHiddenFilterNames,
+    setHoveredPreviewPreset: s.setHoveredPreviewPreset
   })));
 
   const [showRestoreModal, setShowRestoreModal] = useState(false);
+
 
   // We are completely ditching buggy Drag & Drop and Context Menus
   // Right click immediately folds the filter.
@@ -98,8 +100,13 @@ export const FilterPresetGrid: React.FC<FilterPresetGridProps> = ({
              e.stopPropagation();
              foldOrDeletePreset(preset);
           }}
+          onMouseEnter={() => setHoveredPreviewPreset(preset)}
+          onMouseLeave={() => setHoveredPreviewPreset(null)}
           style={{ padding: '8px 0px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-          onClick={() => applyPreset(preset)}
+          onClick={() => {
+            applyPreset(preset);
+            setHoveredPreviewPreset(null); // Click confirms it, no need to hover preview it anymore
+          }}
           title="点击应用滤镜，右键直接折叠隐藏"
         >
           <div style={{ display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>

@@ -25,6 +25,9 @@
     "react-advanced-cropper": "^0.20.1",
     "react-dom": "^19.1.0",
     "react-image-crop": "^11.0.10",
+    "react-qr-code": "^2.0.18",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

@@ -64,6 +64,11 @@ export interface TimelineItem {
   blendMode?: string;
   flipX?: boolean;
   flipY?: boolean;
+  maskShape?: string;
+  maskFeather?: number;
+  maskInvert?: boolean;
+  keystoneX?: number;
+  keystoneY?: number;
   vignette: number;
   fade: number;
   posX?: number;
@@ -104,4 +109,8 @@ export interface TimelineItem {
   fillMode?: 'contain' | 'cover';
   overrides?: string[];
   maskShape?: string;
+  maskFeather?: number;
+  maskInvert?: boolean;
+  keystoneX?: number;
+  keystoneY?: number;
 }

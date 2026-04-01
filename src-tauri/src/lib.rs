@@ -1256,12 +1256,12 @@ async fn generate_tts(app: tauri::AppHandle, req: TtsRequest) -> Result<String, 
     }
 
     let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis();
-    let output_file = tts_dir.join(format!("tts_{}.mp3", ts));
+    let output_file = tts_dir.join(format!("tts_{}.wav", ts));
 
-    // edge-tts 不支持 SSML，统一使用 --text + --voice + --rate
-    // 选对音色（如 YunzeNeural）本身就有很好的自然语感
+    // 本地开源大模型硬核驱动 (无网可用)
+    // 选对音色本身就有很好的自然语感，直接生成无损 wav 格式
     let mut cmd = Command::new("python");
-    cmd.arg("-m").arg("edge_tts")
+    cmd.arg("src-tauri/scripts/local_tts_engine.py")
         .arg("--text").arg(&req.text)
         .arg("--voice").arg(&req.voice)
         .arg("--rate").arg(&req.rate)
@@ -1277,9 +1277,9 @@ async fn generate_tts(app: tauri::AppHandle, req: TtsRequest) -> Result<String, 
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let output = cmd.spawn()
-        .map_err(|e| format!("启动 edge-tts 失败: {}. 请确认已安装 Python 和 edge-tts (pip install edge-tts)", e))?
+        .map_err(|e| format!("启动本地离线 TTS 模型失败: {}. 请确认已安装 Python 和 sherpa-onnx", e))?
         .wait_with_output()
-        .map_err(|e| format!("等待 edge-tts 完成失败: {}", e))?;
+        .map_err(|e| format!("等待大模型生成完成失败: {}", e))?;
 
     if output_file.exists() && std::fs::metadata(&output_file).map(|m| m.len() > 0).unwrap_or(false) {
         Ok(output_file.to_string_lossy().into_owned())
@@ -1293,8 +1293,7 @@ async fn generate_tts(app: tauri::AppHandle, req: TtsRequest) -> Result<String, 
 #[tauri::command]
 async fn list_tts_voices() -> Result<Vec<TtsVoice>, String> {
     let output = Command::new("python")
-        .arg("-m")
-        .arg("edge_tts")
+        .arg("src-tauri/scripts/local_tts_engine.py")
         .arg("--list-voices")
         .output()
         .map_err(|e| format!("获取音色列表失败: {}", e))?;
@@ -1331,7 +1330,128 @@ pub struct WebMusicItem {
 }
 
 #[tauri::command]
-async fn search_web_music(keyword: String) -> Result<Vec<WebMusicItem>, String> {
+async fn bili_get_qr_auth() -> Result<(String, String), String> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36".parse().unwrap());
+    headers.insert("Referer", "https://www.bilibili.com".parse().unwrap());
+    
+    let client = reqwest::Client::builder().default_headers(headers).build().unwrap();
+    let url = "https://passport.bilibili.com/x/passport-login/web/qrcode/generate";
+    let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    
+    let qr_url = json["data"]["url"].as_str().unwrap_or("").to_string();
+    let qrcode_key = json["data"]["qrcode_key"].as_str().unwrap_or("").to_string();
+    
+    if qr_url.is_empty() { return Err("获取二维码失败".to_string()); }
+    Ok((qr_url, qrcode_key))
+}
+
+#[tauri::command]
+async fn bili_poll_qr_auth(qrcode_key: String) -> Result<(i32, String, String), String> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36".parse().unwrap());
+    headers.insert("Referer", "https://www.bilibili.com".parse().unwrap());
+    
+    let client = reqwest::Client::builder().default_headers(headers).build().unwrap();
+    let url = format!("https://passport.bilibili.com/x/passport-login/web/qrcode/poll?qrcode_key={}", qrcode_key);
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    
+    let cookies = resp.headers().get_all("set-cookie")
+        .into_iter()
+        .filter_map(|h| h.to_str().ok())
+        .collect::<Vec<_>>()
+        .join("; ");
+        
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    let code = json["data"]["code"].as_i64().unwrap_or(-1) as i32;
+    let message = json["data"]["message"].as_str().unwrap_or("").to_string();
+    
+    let mut sessdata = String::new();
+    if code == 0 {
+        // Fallback 1: Extract from the redirect URL in json payload
+        if let Some(url_str) = json["data"]["url"].as_str() {
+            if let Some(idx) = url_str.find("SESSDATA=") {
+                let start = idx + 9;
+                let end = url_str[start..].find('&').map(|i| start + i).unwrap_or(url_str.len());
+                sessdata = url_str[start..end].to_string();
+            }
+        }
+        
+        // Fallback 2: cookies
+        if sessdata.is_empty() {
+            if let Some(s) = cookies.split(';').find(|c| c.trim().starts_with("SESSDATA=")) {
+                sessdata = s.trim().replace("SESSDATA=", "");
+            }
+        }
+    }
+    Ok((code, message, sessdata))
+}
+
+#[tauri::command]
+async fn search_web_music(keyword: String, source: Option<String>, sessdata: Option<String>) -> Result<Vec<WebMusicItem>, String> {
+    let src = source.unwrap_or_else(|| "apple".to_string());
+    
+    if src == "local" {
+        return search_local_music(keyword).await;
+    } else if src == "jamendo" {
+        return Err("Not supported".into());
+    } else if src == "netease" {
+        return Err("网易云通道尚未实装".into());
+    } else if src == "bilibili" {
+        // B站搜索
+        let mut items = Vec::new();
+        let url = format!("https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword={}", urlencoding::encode(&keyword));
+        
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36".parse().unwrap());
+        if let Some(s) = sessdata {
+            if !s.is_empty() {
+                headers.insert("Cookie", format!("SESSDATA={}", s).parse().unwrap());
+            }
+        }
+
+        let client = reqwest::Client::builder().default_headers(headers).build().unwrap();
+        let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+        let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        
+        if json["code"].as_i64().unwrap_or(-1) != 0 {
+            return Err(format!("B站API出错: {:?}", json["message"]));
+        }
+
+        if let Some(results) = json.pointer("/data/result").and_then(|v| v.as_array()) {
+            for v_obj in results {
+                let id = v_obj["id"].as_u64().unwrap_or(0); // Actually an internal ID
+                let bvid = v_obj["bvid"].as_str().unwrap_or("").to_string(); // we use bvid for url 
+                let raw_name = v_obj["title"].as_str().unwrap_or("").to_string();
+                let name = raw_name.replace("<em class=\"keyword\">", "").replace("</em>", "");
+                let artist = v_obj["author"].as_str().unwrap_or("UP主").to_string();
+                let cover = format!("https:{}", v_obj["pic"].as_str().unwrap_or(""));
+                let dur_str = v_obj["duration"].as_str().unwrap_or("00:00"); // e.g., "03:45"
+                let parts: Vec<&str> = dur_str.split(':').collect();
+                let mut duration_ms = 0;
+                if parts.len() == 2 {
+                    if let (Ok(m), Ok(s)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+                        duration_ms = (m * 60 + s) * 1000;
+                    }
+                }
+                
+                if !bvid.is_empty() {
+                    items.push(WebMusicItem {
+                        id,
+                        name,
+                        artist,
+                        cover,
+                        duration: duration_ms,
+                        url: format!("bilibili:{}", bvid), // special prefix for download parsing
+                        genre: "B站原音".to_string()
+                    });
+                }
+            }
+        }
+        return Ok(items);
+    }
+
     let url = format!("https://itunes.apple.com/search?term={}&media=music&limit=100", urlencoding::encode(&keyword));
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0")
@@ -1434,10 +1554,132 @@ fn calculate_relevance(name: &str, artist: &str, query: &str) -> i32 {
     score
 }
 
+async fn search_local_music(keyword: String) -> Result<Vec<WebMusicItem>, String> {
+    // A brilliant idea: scan standard Music folders on Windows for mp3/wav files matching keyword
+    use std::path::Path;
+    use std::fs;
+    
+    let mut items = Vec::new();
+    let mut id_counter = 50000;
+    
+    // Look in C:\Users\Username\Music or C:\Users\Public\Music
+    let user_dirs = vec![
+        dirs::audio_dir(),
+        dirs::download_dir(),
+        dirs::desktop_dir(),
+        Some(std::path::PathBuf::from("H:\\project\\CLIP JIANJI\\public")) // A common fallback if needed
+    ];
+
+    for dir_opt in user_dirs {
+        if let Some(dir) = dir_opt {
+            if dir.exists() && dir.is_dir() {
+                // A very simple non-recursive glob/scan for performance
+                if let Ok(entries) = fs::read_dir(dir) {
+                    for entry in entries.filter_map(Result::ok) {
+                        let path = entry.path();
+                        if path.is_file() {
+                            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                                if ext.eq_ignore_ascii_case("mp3") || ext.eq_ignore_ascii_case("wav") || ext.eq_ignore_ascii_case("m4a") {
+                                    if let Some(name) = path.file_stem().and_then(|n| n.to_str()) {
+                                        if keyword.is_empty() || name.to_lowercase().contains(&keyword.to_lowercase()) {
+                                            id_counter += 1;
+                                            // Mock properties, since we don't have id3 reading cleanly included.
+                                            let url = format!("file://{}", path.display().to_string().replace("\\", "/"));
+                                            items.push(WebMusicItem {
+                                                id: id_counter,
+                                                name: name.to_string(),
+                                                artist: "本地设备".to_string(),
+                                                cover: "https://cdn-icons-png.flaticon.com/512/8112/8112613.png".to_string(),
+                                                duration: 180000, // Hardcoded 3 mins placeholder, it plays until it finishes anyway
+                                                url,
+                                                genre: "本地实体文件".to_string()
+                                            });
+                                            if items.len() >= 50 {
+                                                return Ok(items);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if items.is_empty() {
+        return Err("本地音乐夹、下载处或桌面均未检索到含该关键词的MP3/WAV文件。".to_string());
+    }
+    Ok(items)
+}
+
 #[tauri::command]
-async fn download_web_music(app: tauri::AppHandle, url: String, id: u64, name: String, artist: String) -> Result<String, String> {
+async fn download_web_music(app: tauri::AppHandle, mut url: String, id: u64, name: String, artist: String, sessdata: Option<String>) -> Result<String, String> {
+    let mut actual_url = url.clone();
+    
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36".parse().unwrap());
+    headers.insert("Referer", "https://www.bilibili.com".parse().unwrap());
+    
+    if url.starts_with("bilibili:") {
+        let bvid = url.strip_prefix("bilibili:").unwrap();
+        // 1. Get CID
+        if let Some(s) = &sessdata {
+            if !s.is_empty() {
+                headers.insert("Cookie", format!("SESSDATA={}", s).parse().unwrap());
+            }
+        }
+        
+        let client = reqwest::Client::builder().default_headers(headers.clone()).build().unwrap();
+        
+        // Fetch view info to get CID
+        let view_url = format!("https://api.bilibili.com/x/web-interface/view?bvid={}", bvid);
+        let resp = client.get(&view_url).send().await.map_err(|e| format!("B站CID请求失败: {}", e))?;
+        let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        
+        if json["code"].as_i64().unwrap_or(-1) != 0 {
+            return Err(format!("获取B站视频详情失败: {:?}", json["message"]));
+        }
+        
+        let cid = json["data"]["cid"].as_u64().unwrap_or(0);
+        if cid == 0 { return Err("无法获取视频CID".into()); }
+        
+        // 2. Get PlayUrl (dash format audio)
+        let playurl = format!("https://api.bilibili.com/x/player/wbi/playurl?fnval=16&bvid={}&cid={}", bvid, cid);
+        let resp = client.get(&playurl).send().await.map_err(|e| format!("B站音频地址请求失败: {}", e))?;
+        let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        
+        if json["code"].as_i64().unwrap_or(-1) != 0 {
+            // Fallback non-wbi
+            let playurl_old = format!("https://api.bilibili.com/x/player/playurl?fnval=16&bvid={}&cid={}", bvid, cid);
+            let resp2 = client.get(&playurl_old).send().await.map_err(|e| format!("B站降级请求失败: {}", e))?;
+            let json2: serde_json::Value = resp2.json().await.map_err(|e| e.to_string())?;
+            if let Some(arr) = json2.pointer("/data/dash/audio").and_then(|v| v.as_array()) {
+                if let Some(first) = arr.first() {
+                    actual_url = first["baseUrl"].as_str().unwrap_or("").to_string();
+                } else {
+                    return Err("未能解析音轨 (降级失败)".into());
+                }
+            } else {
+                return Err(format!("无权解析高品质原音轨: {:?}", json2["message"]));
+            }
+        } else {
+            if let Some(arr) = json.pointer("/data/dash/audio").and_then(|v| v.as_array()) {
+                if let Some(first) = arr.first() {
+                    actual_url = first["baseUrl"].as_str().unwrap_or("").to_string();
+                } else {
+                    return Err("未包含音轨数据".into());
+                }
+            } else {
+                return Err("音轨数据结构异常".into());
+            }
+        }
+    }
+    
+    // Now download from actual_url
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0")
+        .default_headers(headers)
         .build()
         .map_err(|e| e.to_string())?;
     
@@ -1474,6 +1716,37 @@ async fn download_web_music(app: tauri::AppHandle, url: String, id: u64, name: S
     Ok(out_path.to_string_lossy().into_owned())
 }
 
+#[tauri::command]
+async fn read_local_file(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_machine_id() -> String {
+    machine_uid::get().unwrap_or_else(|_| "UNKNOWN_MACHINE".to_string())
+}
+
+#[tauri::command]
+fn read_auth_store(app: tauri::AppHandle) -> Result<String, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let target = app_data_dir.join(".sys_auth.json");
+    if target.exists() {
+        std::fs::read_to_string(&target).map_err(|e| e.to_string())
+    } else {
+        Ok("{}".to_string())
+    }
+}
+
+#[tauri::command]
+fn write_auth_store(app: tauri::AppHandle, data: String) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    if !app_data_dir.exists() {
+        let _ = std::fs::create_dir_all(&app_data_dir);
+    }
+    let target = app_data_dir.join(".sys_auth.json");
+    std::fs::write(&target, data).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1488,7 +1761,13 @@ pub fn run() {
             generate_tts,
             list_tts_voices,
             search_web_music,
-            download_web_music
+            download_web_music,
+            bili_get_qr_auth,
+            bili_poll_qr_auth,
+            read_local_file,
+            get_machine_id,
+            read_auth_store,
+            write_auth_store
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

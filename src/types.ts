@@ -133,6 +133,10 @@ export interface TimelineItem {
   overrides?: string[]; // 被手动修改过的字段名列表（全局覆盖模型）
   collapsed?: boolean; // 视频折叠：折叠后在时间轴中只显示一帧缩略图
   maskShape?: string;
+  // 色阶 Levels
+  levelInBlack?: number; // 0 to 255
+  levelInGamma?: number; // 0.1 to 9.99
+  levelInWhite?: number; // 0 to 255
 }
 
 // 全局默认值接口
@@ -163,6 +167,9 @@ export interface GlobalDefaults {
   fade: number;
   posX: number;
   posY: number;
+  levelInBlack: number;
+  levelInGamma: number;
+  levelInWhite: number;
 }
 
 export const GLOBAL_DEFAULTS_INIT: GlobalDefaults = {
@@ -172,7 +179,8 @@ export const GLOBAL_DEFAULTS_INIT: GlobalDefaults = {
   sharpness: 0, grain: 0,
   temp: 0, tint: 0, zoom: 1.0, rotation: 0, animation: 'none',
   opacity: 1.0, blendMode: 'normal', flipX: false, flipY: false,
-  vignette: 0, fade: 0, posX: 0, posY: 0
+  vignette: 0, fade: 0, posX: 0, posY: 0,
+  levelInBlack: 0, levelInGamma: 1.0, levelInWhite: 255
 };
 
 export const ANIMATION_PRESETS = ['anim-img-fadeIn', 'anim-img-slideLeft', 'anim-img-slideRight', 'anim-img-slideUp', 'anim-img-slideDown', 'anim-img-zoomIn', 'anim-img-zoomOut', 'anim-img-panLeft', 'anim-img-panRight'];

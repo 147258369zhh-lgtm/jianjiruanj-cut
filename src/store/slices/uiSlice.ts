@@ -12,6 +12,9 @@ export interface UiSlice {
   panelOrderText: string[];
   panelCollapsed: Record<string, boolean>;
   
+  // 预览悬停预设
+  hoveredPreviewPreset: FilterPreset | null;
+  
   // 自定义与折叠滤镜
   customFilters: FilterPreset[];
   hiddenFilterNames: string[];
@@ -60,6 +63,7 @@ export interface UiSlice {
   exportMasterAudio: boolean;
   
   // Setters
+  setHoveredPreviewPreset: (v: FilterPreset | null) => void;
   setActiveTab: (v: 'effects' | 'export') => void;
   setPropertyTab: (v: 'presets' | 'color' | 'text' | 'transform') => void;
   setLibTab: (v: 'image' | 'audio' | 'video') => void;
@@ -121,6 +125,7 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   panelCollapsed: (() => { try { return JSON.parse(localStorage.getItem('__editor_panel_collapsed__') as string) || {}; } catch { return {}; } })(),
   customFilters: loadCustomFilters(),
   hiddenFilterNames: loadHiddenFilters(),
+  hoveredPreviewPreset: null,
   statusMsg: '',
   showShortcuts: false,
   showSortMenu: false,
@@ -172,6 +177,7 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
     localStorage.setItem('__editor_panel_collapsed__', JSON.stringify(next));
     return { panelCollapsed: next };
   }),
+  setHoveredPreviewPreset: (v) => set({ hoveredPreviewPreset: v }),
   setCustomFilters: (v) => { localStorage.setItem('__editor_custom_filters__', JSON.stringify(v)); set({ customFilters: v }); },
   setHiddenFilterNames: (v) => { localStorage.setItem('__editor_hidden_filters__', JSON.stringify(v)); set({ hiddenFilterNames: v }); },
   setStatusMsg: (v) => set({ statusMsg: v }),

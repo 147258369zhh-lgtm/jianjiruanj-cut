@@ -441,7 +441,7 @@ export function useAppController() {
   const updateSelectedProperty = (key: keyof TimelineItem, val: any) => {
     if (selectedIds.size === 0) return;
 
-    const textRelatedKeys = ['overlayText', 'fontFamily', 'fontColor', 'fontSize', 'fontWeight', 'textAlign', 'textBg', 'textBgPadding', 'textBgRadius', 'textShadowColor', 'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY', 'textStrokeColor', 'textStrokeWidth', 'textGlow', 'textGlowColor', 'textGlowRadius', 'textLetterSpacing', 'textLineHeight', 'textOpacity', 'textRotation', 'textX', 'textY', 'textAnimation', 'textAnimDuration'];
+    const textRelatedKeys = ['overlayText', 'fontFamily', 'fontColor', 'fontSize', 'fontWeight', 'textAlign', 'textBg', 'textBgEnable', 'textBgPadding', 'textBgPadX', 'textBgPadY', 'textBgRadius', 'textShadow', 'textShadowColor', 'textShadowBlur', 'textShadowOffsetX', 'textShadowOffsetY', 'textStroke', 'textStrokeColor', 'textStrokeWidth', 'textGlow', 'textGlowColor', 'textGlowRadius', 'textLetterSpacing', 'textLineHeight', 'textOpacity', 'textRotation', 'textX', 'textY', 'textWidth', 'textAnimation', 'textAnimDuration', 'textAnimLoop', 'textAnimLoopDuration', 'textAnimOut', 'textAnimOutDuration'];
 
     setTimeline(prev => prev.map(t => {
       if (!selectedIds.has(t.id)) return t;

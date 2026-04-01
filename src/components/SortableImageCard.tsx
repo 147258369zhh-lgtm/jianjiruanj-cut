@@ -5,6 +5,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { generateThumbnail } from '../utils/thumbnail';
 import { TimelineItem, Resource } from '../types';
 import { useThumbnail } from '../hooks/useThumbnail';
+import { computeFilter } from '../features/filter-engine/useFilter';
 
 const VideoFrame = ({ src, timeOffset, style }: { src: string, timeOffset: number, style: React.CSSProperties }) => {
   const thumbUrl = useThumbnail(src, timeOffset);
@@ -56,17 +57,26 @@ export const SortableImageCard = memo(function SortableImageCard({
     generateThumbnail(src).then(setThumbUrl);
   }, [resource?.path, previewUrl, isVideo]);
 
+  const getClipPath = (it: any) => {
+    if (it?.maskShape && it.maskShape !== 'none') {
+      switch (it.maskShape) {
+        case 'circle': return 'circle(50% at 50% 50%)';
+        case 'ellipse': return 'ellipse(45% 35% at 50% 50%)';
+        case 'heart': return 'polygon(50% 15%, 61% 0%, 85% 0%, 100% 15%, 100% 38%, 50% 100%, 0% 38%, 0% 15%, 15% 0%, 39% 0%)';
+        case 'star': return 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)';
+        case 'triangle': return 'polygon(50% 0%, 0% 100%, 100% 100%)';
+        case 'rhombus': return 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)';
+        case 'hexagon': return 'polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%)';
+      }
+    }
+    return it?.cropPos ? `inset(${it.cropPos.y}% ${100 - it.cropPos.x - it.cropPos.width}% ${100 - it.cropPos.y - it.cropPos.height}% ${it.cropPos.x}%)` : 'none';
+  };
+
   const thumbStyle: React.CSSProperties = {
     width: '100%', height: '100%', objectFit: item.fillMode === 'contain' ? 'contain' : 'cover',
-    transform: `rotate(${item.rotation}deg) scale(${item.zoom || 1})`,
-    filter: `
-      brightness(${item.exposure ?? 1.0}) 
-      contrast(${(item.contrast ?? 1.0) + ((item.brilliance ?? 1.0) - 1.0) * 0.2}) 
-      saturate(${(item.saturation ?? 1.0) + ((item.brilliance ?? 1.0) - 1.0) * 0.1})
-      sepia(${(item.temp ?? 0) > 0 ? (item.temp ?? 0) / 100 : 0})
-      hue-rotate(${(item.tint ?? 0)}deg)
-    `,
-    clipPath: item.cropPos ? `inset(${item.cropPos.y}% ${100 - item.cropPos.x - item.cropPos.width}% ${100 - item.cropPos.y - item.cropPos.height}% ${item.cropPos.x}%)` : 'none',
+    transform: `perspective(1000px) translate(${item.posX || 0}%, ${item.posY || 0}%) rotate(${item.rotation || 0}deg) rotateY(${item.keystoneX || 0}deg) rotateX(${item.keystoneY || 0}deg) scale(${(item.zoom || 1) * (item.flipX ? -1 : 1)}, ${(item.zoom || 1) * (item.flipY ? -1 : 1)})`,
+    filter: computeFilter(item),
+    clipPath: getClipPath(item),
     transition: 'transform 0.3s cubic-bezier(0.23, 1, 0.32, 1), filter 0.3s',
   };
 
@@ -304,7 +314,28 @@ export const SortableImageCard = memo(function SortableImageCard({
 
       {/* Removed numerical badge as requested by user to save resources */}
 
-      {/* 浮空文字预览层 */}
+      {/* 浮空文字预览层 (新版多文本图层支持) */}
+      {item.textOverlays?.map((txt) => (
+        <div key={txt.id} style={{
+          position: 'absolute',
+          top: `${txt.textY ?? 50}%`,
+          left: `${txt.textX ?? 50}%`,
+          transform: `perspective(1000px) translate(-50%, -50%) rotate(${txt.textRotation || 0}deg)`,
+          color: txt.fontColor || '#fff',
+          fontSize: `${(txt.fontSize || 24) * 0.3}px`, // Scaled down for tiny thumbnail
+          fontWeight: txt.fontWeight === 'bold' ? 700 : 400,
+          fontFamily: txt.fontFamily || 'inherit',
+          textAlign: 'center',
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+          textShadow: '0 1px 3px rgba(0,0,0,0.8)',
+          zIndex: 5,
+        }}>
+          {txt.text}
+        </div>
+      ))}
+
+      {/* 浮空文字预览层 (旧版兼容) */}
       {item.overlayText && (
         <div style={textStyle}>
           {item.overlayText}

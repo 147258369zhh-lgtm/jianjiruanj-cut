@@ -7,6 +7,7 @@ import IosSelect from './IosSelect';
 import { FILTER_PRESETS } from '../features/filter-engine/filterPresets';
 import ColorPicker from '../features/text-workshop/ColorPicker';
 import { PropertyAccordionBlock } from './PropertyAccordionBlock';
+import { TransformAndMaskPanel } from './TransformAndMaskPanel';
 import ProFontSelectComp from '../features/text-workshop/FontSelector';
 import { ColorCurvePanel } from './ColorCurvePanel';
 
@@ -761,102 +762,40 @@ export const VideoPropertyPanel: React.FC<Props> = ({
           })()}
       </div>
 
-  {/* GROUP 4: 几何与时间 */}
-      <div className="ios-prop-group" style={{ display: propertyTab === 'transform' ? 'block' : 'none' }}>
-        <div className="ios-text" style={{ color: '#F87171', fontSize: 13, marginBottom: 8, display: 'block' }}>📐 几何、时间与转场</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="ios-button-small ios-button" style={{ flex: 1 }} onClick={() => updateSelectedProperty('rotation', (selectedItem!.rotation + 90) % 360)}>↺ 旋转 90°</button>
-            <button className="ios-button-small ios-button" style={{ flex: 1 }} onClick={() => updateSelectedProperty('flipX', !(selectedItem as any)?.flipX)}>↔️ 水平翻转</button>
-          </div>
-          <div className="ios-field" >
-            <IosSelect
-              value={selectedItem?.fillMode || 'cover'}
-              onChange={val => {
-                commitSnapshotNow();
-                updateSelectedProperty('fillMode', val);
-              }}
-              style={{ height: 32 }}
-              options={[
-                { value: 'cover', label: '智能匹配 (Cover)' },
-                { value: 'contain', label: '适应比例 (Contain)' },
-              ]}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>缩放: {selectedItem?.zoom?.toFixed(2) || '1.0'}</span>
-            <ProSlider min={1.0} max={3.0} step={0.1} value={selectedItem?.zoom || 1.0} onChange={d => updateSelectedProperty('zoom', d)} />
-          </div>
+        {/* GROUP 4: 几何、蒙版与转场 (独立组件) */}
+      <div className="ios-prop-group" style={{ display: propertyTab === 'transform' ? 'block' : 'none', padding: 0, background: 'transparent' }}>
+        <TransformAndMaskPanel
+          selectedItem={selectedItem!}
+          updateSelectedProperty={updateSelectedProperty}
+          updatePropertyWithUndo={updatePropertyWithUndo}
+          finalizeSliderUndo={finalizeSliderUndo}
+          commitSnapshotNow={commitSnapshotNow}
+          isOverridden={isOverridden as any}
+          restoreInheritance={restoreInheritance as any}
+          
+          favTrans={favTrans}
+          toggleFavTrans={toggleFavTrans}
+          setTimeline={setTimeline as any}
+          setStatusMsg={setStatusMsg}
+          
+          orderTransform={Math.max(0, panelOrderImage.indexOf('transform'))}
+          isCollapsedTransform={!!panelCollapsed['transform']}
+          onToggleTransform={() => togglePanelCollapsed('transform')}
+          onDragStartTransform={(e) => handleDragStart(e, 'transform')}
+          onDropTransform={(e) => handleDrop(e, 'transform')}
 
-          {/* 追加功能：X轴与Y轴自由位移 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0 8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty('posX', 0); }} style={{ cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.85)' }} title="双击重置">X轴平移 (X Offset)</span>
-                <span style={{ fontSize: 11, color: '#6EE7B7', fontVariantNumeric: 'tabular-nums' }}>{selectedItem?.posX?.toFixed(1) || '0.0'}%</span>
-              </div>
-              <ProSlider gradient="linear-gradient(90deg, #34D399, #10B981)" min={-100} max={100} step={0.5} isCentered centerValue={0} value={selectedItem?.posX || 0} onChange={d => updatePropertyWithUndo('posX', d)} onMouseUp={finalizeSliderUndo} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span onDoubleClick={() => { commitSnapshotNow(); updateSelectedProperty('posY', 0); }} style={{ cursor: 'pointer', fontSize: 11, color: 'rgba(255,255,255,0.85)' }} title="双击重置">Y轴平移 (Y Offset)</span>
-                <span style={{ fontSize: 11, color: '#A78BFA', fontVariantNumeric: 'tabular-nums' }}>{selectedItem?.posY?.toFixed(1) || '0.0'}%</span>
-              </div>
-              <ProSlider gradient="linear-gradient(90deg, #C084FC, #8B5CF6)" min={-100} max={100} step={0.5} isCentered centerValue={0} value={selectedItem?.posY || 0} onChange={d => updatePropertyWithUndo('posY', d)} onMouseUp={finalizeSliderUndo} />
-            </div>
-          </div>
-          <div className="ios-field" >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><label className="ios-field-label">封装格式</label>
-              <span>转场方式</span>
-              {selectedItem && <span onClick={() => selectedItem && (isOverridden(selectedItem, 'transition') ? restoreInheritance(selectedItem.id, 'transition') : null)} style={{ cursor: isOverridden(selectedItem, 'transition') ? 'pointer' : 'default', fontSize: 11, opacity: 0.7 }} title={isOverridden(selectedItem, 'transition') ? '点击恢复继承' : '继承全局默认'}>{isOverridden(selectedItem, 'transition') ? '✏️' : '🔗'}</span>}
-            </span>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <IosSelect
-                value={selectedItem?.transition || 'none'}
-                onChange={val => {
-                  commitSnapshotNow();
-                  updateSelectedProperty('transition', val);
-                }}
-                style={{ flex: 1, height: 32 }}
-                options={[
-                  { value: 'none', label: '直接切入 (Cut)' },
-                  { value: 'fade', label: '经典叠化 (Dissolve)' },
-                  { value: 'white', label: '模糊闪白 (Dip to White)' },
-                  { value: 'iris', label: '中心扩散 (Iris)' },
-                  { value: 'slide', label: '平滑推入 (Push)' },
-                  { value: 'slide_up', label: '垂直推开 (Slide Up)' },
-                  { value: 'zoom', label: '专业缩放 (Zoom)' },
-                  { value: 'wipe', label: '硬核擦除 (Wipe)' },
-                  { value: 'cube', label: '立体旋转 (Cube)' },
-                  { value: 'glitch', label: '故障艺术 (Glitch)' },
-                  { value: 'flip', label: '水平翻转 (Flip)' }
-                ]}
-                favSet={favTrans}
-                onToggleFav={toggleFavTrans}
-              />
-              <div
-                title="为时间线所有片段随机分配转场（仅来自收藏）"
-                className="ios-hover-scale"
-                style={{
-                  height: 32, width: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.4)', cursor: 'pointer', fontSize: 16,
-                  boxShadow: '0 2px 8px rgba(99,102,241,0.2)', transition: 'all 0.2s cubic-bezier(0.23, 1, 0.32, 1)', flexShrink: 0
-                }}
-                onClick={() => {
-                  commitSnapshotNow();
-                  const transPool = favTrans.length > 0 ? favTrans : ['none', 'fade', 'white', 'iris', 'slide', 'slide_up', 'zoom', 'wipe', 'cube', 'glitch', 'flip'];
-                  setTimeline(prev => prev.map(t => {
-                    const randTrans = transPool[Math.floor(Math.random() * transPool.length)];
-                    const ov = new Set(t.overrides || []);
-                    ov.add('transition');
-                    return { ...t, transition: randTrans, overrides: Array.from(ov) };
-                  }));
-                  setStatusMsg('🎲 已为全轨随机分配新转场！'); setTimeout(() => setStatusMsg(''), 2000);
-                }}
-              >🎲</div>
-            </div>
-          </div>
-        </div>
+          orderMask={Math.max(0, panelOrderImage.indexOf('mask'))}
+          isCollapsedMask={!!panelCollapsed['mask']}
+          onToggleMask={() => togglePanelCollapsed('mask')}
+          onDragStartMask={(e) => handleDragStart(e, 'mask')}
+          onDropMask={(e) => handleDrop(e, 'mask')}
+
+          orderTransition={Math.max(0, panelOrderImage.indexOf('transition'))}
+          isCollapsedTransition={!!panelCollapsed['transition']}
+          onToggleTransition={() => togglePanelCollapsed('transition')}
+          onDragStartTransition={(e) => handleDragStart(e, 'transition')}
+          onDropTransition={(e) => handleDrop(e, 'transition')}
+        />
       </div>
     </div>
   );

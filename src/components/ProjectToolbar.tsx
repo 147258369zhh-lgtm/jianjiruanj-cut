@@ -1,6 +1,7 @@
 import { useAppContext } from '../hooks/useAppContext';
 import React from 'react';
 import { useStore } from '../store';
+import { useAuthStore } from '../store/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
 
 
@@ -59,7 +60,8 @@ export const ProjectToolbar: React.FC = () => {
       border: '1px solid var(--ios-hairline)',
       flexShrink: 0, minHeight: 46,
       borderRadius: 'var(--squircle-s)', // Make it a squircle rectangle
-      position: 'relative'
+      position: 'relative',
+      zIndex: 9999
     }}>
 
       {/* 左侧操作区：严格对齐下方的 LeftPanel (内部316宽，三等分) */}
@@ -178,6 +180,7 @@ export const ProjectToolbar: React.FC = () => {
           {showMoreMenu && (
             <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'rgba(28,28,42,0.97)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 6, zIndex: 1000, minWidth: 180, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
               {[
+                { icon: '🔑', label: '软件授权与激活', action: () => { useAuthStore.setState({ isLocked: true }); setShowMoreMenu(false); } },
                 { icon: '💾', label: '保存工程  Ctrl+S', action: () => { saveProject(); setShowMoreMenu(false); } },
                 { icon: '📂', label: '加载工程  Ctrl+O', action: () => { loadProject(); setShowMoreMenu(false); } },
               ].map(item => (

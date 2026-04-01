@@ -102,6 +102,8 @@ export const PropertyAccordionBlock: React.FC<PropertyAccordionBlockProps> = ({
       {/* Content */}
       <div
         className="accordion-content"
+        draggable
+        onDragStart={e => { e.preventDefault(); e.stopPropagation(); }}
         style={{
           height: isCollapsed ? 0 : 'auto',
           overflow: isCollapsed ? 'hidden' : 'visible',

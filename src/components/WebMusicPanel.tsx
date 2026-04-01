@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import QRCode from 'react-qr-code';
 import { useAppContext } from '../hooks/useAppContext';
 import { getMediaDuration } from '../utils/mediaUtils';
 
@@ -18,9 +19,71 @@ export const WebMusicPanel: React.FC = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<WebMusicItem[]>([]);
   const [activeGenre, setActiveGenre] = useState<string | null>(null);
+  const [source, setSource] = useState<'apple' | 'jamendo' | 'netease' | 'bilibili' | 'local'>('apple');
   const [isSearching, setIsSearching] = useState(false);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [playingId, setPlayingId] = useState<number | null>(null);
+
+  // Auth States for Bilibili
+  const [biliSessData, setBiliSessData] = useState<string>(() => localStorage.getItem('BILI_SESSDATA') || '');
+  const [showBiliAuth, setShowBiliAuth] = useState(false);
+  const [qrUrl, setQrUrl] = useState('');
+  const [qrKey, setQrKey] = useState('');
+  const [authStatusMsg, setAuthStatusMsg] = useState('请使用哔哩哔哩App扫码登录');
+  const pollTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (showBiliAuth && qrKey) {
+      pollTimerRef.current = window.setInterval(async () => {
+        try {
+          const res = await invoke<[number, string, string]>('bili_poll_qr_auth', { qrcodeKey: qrKey });
+          const [code, msg, sessdata] = res;
+          
+          if (code === 86038) {
+            setAuthStatusMsg('二维码已失效，请重新生成');
+            clearInterval(pollTimerRef.current as number);
+          } else if (code === 86090) {
+            setAuthStatusMsg('已扫码，请在手机端确认登录...');
+          } else if (code === 86101) {
+            // just continue waiting
+            if (authStatusMsg !== '请使用哔哩哔哩App扫码授权') setAuthStatusMsg('请使用哔哩哔哩App扫码授权');
+          } else if (code === 0 && sessdata) {
+            setAuthStatusMsg('登录成功！即将刷新...');
+            setBiliSessData(sessdata);
+            localStorage.setItem('BILI_SESSDATA', sessdata);
+            clearInterval(pollTimerRef.current as number);
+            setTimeout(() => {
+              setShowBiliAuth(false);
+            }, 1000);
+          } else if (code !== 0) {
+            setAuthStatusMsg(`等待中 [状态码: ${code}] ${msg}`);
+          }
+        } catch (e: any) {
+          console.error(e);
+          setAuthStatusMsg(`轮询网络异常: ${e}`);
+        }
+      }, 3000);
+
+      return () => {
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      };
+    }
+  }, [showBiliAuth, qrKey]);
+
+  const handleBiliAuth = async () => {
+    setShowBiliAuth(true);
+    setQrUrl('');
+    setQrKey('');
+    setAuthStatusMsg('正在生成安全登录码...');
+    try {
+      const [url, key] = await invoke<[string, string]>('bili_get_qr_auth');
+      setQrUrl(url);
+      setQrKey(key);
+      setAuthStatusMsg('请使用哔哩哔哩App扫码授权提取原轨');
+    } catch (e: any) {
+      setAuthStatusMsg('生成扫码失败: ' + e);
+    }
+  };
 
   const genres = React.useMemo(() => {
     const list = Array.from(new Set(results.map(r => r.genre).filter(g => g && g !== 'Unknown' && g !== 'Other')));
@@ -40,11 +103,21 @@ export const WebMusicPanel: React.FC = () => {
 
   const handleSearch = async () => {
     if (!query.trim()) return;
+
+    if (source === 'bilibili' && !biliSessData) {
+      handleBiliAuth();
+      return;
+    }
+
     setIsSearching(true);
     setResults([]);
     setActiveGenre(null);
     try {
-      const items = await invoke<WebMusicItem[]>('search_web_music', { keyword: query });
+      const items = await invoke<WebMusicItem[]>('search_web_music', { 
+        keyword: query, 
+        source, 
+        sessdata: biliSessData || undefined 
+      });
       setResults(items);
     } catch (err: any) {
       alert(`搜索失败: ${err}`);
@@ -57,12 +130,13 @@ export const WebMusicPanel: React.FC = () => {
     if (downloadingId) return;
     setDownloadingId(item.id);
     try {
-      // 1. Download to local disk from Apple's server
+      // 1. Download to local disk from server
       const localPath = await invoke<string>('download_web_music', { 
         url: item.url,
         id: item.id, 
         name: item.name, 
-        artist: item.artist 
+        artist: item.artist,
+        sessdata: biliSessData || undefined
       });
 
       // 2. Add to global resources
@@ -138,30 +212,54 @@ export const WebMusicPanel: React.FC = () => {
         </button>
       </div>
 
-      {/* 快捷搜索模组 */}
-      <div className="hide-scrollbar" style={{ display: 'flex', gap: 6, padding: '0 0 8px', overflowX: 'auto', whiteSpace: 'nowrap', fontSize: 11 }}>
-        <span style={{ color: 'rgba(255,255,255,0.4)', alignSelf: 'center' }}>💡 探索技巧:</span>
+      <div style={{ display: 'flex', gap: 6, padding: '0 0 10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap' }}>数据源:</span>
+        <select 
+          value={source} 
+          onChange={e => setSource(e.target.value as any)}
+          style={{
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 6, color: '#10B981', fontSize: 11, padding: '4px 6px', outline: 'none', cursor: 'pointer', fontWeight: 600,
+            maxWidth: 160, textOverflow: 'ellipsis'
+          }}
+          title="切换网络音乐检索源"
+        >
+          <option value="apple" style={{ background: '#1a1a2e', color: '#fff' }}>🍎 苹果库 (30秒试听 / 华语精准)</option>
+          <option value="bilibili" style={{ background: '#1a1a2e', color: '#fff' }}>📺 B站原音 (免版权 / 极客最爱)</option>
+          <option value="local" style={{ background: '#1a1a2e', color: '#fff' }}>📂 硬盘检索 (即时扫描本机全长MP3)</option>
+        </select>
+        
+        {source === 'bilibili' && biliSessData && (
+           <span style={{ fontSize: 11, color: '#10B981', background: 'rgba(16,185,129,0.1)', padding: '2px 6px', borderRadius: 4, cursor: 'pointer' }}
+                 onClick={() => { localStorage.removeItem('BILI_SESSDATA'); setBiliSessData(''); }}
+                 title="点击注销安全验证"
+           >✅ B站已授权</span>
+        )}
+        
+        <div style={{ width: 1, height: 14, background: 'rgba(255,255,255,0.1)', margin: '0 4px' }} />
+
+        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>💡 探索:</span>
         <span 
-          style={{ cursor: 'pointer', color: '#10B981', background: 'rgba(16,185,129,0.1)', padding: '3px 10px', borderRadius: 12, fontWeight: 600, transition: 'all 0.2s' }} 
+          style={{ cursor: 'pointer', color: '#10B981', background: 'rgba(16,185,129,0.1)', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap' }} 
           onClick={() => appendToQuery('伴奏')}
         >🎶 找伴奏</span>
         <span 
-          style={{ cursor: 'pointer', color: '#3B82F6', background: 'rgba(59,130,246,0.1)', padding: '3px 10px', borderRadius: 12, fontWeight: 600, transition: 'all 0.2s' }} 
+          style={{ cursor: 'pointer', color: '#3B82F6', background: 'rgba(59,130,246,0.1)', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap' }} 
           onClick={() => appendToQuery('原唱')}
         >🎤 找原唱</span>
         <span 
-          style={{ cursor: 'pointer', color: '#F59E0B', background: 'rgba(245,158,11,0.1)', padding: '3px 10px', borderRadius: 12, fontWeight: 600, transition: 'all 0.2s' }} 
-          onClick={() => appendToQuery('周杰伦')}
-        >🎵 指定大牌歌手</span>
+          style={{ cursor: 'pointer', color: '#F59E0B', background: 'rgba(245,158,11,0.1)', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, transition: 'all 0.2s', whiteSpace: 'nowrap' }} 
+          onClick={() => appendToQuery('Vlog')}
+        >🎵 搜 Vlog</span>
       </div>
 
       {/* 动态筛选标籤 */}
       {genres.length > 0 && !isSearching && (
-        <div className="hide-scrollbar" style={{ display: 'flex', gap: 6, padding: '0 0 8px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'flex', gap: 6, padding: '0 0 8px', flexWrap: 'wrap', alignItems: 'center' }}>
           <div
             onClick={() => setActiveGenre(null)}
             style={{
-              padding: '4px 10px', borderRadius: 12, fontSize: 11, cursor: 'pointer', transition: 'all 0.2s', flexShrink: 0,
+              padding: '4px 10px', borderRadius: 12, fontSize: 11, cursor: 'pointer', transition: 'all 0.2s', flexShrink: 0, whiteSpace: 'nowrap',
               background: activeGenre === null ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)',
               color: activeGenre === null ? '#10B981' : 'rgba(255,255,255,0.6)',
               fontWeight: activeGenre === null ? 600 : 'normal'
@@ -174,7 +272,7 @@ export const WebMusicPanel: React.FC = () => {
               key={g}
               onClick={() => setActiveGenre(g === activeGenre ? null : g)}
               style={{
-                padding: '4px 10px', borderRadius: 12, fontSize: 11, cursor: 'pointer', transition: 'all 0.2s', flexShrink: 0,
+                padding: '4px 10px', borderRadius: 12, fontSize: 11, cursor: 'pointer', transition: 'all 0.2s', flexShrink: 0, whiteSpace: 'nowrap',
                 background: activeGenre === g ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)',
                 color: activeGenre === g ? '#10B981' : 'rgba(255,255,255,0.6)',
                 fontWeight: activeGenre === g ? 600 : 'normal'
@@ -263,6 +361,34 @@ export const WebMusicPanel: React.FC = () => {
           </div>
         ))}
       </div>
+      
+      {showBiliAuth && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          zIndex: 100, padding: 20
+        }}>
+          <div style={{ background: '#fff', padding: '20px', borderRadius: 16, boxShadow: '0 8px 32px rgba(16,185,129,0.3)', marginBottom: 20 }}>
+            {qrUrl ? (
+              <QRCode value={qrUrl} size={180} fgColor="#FB7299" />
+            ) : (
+              <div style={{ width: 180, height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>生成中...</div>
+            )}
+          </div>
+          <div style={{ color: '#fff', fontSize: 14, fontWeight: 500, marginBottom: 6, color: '#FB7299' }}>📺 B站大会员专属提权</div>
+          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, textAlign: 'center', maxWidth: 240, marginBottom: 20 }}>
+            {authStatusMsg}
+          </div>
+          <button 
+            className="ios-button"
+            onClick={() => setShowBiliAuth(false)}
+            style={{ padding: '6px 20px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: 8, cursor: 'pointer' }}
+          >
+            取消验证
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -27,7 +27,7 @@ export const LeftPanel: React.FC = () => {
   // AI 配音与网络爬虫相关状态
   const [musicSubTab, setMusicSubTab] = useState<'audio' | 'tts' | 'web'>('audio');
   const [ttsText, setTtsText] = useState('');
-  const [ttsVoice, setTtsVoice] = useState('zh-CN-YunyangNeural');
+  const [ttsVoice, setTtsVoice] = useState('zh-CN-Aishell3-F0');
   const [ttsRate, setTtsRate] = useState('+0%');
   const [ttsGenerating, setTtsGenerating] = useState(false);
   const [generatedVoiceovers, setGeneratedVoiceovers] = useState<{ id: string; name: string; path: string; duration: number; selected: boolean }[]>([]);
@@ -91,15 +91,14 @@ export const LeftPanel: React.FC = () => {
               <textarea value={ttsText} onChange={e => setTtsText(e.target.value)} placeholder="输入需要配音的文字内容..." style={{ width: '100%', height: 80, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#fff', fontSize: 12, padding: '8px 10px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }} />
               <div style={{ display: 'flex', gap: 6 }}>
                 <select value={ttsVoice} onChange={e => setTtsVoice(e.target.value)} style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', fontSize: 10, padding: '4px 6px', outline: 'none', cursor: 'pointer' }}>
-                  <optgroup label="🎙️ 专业播音" style={{ background: '#1a1a2e', color: '#ccc' }}>
-                    <option value="zh-CN-YunyangNeural" style={{ background: '#1a1a2e' }}>云扬 · 新闻播音（推荐）</option>
-                    <option value="zh-CN-YunjianNeural" style={{ background: '#1a1a2e' }}>云健 · 热情解说</option>
+                  <optgroup label="🎙️ 本地开源女声" style={{ background: '#1a1a2e', color: '#ccc' }}>
+                    <option value="zh-CN-Aishell3-F0" style={{ background: '#1a1a2e' }}>F0 · 清脆女声（推荐）</option>
+                    <option value="zh-CN-Aishell3-F1" style={{ background: '#1a1a2e' }}>F1 · 柔美女声</option>
+                    <option value="zh-CN-Aishell3-F33" style={{ background: '#1a1a2e' }}>F33 · 知性女声</option>
                   </optgroup>
-                  <optgroup label="🎵 自然亲和" style={{ background: '#1a1a2e', color: '#ccc' }}>
-                    <option value="zh-CN-YunxiNeural" style={{ background: '#1a1a2e' }}>云希 · 阳光男声</option>
-                    <option value="zh-CN-XiaoxiaoNeural" style={{ background: '#1a1a2e' }}>晓晓 · 温暖女声</option>
-                    <option value="zh-CN-XiaoyiNeural" style={{ background: '#1a1a2e' }}>晓依 · 活泼女声</option>
-                    <option value="zh-CN-YunxiaNeural" style={{ background: '#1a1a2e' }}>云夏 · 少年男声</option>
+                  <optgroup label="🎵 本地开源男声" style={{ background: '#1a1a2e', color: '#ccc' }}>
+                    <option value="zh-CN-Aishell3-M10" style={{ background: '#1a1a2e' }}>M10 · 稳重男声</option>
+                    <option value="zh-CN-Aishell3-M14" style={{ background: '#1a1a2e' }}>M14 · 青年男声</option>
                   </optgroup>
                 </select>
                 <select value={ttsRate} onChange={e => setTtsRate(e.target.value)} style={{ width: 66, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', fontSize: 10, padding: '4px 4px', outline: 'none', cursor: 'pointer' }}>

@@ -161,20 +161,44 @@
 @keyframes text-loop-pulse { 0%, 100% {transform: translate(-50%, -50%) scale(1);} 50% {transform: translate(-50%, -50%) scale(1.05);} }
 @keyframes text-loop-shake { 0%, 100% {transform: translate(-50%, -50%);} 25% {transform: translate(calc(-50% - 10px), -50%);} 75% {transform: translate(calc(-50% + 10px), -50%);} }
 @keyframes text-loop-float { 0%, 100% {transform: translate(-50%, -50%);} 50% {transform: translate(-50%, calc(-50% - 10px));} }
+@keyframes text-loop-wave { 0% {transform: translate(-50%, -50%) rotate(0deg);} 25% {transform: translate(-50%, -50%) rotate(3deg);} 75% {transform: translate(-50%, -50%) rotate(-3deg);} 100% {transform: translate(-50%, -50%) rotate(0deg);} }
+@keyframes text-loop-glitch { 0%, 100% {transform: translate(-50%, -50%); filter: none;} 20% {transform: translate(calc(-50% - 3px), calc(-50% + 2px)); filter: hue-rotate(90deg);} 40% {transform: translate(calc(-50% + 3px), calc(-50% - 2px)); filter: hue-rotate(-90deg);} 60% {transform: translate(calc(-50% - 1px), calc(-50% + 1px)); filter: hue-rotate(45deg);} 80% {transform: translate(calc(-50% + 1px), -50%); filter: none;} }
+@keyframes text-loop-swing { 0%, 100% {transform: translate(-50%, -50%) rotate(0deg);} 25% {transform: translate(-50%, -50%) rotate(8deg);} 75% {transform: translate(-50%, -50%) rotate(-8deg);} }
+@keyframes text-loop-flash { 0%, 100% {opacity: 1;} 50% {opacity: 0.1;} }
+@keyframes text-loop-spin { from {transform: translate(-50%, -50%) rotate(0deg);} to {transform: translate(-50%, -50%) rotate(360deg);} }
 
 .text-anim-loop-pulse { animation: text-loop-pulse var(--text-loop-dur, 2s) ease-in-out infinite; }
 .text-anim-loop-shake { animation: text-loop-shake var(--text-loop-dur, 0.5s) ease-in-out infinite; }
 .text-anim-loop-float { animation: text-loop-float var(--text-loop-dur, 3s) ease-in-out infinite; }
+.text-anim-loop-wave { animation: text-loop-wave var(--text-loop-dur, 2s) ease-in-out infinite; }
+.text-anim-loop-glitch { animation: text-loop-glitch var(--text-loop-dur, 0.5s) steps(1) infinite; }
+.text-anim-loop-swing { animation: text-loop-swing var(--text-loop-dur, 1.5s) ease-in-out infinite; }
+.text-anim-loop-flash { animation: text-loop-flash var(--text-loop-dur, 1s) ease-in-out infinite; }
+.text-anim-loop-spin { animation: text-loop-spin var(--text-loop-dur, 2s) linear infinite; }
 
+/* ─── 入场补充：blurIn / dropIn / elasticIn ─── */
+@keyframes text-blurIn { from {opacity: 0; filter: blur(20px); transform: translate(-50%, -50%) scale(1.1);} to {opacity: 1; filter: blur(0); transform: translate(-50%, -50%) scale(1);} }
+@keyframes text-dropIn { 0% {opacity: 0; transform: translate(-50%, calc(-50% - 120px)) scale(0.8);} 60% {opacity: 1; transform: translate(-50%, calc(-50% + 8px)) scale(1.02);} 100% {transform: translate(-50%, -50%) scale(1);} }
+@keyframes text-elasticIn { 0% {opacity: 0; transform: translate(-50%, -50%) scale(0.3);} 50% {opacity: 1; transform: translate(-50%, -50%) scale(1.15);} 70% {transform: translate(-50%, -50%) scale(0.92);} 100% {transform: translate(-50%, -50%) scale(1);} }
+
+/* ─── 出场补充 ─── */
 @keyframes text-out-fadeOut { from {opacity: 1;} to {opacity: 0;} }
 @keyframes text-out-zoomOut { from {opacity: 1; transform: translate(-50%, -50%) scale(1);} to {opacity: 0; transform: translate(-50%, -50%) scale(0.3);} }
 @keyframes text-out-slideDownOut { from {opacity: 1; transform: translate(-50%, -50%);} to {opacity: 0; transform: translate(-50%, calc(-50% + 50px));} }
 @keyframes text-out-slideRightOut { from {opacity: 1; transform: translate(-50%, -50%);} to {opacity: 0; transform: translate(calc(-50% + 80px), -50%);} }
+@keyframes text-out-slideLeftOut { from {opacity: 1; transform: translate(-50%, -50%);} to {opacity: 0; transform: translate(calc(-50% - 80px), -50%);} }
+@keyframes text-out-blurOut { from {opacity: 1; filter: blur(0); transform: translate(-50%, -50%) scale(1);} to {opacity: 0; filter: blur(20px); transform: translate(-50%, -50%) scale(1.1);} }
+@keyframes text-out-rollOut { from {opacity: 1; transform: translate(-50%, -50%) rotate(0deg);} to {opacity: 0; transform: translate(calc(-50% + 100px), -50%) rotate(120deg);} }
+@keyframes text-out-sinkOut { from {opacity: 1; transform: translate(-50%, -50%) scale(1);} to {opacity: 0; transform: translate(-50%, calc(-50% + 60px)) scale(0.6);} }
 
 .text-anim-out-fadeOut { animation: text-out-fadeOut var(--text-out-dur, 0.5s) ease-out forwards; }
 .text-anim-out-zoomOut { animation: text-out-zoomOut var(--text-out-dur, 0.5s) ease-in forwards; }
 .text-anim-out-slideDownOut { animation: text-out-slideDownOut var(--text-out-dur, 0.5s) ease-in forwards; }
 .text-anim-out-slideRightOut { animation: text-out-slideRightOut var(--text-out-dur, 0.5s) cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards; }
+.text-anim-out-slideLeftOut { animation: text-out-slideLeftOut var(--text-out-dur, 0.5s) cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards; }
+.text-anim-out-blurOut { animation: text-out-blurOut var(--text-out-dur, 0.6s) ease-out forwards; }
+.text-anim-out-rollOut { animation: text-out-rollOut var(--text-out-dur, 0.6s) ease-in forwards; }
+.text-anim-out-sinkOut { animation: text-out-sinkOut var(--text-out-dur, 0.6s) ease-in forwards; }
 
 /* ─── 图片入场动画 (Image Animation / Ken Burns) ─── */
 @keyframes img-fadeIn {
@@ -619,6 +643,54 @@
   }
 }
 
+.trans-door {
+  animation: transDoor 0.7s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes transDoor {
+  from {
+    clip-path: polygon(50% 0, 50% 0, 50% 100%, 50% 100%);
+  }
+
+  to {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0% 100%);
+  }
+}
+
+.trans-blur {
+  animation: transBlur 0.7s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes transBlur {
+  from {
+    filter: blur(20px);
+    opacity: 0;
+    transform: scale(1.1);
+  }
+
+  to {
+    filter: blur(0px);
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.trans-spin {
+  animation: transSpin 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes transSpin {
+  from {
+    transform: rotate(-180deg) scale(0);
+    opacity: 0;
+  }
+
+  to {
+    transform: rotate(0deg) scale(1);
+    opacity: 1;
+  }
+}
+
 .trans-glitch {
   animation: transGlitch 0.5s ease forwards;
 }
@@ -833,3 +905,4 @@
   transform: scale(0.9);
   background: #10B981;
   border-color: #ffffff;
+}

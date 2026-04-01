@@ -229,10 +229,10 @@ export const ColorCurvePanel: React.FC<ColorCurvePanelProps> = ({
               key={i}
               cx={pt.x * 100}
               cy={(1 - pt.y) * 100}
-              r={draggingIdx === i ? 3 : 2.5}
+              r={draggingIdx === i ? 2.5 : 2}
               fill={draggingIdx === i ? '#FFF' : '#1A1A1A'}
               stroke={colors[activeChannel]}
-              strokeWidth={0.8}
+              strokeWidth={0.6}
               style={{ cursor: i === 0 || i === points.length - 1 ? 'ns-resize' : 'grab', transition: 'r 0.1s, fill 0.2s', outline: 'none' }}
               onPointerDown={(e) => handlePointerDown(i, e)}
               onPointerMove={handlePointerMove}
@@ -241,13 +241,13 @@ export const ColorCurvePanel: React.FC<ColorCurvePanelProps> = ({
             />
           ))}
         </svg>
+      </div>
 
-        {/* 悬浮指示角标 */}
-        <div style={{ position: 'absolute', bottom: -8, left: '50%', transform: 'translateX(-50%)', display: 'flex', width: '92%', justifyContent: 'space-between' }}>
-           <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>黑/阴影</span>
-           <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>灰/中间调</span>
-           <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>白/高光</span>
-        </div>
+      {/* 指示角标 (放到边框外/下侧) */}
+      <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', padding: '0 4px', marginTop: -6, zIndex: 1, pointerEvents: 'none' }}>
+         <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', userSelect: 'none' }}>黑/阴影</span>
+         <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>灰/中间调</span>
+         <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>白/高光</span>
       </div>
     </div>
   );

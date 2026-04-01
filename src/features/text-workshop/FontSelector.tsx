@@ -17,11 +17,16 @@ interface ProFontSelectProps {
 const ProFontSelect = ({ value, optGroups, onChange, style }: ProFontSelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+      const target = e.target as Node;
+      if (ref.current && !ref.current.contains(target) && 
+          dropdownRef.current && !dropdownRef.current.contains(target)) {
+        setIsOpen(false);
+      }
     };
     window.addEventListener('mousedown', onClick, true);
     return () => window.removeEventListener('mousedown', onClick, true);
@@ -51,7 +56,7 @@ const ProFontSelect = ({ value, optGroups, onChange, style }: ProFontSelectProps
         <span style={{ fontSize: 9, opacity: 0.5, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s cubic-bezier(0.23, 1, 0.32, 1)', flexShrink: 0 }}>▼</span>
       </div>
       {isOpen && createPortal(
-        <div style={{
+        <div ref={dropdownRef} style={{
           position: 'absolute',
           top: ref.current ? ref.current.getBoundingClientRect().bottom + 4 : 0,
           left: ref.current ? ref.current.getBoundingClientRect().left : 0,

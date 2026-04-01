@@ -41,6 +41,7 @@ import { IngestCurationModal } from './features/project-manager/IngestCurationMo
 import { ExportProgressOverlay } from './features/export-module/ExportProgressOverlay';
 import { DropOverlay } from './components/DropOverlay';
 import { ContextMenuWidget } from './components/ContextMenuWidget';
+import { ActivationGateway } from './components/ActivationGateway';
 
 import { MonitorPanel } from './components/MonitorPanel';
 import { ProjectToolbar } from './components/ProjectToolbar';
@@ -51,7 +52,9 @@ import { RightPanel } from './components/RightPanel';
 import { useAppController } from './hooks/useAppController';
 import { AppContext } from './hooks/useAppContext';
 import { useStore } from './store';
+import { useAuthStore } from './store/useAuthStore';
 import { useShallow } from 'zustand/react/shallow';
+import React, { useEffect } from 'react';
 
 function App() {
   const controller = useAppController();
@@ -63,6 +66,19 @@ function App() {
     showMoreMenu: state.showMoreMenu, setShowMoreMenu: state.setShowMoreMenu,
     theme: state.theme
   })));
+
+  useEffect(() => {
+    // 启动严格授权与试用时长校验
+    useAuthStore.getState().initAuth();
+    
+    // 每秒滴答更新试用剩余时间
+    const timer = setInterval(() => {
+      useAuthStore.getState().clockTick();
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <AppContext.Provider value={controller as any}>
     <div className="app-root-container">
@@ -108,6 +124,7 @@ function App() {
       <CrashRecoveryModal />
       <IngestCurationModal />
       <ExportProgressOverlay />
+      <ActivationGateway />
     </div>
     </AppContext.Provider>
   );
