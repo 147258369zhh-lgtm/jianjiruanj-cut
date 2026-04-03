@@ -61,6 +61,7 @@ export interface UiSlice {
   exportDeband: boolean;
   exportForceCpu: boolean;
   exportMasterAudio: boolean;
+  showGrid: boolean;
   
   // Setters
   setHoveredPreviewPreset: (v: FilterPreset | null) => void;
@@ -106,6 +107,7 @@ export interface UiSlice {
   setExportDeband: (v: boolean) => void;
   setExportForceCpu: (v: boolean) => void;
   setExportMasterAudio: (v: boolean) => void;
+  setShowGrid: (v: boolean) => void;
 }
 
 const loadCustomFilters = (): FilterPreset[] => {
@@ -159,6 +161,7 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   exportDeband: false,
   exportForceCpu: false,
   exportMasterAudio: false,
+  showGrid: false,
   
   setActiveTab: (v) => set({ activeTab: v }),
   setPropertyTab: (v) => set({ propertyTab: v }),
@@ -213,4 +216,5 @@ export const createUiSlice: StateCreator<UiSlice> = (set) => ({
   setExportDeband: (v) => set({ exportDeband: v }),
   setExportForceCpu: (v) => set({ exportForceCpu: v }),
   setExportMasterAudio: (v) => set({ exportMasterAudio: v }),
+  setShowGrid: (v) => set({ showGrid: v }),
 });

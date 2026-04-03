@@ -12,41 +12,65 @@ import ssl
 # ==========================================
 
 MODEL_URLS = [
-    "https://hf-mirror.com/csukuangfj/vits-zh-aishell3/resolve/main/vits-aishell3.tar.bz2",
-    "https://mirror.ghproxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-aishell3.tar.bz2",
-    "https://github.moeyy.xyz/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-aishell3.tar.bz2"
+    "https://ghfast.top/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-icefall-zh-aishell3.tar.bz2",
+    "https://mirror.ghproxy.com/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-icefall-zh-aishell3.tar.bz2"
 ]
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "clip_jianji_tts")
-MODEL_DIR = os.path.join(CACHE_DIR, "vits-aishell3")
+MODEL_DIR = os.path.join(CACHE_DIR, "vits-icefall-zh-aishell3")
 
-# 根据实验挑选了几个在 AIShell3 中听着比较正常、拟真度不错的角色ID，伪装成各种音色
+# 根据实验挑选了多组在 AIShell3 中听着比较正常、拟真度不错的角色ID，伪装成各种音色
 VOICE_MAP = {
-    "zh-CN-Aishell3-F0": {"sid": 0, "name": "zh-CN-Aishell3-F0", "short_name": "Aishell3-F0", "gender": "Female", "desc": "开源清脆女声"},
-    "zh-CN-Aishell3-F1": {"sid": 1, "name": "zh-CN-Aishell3-F1", "short_name": "Aishell3-F1", "gender": "Female", "desc": "开源柔美女声"},
-    "zh-CN-Aishell3-M10": {"sid": 10, "name": "zh-CN-Aishell3-M10", "short_name": "Aishell3-M10", "gender": "Male", "desc": "开源稳重男声"},
-    "zh-CN-Aishell3-M14": {"sid": 14, "name": "zh-CN-Aishell3-M14", "short_name": "Aishell3-M14", "gender": "Male", "desc": "开源青年男声"},
-    "zh-CN-Aishell3-F33": {"sid": 33, "name": "zh-CN-Aishell3-F33", "short_name": "Aishell3-F33", "gender": "Female", "desc": "开源知性女声"}
+    # ------------------ 女声系列 ------------------
+    "zh-CN-F-QingCui":   {"sid": 0, "name": "zh-CN-F-QingCui", "short_name": "清脆女声", "gender": "Female", "desc": "元气清脆的少女音"},
+    "zh-CN-F-RouMei":    {"sid": 1, "name": "zh-CN-F-RouMei", "short_name": "柔美女声", "gender": "Female", "desc": "温柔甜美的年轻女性"},
+    "zh-CN-F-ZhiXing":   {"sid": 33, "name": "zh-CN-F-ZhiXing", "short_name": "知性女声", "gender": "Female", "desc": "成熟稳重的学姐音"},
+    "zh-CN-F-QingLeng":  {"sid": 40, "name": "zh-CN-F-QingLeng", "short_name": "清冷御姐", "gender": "Female", "desc": "冷静且气质的冷艳音"},
+    "zh-CN-F-HuoPo":     {"sid": 48, "name": "zh-CN-F-HuoPo", "short_name": "活泼女大", "gender": "Female", "desc": "略带俏皮的活泼女大"},
+    "zh-CN-F-BaQi":      {"sid": 55, "name": "zh-CN-F-BaQi", "short_name": "霸气女主", "gender": "Female", "desc": "气场全开的大女主音"},
+    "zh-CN-F-TianZhen":  {"sid": 61, "name": "zh-CN-F-TianZhen", "short_name": "天真萝莉", "gender": "Female", "desc": "稚嫩可爱的幼妹音"},
+    "zh-CN-F-WenWan":    {"sid": 70, "name": "zh-CN-F-WenWan", "short_name": "温婉闺蜜", "gender": "Female", "desc": "极具亲和力的倾听者"},
+    "zh-CN-F-LuoLi":     {"sid": 80, "name": "zh-CN-F-LuoLi", "short_name": "傲娇幼女", "gender": "Female", "desc": "带着一点点小脾气的二次元女孩"},
+    "zh-CN-F-ZhiBo":     {"sid": 99, "name": "zh-CN-F-ZhiBo", "short_name": "电台女播", "gender": "Female", "desc": "字正腔圆的专业级广播女声"},
+    
+    # ------------------ 男声系列 ------------------
+    "zh-CN-M-WenZhong":  {"sid": 10, "name": "zh-CN-M-WenZhong", "short_name": "稳重男声", "gender": "Male", "desc": "低沉磁性的成熟男声"},
+    "zh-CN-M-QingNian":  {"sid": 14, "name": "zh-CN-M-QingNian", "short_name": "青年男声", "gender": "Male", "desc": "标准的青年男声音色"},
+    "zh-CN-M-YangGuang": {"sid": 21, "name": "zh-CN-M-YangGuang", "short_name": "阳光少年", "gender": "Male", "desc": "充满朝气与活力的运动系男生"},
+    "zh-CN-M-ZhiYu":     {"sid": 30, "name": "zh-CN-M-ZhiYu", "short_name": "治愈暖男", "gender": "Male", "desc": "温柔可亲如同邻家大哥哥"},
+    "zh-CN-M-DaShu":     {"sid": 41, "name": "zh-CN-M-DaShu", "short_name": "沧桑大叔", "gender": "Male", "desc": "声音极具阅历的中老年男声"},
+    "zh-CN-M-BaZong":    {"sid": 50, "name": "zh-CN-M-BaZong", "short_name": "霸道总裁", "gender": "Male", "desc": "冷酷强势的霸总音"},
+    "zh-CN-M-ZhengTai":  {"sid": 66, "name": "zh-CN-M-ZhengTai", "short_name": "清心正太", "gender": "Male", "desc": "清亮单纯的小男孩音"},
+    "zh-CN-M-DuoLuo":    {"sid": 88, "name": "zh-CN-M-DuoLuo", "short_name": "慵懒男主", "gender": "Male", "desc": "略带一丝沙哑的慵懒气息"},
+    "zh-CN-M-DiYin":     {"sid": 100, "name": "zh-CN-M-DiYin", "short_name": "深感低音", "gender": "Male", "desc": "令人沉醉的重低音炮"},
+    "zh-CN-M-XinWen":    {"sid": 120, "name": "zh-CN-M-XinWen", "short_name": "新闻男播", "gender": "Male", "desc": "严谨有力且字正腔圆的播音男"}
 }
 
 def download_model_if_needed():
     if not os.path.exists(MODEL_DIR):
-        print(f"首次运行大模型，正在从国内高速镜像为您下载本地大模型基座...")
+        print(f"首次运行大模型，正在为您下载本地大模型基座...")
         print(f"大概 15MB，请稍候几秒...")
         os.makedirs(CACHE_DIR, exist_ok=True)
         tar_path = os.path.join(CACHE_DIR, "vits.tar.bz2")
         downloaded = False
         
-        import subprocess
+        import urllib.request
+        import ssl
+        
+        try:
+            # 兼容不同系统环境，绕过无证书校验时的阻止
+            ssl._create_default_https_context = ssl._create_unverified_context
+        except AttributeError:
+            pass
+            
         for url in MODEL_URLS:
             try:
-                print(f"尝试借助系统引擎拉取节点: {url[:30]}...")
-                subprocess.run(["curl.exe", "-k", "-L", url, "-o", tar_path], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"尝试拉取节点: {url[:40]}...")
+                urllib.request.urlretrieve(url, tar_path)
                 if os.path.exists(tar_path) and os.path.getsize(tar_path) > 1000000:
                     downloaded = True
                     break
             except Exception as e:
-                print(f"节点拉取失败，尝试下一个...")
-        
+                print(f"节点拉取失败: {e}，尝试下一个...")
         
         if not downloaded:
             print("所有大模型节点下载失败，请检查网络！")
@@ -77,13 +101,13 @@ def handle_generate(text, voice, rate_str, output_path):
     import soundfile as sf
     import numpy as np
 
-    sid = VOICE_MAP.get(voice, VOICE_MAP["zh-CN-Aishell3-F0"])["sid"]
+    sid = VOICE_MAP.get(voice, VOICE_MAP["zh-CN-F-QingCui"])["sid"]
     
     # 初始化 VITS TTS
-    vits_model = os.path.join(MODEL_DIR, "vits-aishell3.onnx")
+    vits_model = os.path.join(MODEL_DIR, "model.onnx")
     tokens = os.path.join(MODEL_DIR, "tokens.txt")
     lexicon = os.path.join(MODEL_DIR, "lexicon.txt")
-    rule_fsts = os.path.join(MODEL_DIR, "rule.fst")
+    rule_fars = os.path.join(MODEL_DIR, "rule.far")
 
     tts_config = sherpa_onnx.OfflineTtsConfig(
         model=sherpa_onnx.OfflineTtsModelConfig(
@@ -96,7 +120,7 @@ def handle_generate(text, voice, rate_str, output_path):
             debug=0,
             provider="cpu",
         ),
-        rule_fsts=rule_fsts,
+        rule_fars=rule_fars,
         max_num_sentences=1,
     )
     

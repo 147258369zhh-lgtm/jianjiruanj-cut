@@ -1258,10 +1258,17 @@ async fn generate_tts(app: tauri::AppHandle, req: TtsRequest) -> Result<String, 
     let ts = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis();
     let output_file = tts_dir.join(format!("tts_{}.wav", ts));
 
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let script_path = if cwd.join("scripts/local_tts_engine.py").exists() {
+        cwd.join("scripts/local_tts_engine.py")
+    } else {
+        cwd.join("src-tauri/scripts/local_tts_engine.py")
+    };
+
     // 本地开源大模型硬核驱动 (无网可用)
     // 选对音色本身就有很好的自然语感，直接生成无损 wav 格式
     let mut cmd = Command::new("python");
-    cmd.arg("src-tauri/scripts/local_tts_engine.py")
+    cmd.arg(&script_path)
         .arg("--text").arg(&req.text)
         .arg("--voice").arg(&req.voice)
         .arg("--rate").arg(&req.rate)
@@ -1292,8 +1299,15 @@ async fn generate_tts(app: tauri::AppHandle, req: TtsRequest) -> Result<String, 
 
 #[tauri::command]
 async fn list_tts_voices() -> Result<Vec<TtsVoice>, String> {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let script_path = if cwd.join("scripts/local_tts_engine.py").exists() {
+        cwd.join("scripts/local_tts_engine.py")
+    } else {
+        cwd.join("src-tauri/scripts/local_tts_engine.py")
+    };
+
     let output = Command::new("python")
-        .arg("src-tauri/scripts/local_tts_engine.py")
+        .arg(&script_path)
         .arg("--list-voices")
         .output()
         .map_err(|e| format!("获取音色列表失败: {}", e))?;
@@ -1717,6 +1731,113 @@ async fn download_web_music(app: tauri::AppHandle, mut url: String, id: u64, nam
 }
 
 #[tauri::command]
+async fn search_ytdlp(keyword: String, proxy: Option<String>) -> Result<Vec<WebMusicItem>, String> {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let script_path = if cwd.join("scripts/yt_music_engine.py").exists() {
+        cwd.join("scripts/yt_music_engine.py")
+    } else {
+        cwd.join("src-tauri/scripts/yt_music_engine.py")
+    };
+
+    let mut cmd = std::process::Command::new("python");
+    cmd.arg(&script_path).arg("--search").arg(&keyword);
+    if let Some(p) = proxy {
+        if !p.trim().is_empty() {
+            cmd.arg("--proxy").arg(p.trim());
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    
+    let output = cmd.output().map_err(|e| format!("Python 命令启动失败: {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    
+    let mut parsed_json: Option<serde_json::Value> = None;
+    for line in stdout.lines().rev() {
+        if line.trim().starts_with('{') {
+            if let Ok(j) = serde_json::from_str(line) {
+                parsed_json = Some(j);
+                break;
+            }
+        }
+    }
+    
+    let json = parsed_json.ok_or_else(|| format!("JSON 解析失败:\nstdout: {}\nstderr: {}", stdout, String::from_utf8_lossy(&output.stderr)))?;
+    
+    if json["status"].as_str().unwrap_or("") == "success" {
+        let items: Vec<WebMusicItem> = serde_json::from_value(json["data"].clone()).map_err(|e| format!("反序列化失败: {}", e))?;
+        Ok(items)
+    } else {
+        Err(json["message"].as_str().unwrap_or("未知错误").to_string())
+    }
+}
+
+#[tauri::command]
+async fn download_ytdlp(app: tauri::AppHandle, url: String, id: String, name: String, artist: String, proxy: Option<String>) -> Result<String, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let music_dir = app_data_dir.join("music_downloads");
+    if !music_dir.exists() {
+        let _ = std::fs::create_dir_all(&music_dir);
+    }
+
+    let safe_name = name.replace(|c: char| !c.is_alphanumeric() && c != ' ' && c != '-', "_");
+    let safe_artist = artist.replace(|c: char| !c.is_alphanumeric() && c != ' ' && c != '-', "_");
+    let filename = format!("{}___{}_{}.m4a", safe_artist, safe_name, id);
+    let out_path = music_dir.join(&filename);
+
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let script_path = if cwd.join("scripts/yt_music_engine.py").exists() {
+        cwd.join("scripts/yt_music_engine.py")
+    } else {
+        cwd.join("src-tauri/scripts/yt_music_engine.py")
+    };
+
+    let ffmpeg_path = resolve_ffmpeg_path(&app);
+
+    let mut cmd = std::process::Command::new("python");
+    cmd.arg(&script_path)
+       .arg("--download").arg(&url)
+       .arg("--output").arg(&out_path)
+       .arg("--ffmpeg").arg(ffmpeg_path);
+       
+    if let Some(p) = proxy {
+        if !p.trim().is_empty() {
+            cmd.arg("--proxy").arg(p.trim());
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    
+    let output = cmd.output().map_err(|e| format!("Python 命令启动失败: {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    
+    let mut parsed_json: Option<serde_json::Value> = None;
+    if let Some(start) = stdout.find('{') {
+        if let Some(end) = stdout.rfind('}') {
+            if let Ok(j) = serde_json::from_str(&stdout[start..=end]) {
+                parsed_json = Some(j);
+            }
+        }
+    }
+    
+    let json = parsed_json.ok_or_else(|| format!("JSON 解析失败:\nstdout: {}\nstderr: {}", stdout, String::from_utf8_lossy(&output.stderr)))?;
+    
+    if json["status"].as_str().unwrap_or("") == "success" {
+        Ok(json["path"].as_str().unwrap_or("").to_string())
+    } else {
+        Err(json["message"].as_str().unwrap_or("未知错误").to_string())
+    }
+}
+
+#[tauri::command]
 async fn read_local_file(path: String) -> Result<Vec<u8>, String> {
     std::fs::read(&path).map_err(|e| e.to_string())
 }
@@ -1762,6 +1883,8 @@ pub fn run() {
             list_tts_voices,
             search_web_music,
             download_web_music,
+            search_ytdlp,
+            download_ytdlp,
             bili_get_qr_auth,
             bili_poll_qr_auth,
             read_local_file,

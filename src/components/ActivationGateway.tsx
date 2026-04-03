@@ -2,15 +2,18 @@ import React from 'react';
 import { useAuthStore } from '../store/useAuthStore';
 
 export const ActivationGateway: React.FC = () => {
-  const { isInitializing, isLocked, errorMsg, machineId, verifyCode } = useAuthStore();
+  const authState = useAuthStore();
+  const { isInitializing, isLocked, errorMsg, machineId, verifyCode, isVip, expireDate, activationCode } = authState;
+
   const [inputCode, setInputCode] = React.useState('');
   const [localMsg, setLocalMsg] = React.useState('');
   const [isVerifying, setIsVerifying] = React.useState(false);
 
-  // 初始化时不要显示白屏死锁，应该让主界面透出加载中或者静默通过
-  if (isInitializing) return null;
-  // 如果没有锁定，就全部透传放行！
-  if (!isLocked) return null;
+  React.useEffect(() => {
+    if (activationCode && !inputCode) {
+      setInputCode(activationCode);
+    }
+  }, [activationCode, inputCode]);
 
   const handleActivate = async () => {
     if (!inputCode.trim()) {
@@ -30,23 +33,39 @@ export const ActivationGateway: React.FC = () => {
       position: 'fixed', inset: 0, zIndex: 99999,
       backdropFilter: 'blur(32px) saturate(150%)',
       backgroundColor: 'rgba(15, 23, 42, 0.8)', // Slate-900 with opacity
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      display: (!isInitializing && isLocked) ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center',
       color: '#fff', userSelect: 'none'
     }}>
       <div className="glass-panel" style={{
+        position: 'relative',
         width: 520, padding: 32, borderRadius: 24,
         background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95))',
         border: '1px solid rgba(148, 163, 184, 0.2)',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
         display: 'flex', flexDirection: 'column', gap: 20
       }}>
+        {isVip && (
+          <button 
+            className="ios-hover-scale"
+            onClick={() => useAuthStore.setState({ isLocked: false })} 
+            style={{ 
+              position: 'absolute', top: 16, right: 16, 
+              background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', 
+              borderRadius: '50%', width: 32, height: 32, 
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: '0.2s' 
+            }}>
+            ✕
+          </button>
+        )}
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>{isVip && !isLocked ? '💎' : '🔒'}</div>
           <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700, background: 'linear-gradient(to right, #60A5FA, #A78BFA)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            软件试用已到期 / 锁定
+            {isVip && !isLocked ? '旗舰版已授权' : '软件试用已到期 / 锁定'}
           </h2>
           <p style={{ marginTop: 8, fontSize: 13, color: '#94A3B8' }}>
-            {errorMsg || '您的30分钟免费体验期已结束，请填入正版激活码以永久解锁所有专业级视频合成与滤镜功能。'}
+            {isVip && !isLocked && expireDate
+               ? `您的旗舰版授权将于 ${new Date(expireDate).toLocaleDateString()} 到期，剩余 ${Math.ceil((expireDate - Date.now()) / 86400000)} 天。期间您可以畅享所有高阶功能。`
+               : (errorMsg || '您的30分钟免费体验期已结束，请填入正版激活码以永久解锁所有专业级视频合成与滤镜功能。')}
           </p>
         </div>
 
@@ -110,9 +129,9 @@ export const ActivationGateway: React.FC = () => {
             boxShadow: '0 4px 14px rgba(139, 92, 246, 0.4)', transition: '0.2s', marginTop: 8
           }}
         >
-          {isVerifying ? '正在验证核心签名...' : '校验身份并解锁软体'}
+          {isVerifying ? '正在验证核心签名...' : (isVip && !isLocked ? '更新离线授权证书' : '校验身份并解锁软体')}
         </button>
       </div>
     </div>
   );
-};
+};

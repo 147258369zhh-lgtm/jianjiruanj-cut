@@ -1,3 +1,4 @@
+import { getClipPath } from '../utils/shapeUtils';
 import React, { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -57,20 +58,7 @@ export const SortableImageCard = memo(function SortableImageCard({
     generateThumbnail(src).then(setThumbUrl);
   }, [resource?.path, previewUrl, isVideo]);
 
-  const getClipPath = (it: any) => {
-    if (it?.maskShape && it.maskShape !== 'none') {
-      switch (it.maskShape) {
-        case 'circle': return 'circle(50% at 50% 50%)';
-        case 'ellipse': return 'ellipse(45% 35% at 50% 50%)';
-        case 'heart': return 'polygon(50% 15%, 61% 0%, 85% 0%, 100% 15%, 100% 38%, 50% 100%, 0% 38%, 0% 15%, 15% 0%, 39% 0%)';
-        case 'star': return 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)';
-        case 'triangle': return 'polygon(50% 0%, 0% 100%, 100% 100%)';
-        case 'rhombus': return 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)';
-        case 'hexagon': return 'polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%)';
-      }
-    }
-    return it?.cropPos ? `inset(${it.cropPos.y}% ${100 - it.cropPos.x - it.cropPos.width}% ${100 - it.cropPos.y - it.cropPos.height}% ${it.cropPos.x}%)` : 'none';
-  };
+  
 
   const thumbStyle: React.CSSProperties = {
     width: '100%', height: '100%', objectFit: item.fillMode === 'contain' ? 'contain' : 'cover',
@@ -264,6 +252,9 @@ export const SortableImageCard = memo(function SortableImageCard({
               return (
                 <div style={{ width: '100%', height: '100%', position: 'relative', background: 'repeating-linear-gradient(90deg, #111 0px, #111 40px, #222 40px, #222 42px)', borderTop: '2px solid #000', borderBottom: '2px solid #000', display: 'flex', alignItems: 'stretch', pointerEvents: 'none', overflow: 'hidden' }}>
                   {Array.from({ length: numFrames }).map((_, i) => {
+                     if (!isVisible) {
+                       return <div key={i} style={{ width: `${100 / numFrames}%`, height: '100%', borderRight: i < numFrames - 1 ? '1px solid rgba(0,0,0,0.5)' : 'none', background: '#222' }} />;
+                     }
                      const timeOffset = item.duration > 0 ? (i / numFrames) * item.duration : 0.1;
                      return (
                        <VideoFrame 

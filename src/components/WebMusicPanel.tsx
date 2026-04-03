@@ -19,10 +19,12 @@ export const WebMusicPanel: React.FC = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<WebMusicItem[]>([]);
   const [activeGenre, setActiveGenre] = useState<string | null>(null);
-  const [source, setSource] = useState<'apple' | 'jamendo' | 'netease' | 'bilibili' | 'local'>('apple');
+  const [source, setSource] = useState<'apple' | 'jamendo' | 'netease' | 'bilibili' | 'local' | 'youtube'>('apple');
   const [isSearching, setIsSearching] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<number | null>(null);
-  const [playingId, setPlayingId] = useState<number | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | string | null>(null);
+  const [playingId, setPlayingId] = useState<number | string | null>(null);
+  const [globalProxy, setGlobalProxy] = useState(() => localStorage.getItem('U2_PROXY') || '');
+  const [showProxySetting, setShowProxySetting] = useState(false);
 
   // Auth States for Bilibili
   const [biliSessData, setBiliSessData] = useState<string>(() => localStorage.getItem('BILI_SESSDATA') || '');
@@ -113,11 +115,19 @@ export const WebMusicPanel: React.FC = () => {
     setResults([]);
     setActiveGenre(null);
     try {
-      const items = await invoke<WebMusicItem[]>('search_web_music', { 
-        keyword: query, 
-        source, 
-        sessdata: biliSessData || undefined 
-      });
+      let items: WebMusicItem[] = [];
+      if (source === 'youtube') {
+        items = await invoke<WebMusicItem[]>('search_ytdlp', { 
+          keyword: query, 
+          proxy: globalProxy || undefined 
+        });
+      } else {
+        items = await invoke<WebMusicItem[]>('search_web_music', { 
+          keyword: query, 
+          source, 
+          sessdata: biliSessData || undefined 
+        });
+      }
       setResults(items);
     } catch (err: any) {
       alert(`搜索失败: ${err}`);
@@ -131,13 +141,24 @@ export const WebMusicPanel: React.FC = () => {
     setDownloadingId(item.id);
     try {
       // 1. Download to local disk from server
-      const localPath = await invoke<string>('download_web_music', { 
-        url: item.url,
-        id: item.id, 
-        name: item.name, 
-        artist: item.artist,
-        sessdata: biliSessData || undefined
-      });
+      let localPath = '';
+      if (source === 'youtube') {
+        localPath = await invoke<string>('download_ytdlp', { 
+          url: item.url,
+          id: item.id.toString(), 
+          name: item.name, 
+          artist: item.artist,
+          proxy: globalProxy || undefined
+        });
+      } else {
+        localPath = await invoke<string>('download_web_music', { 
+          url: item.url,
+          id: item.id as number, 
+          name: item.name, 
+          artist: item.artist,
+          sessdata: biliSessData || undefined
+        });
+      }
 
       // 2. Add to global resources
       const newResourceId = `web_${item.id}`;
@@ -225,9 +246,17 @@ export const WebMusicPanel: React.FC = () => {
           title="切换网络音乐检索源"
         >
           <option value="apple" style={{ background: '#1a1a2e', color: '#fff' }}>🍎 苹果库 (30秒试听 / 华语精准)</option>
+          <option value="youtube" style={{ background: '#1a1a2e', color: '#fff' }}>📺 U2 全球曲库 (全长原轨提取)</option>
           <option value="bilibili" style={{ background: '#1a1a2e', color: '#fff' }}>📺 B站原音 (免版权 / 极客最爱)</option>
           <option value="local" style={{ background: '#1a1a2e', color: '#fff' }}>📂 硬盘检索 (即时扫描本机全长MP3)</option>
         </select>
+        
+        {source === 'youtube' && (
+           <span style={{ fontSize: 11, color: '#F59E0B', background: 'rgba(245,158,11,0.1)', padding: '2px 6px', borderRadius: 4, cursor: 'pointer' }}
+                 onClick={() => setShowProxySetting(!showProxySetting)}
+                 title="点击设置魔法网络代理端口"
+           >🌐 代理网络设置</span>
+        )}
         
         {source === 'bilibili' && biliSessData && (
            <span style={{ fontSize: 11, color: '#10B981', background: 'rgba(16,185,129,0.1)', padding: '2px 6px', borderRadius: 4, cursor: 'pointer' }}
@@ -252,6 +281,24 @@ export const WebMusicPanel: React.FC = () => {
           onClick={() => appendToQuery('Vlog')}
         >🎵 搜 Vlog</span>
       </div>
+
+      {showProxySetting && source === 'youtube' && (
+        <div style={{ display: 'flex', gap: 6, padding: '0 0 10px', alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>HTTP/SOCKS 代理:</span>
+          <input 
+            value={globalProxy}
+            onChange={e => {
+              setGlobalProxy(e.target.value);
+              localStorage.setItem('U2_PROXY', e.target.value);
+            }}
+            placeholder="例如: http://127.0.0.1:10809 (留空则默认系统代理)"
+            style={{ 
+              background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', 
+              borderRadius: 4, padding: '4px 8px', color: '#fff', fontSize: 11, width: 220 
+            }}
+          />
+        </div>
+      )}
 
       {/* 动态筛选标籤 */}
       {genres.length > 0 && !isSearching && (
@@ -376,7 +423,7 @@ export const WebMusicPanel: React.FC = () => {
               <div style={{ width: 180, height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>生成中...</div>
             )}
           </div>
-          <div style={{ color: '#fff', fontSize: 14, fontWeight: 500, marginBottom: 6, color: '#FB7299' }}>📺 B站大会员专属提权</div>
+          <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6, color: '#FB7299' }}>📺 B站大会员专属提权</div>
           <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, textAlign: 'center', maxWidth: 240, marginBottom: 20 }}>
             {authStatusMsg}
           </div>

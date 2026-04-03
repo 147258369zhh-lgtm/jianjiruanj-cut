@@ -14,7 +14,9 @@ export const ProjectDashboard: React.FC = () => {
   const audioCount = useMemo(() => audioItems.length, [audioItems]);
   const voiceoverCount = useMemo(() => voiceoverClips.length, [voiceoverClips]);
   const totalDuration = useMemo(() => timeline.reduce((acc, t) => acc + t.duration, 0), [timeline]);
-  const resourceCount = useMemo(() => resources.filter(r => r.type === 'image').length, [resources]);
+  const resourceCount = useMemo(() => resources.filter(r => r.type === 'image' || r.type === 'video').length, [resources]);
+  const transitionCount = useMemo(() => timeline.filter(t => t.transition && t.transition !== 'none').length, [timeline]);
+  const avgClipLength = useMemo(() => imageCount > 0 ? (totalDuration / imageCount).toFixed(1) : 0, [imageCount, totalDuration]);
 
   const formatDuration = (s: number) => {
     if (s < 60) return `${s.toFixed(1)}s`;
@@ -70,7 +72,17 @@ export const ProjectDashboard: React.FC = () => {
           <div className="dash-stat-card">
             <span className="dash-stat-icon">🗂️</span>
             <span className="dash-stat-value">{resourceCount}</span>
-            <span className="dash-stat-label">素材库中照片</span>
+            <span className="dash-stat-label">导入素材库</span>
+          </div>
+          <div className="dash-stat-card">
+            <span className="dash-stat-icon">✨</span>
+            <span className="dash-stat-value">{transitionCount}</span>
+            <span className="dash-stat-label">特效转场</span>
+          </div>
+          <div className="dash-stat-card">
+            <span className="dash-stat-icon">✂️</span>
+            <span className="dash-stat-value">{avgClipLength}s</span>
+            <span className="dash-stat-label">平均片段长</span>
           </div>
         </div>
       </div>

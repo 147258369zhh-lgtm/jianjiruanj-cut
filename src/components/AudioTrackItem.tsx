@@ -150,6 +150,24 @@ export const AudioTrackItem = memo(({ item, resource, isSelected, onSelect, pps,
           <AudioWaveform isPlaying={isPlaying} palette={palette} />
         </div>
 
+        {/* 淡入淡出可视化遮罩 (如果有) */}
+        {item.fadeIn && item.fadeIn > 0 ? (
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0, left: 0, zIndex: 1,
+            width: `${Math.min(100, (item.fadeIn / item.duration) * 100)}%`,
+            background: 'linear-gradient(to right, rgba(0,0,0,0.7), rgba(0,0,0,0))',
+            pointerEvents: 'none',
+          }} />
+        ) : null}
+        {item.fadeOut && item.fadeOut > 0 ? (
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0, right: 0, zIndex: 1,
+            width: `${Math.min(100, (item.fadeOut / item.duration) * 100)}%`,
+            background: 'linear-gradient(to left, rgba(0,0,0,0.7), rgba(0,0,0,0))',
+            pointerEvents: 'none',
+          }} />
+        ) : null}
+
         {/* 剪辑区域高亮覆盖层 */}
         {editingMode && allBoundaries.length > 1 && allBoundaries.slice(0, -1).map((boundary, idx) => {
           const regionStart = boundary / item.duration;

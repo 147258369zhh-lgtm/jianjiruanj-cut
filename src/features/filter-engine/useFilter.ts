@@ -46,8 +46,9 @@ export function computeFilter(item: Partial<TimelineItem> | null): string {
   
   const temp = Number(item.temp ?? 0);
   const tint = Number(item.tint ?? 0);
-  const calcSepia = Math.abs(temp) / 100 * 0.6;
-  const calcHueRotate = (temp < 0 ? 180 + tint : tint);
+  const calcSepia = temp > 0 ? (temp / 100 * 0.5) : 0;
+  // A negative temp (cool) doesn't work well with sepia. We simulate cooling by slightly reducing brightness of red/green via hue-rotate, but we NEVER flip 180.
+  const calcHueRotate = tint + (temp < 0 ? (temp * -0.15) : 0);
   
   const blurStr = sharp < 0 ? `blur(${Math.abs(sharp) * 4}px) ` : '';
   

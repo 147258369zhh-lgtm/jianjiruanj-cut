@@ -8,6 +8,31 @@ import { ResourceCardItem } from './ResourceCardItem';
 import { WebMusicPanel } from './WebMusicPanel';
 import './LeftPanel.css';
 
+const TTS_VOICES = [
+  { id: 'zh-CN-F-QingCui', label: '清脆女声', gender: 'F', icon: '💁‍♀️' },
+  { id: 'zh-CN-F-RouMei', label: '柔美女声', gender: 'F', icon: '🌸' },
+  { id: 'zh-CN-F-ZhiXing', label: '知性女声', gender: 'F', icon: '👩‍🏫' },
+  { id: 'zh-CN-F-QingLeng', label: '清冷御姐', gender: 'F', icon: '❄️' },
+  { id: 'zh-CN-F-HuoPo', label: '活泼女大', gender: 'F', icon: '🎒' },
+  { id: 'zh-CN-F-BaQi', label: '霸气女主', gender: 'F', icon: '👑' },
+  { id: 'zh-CN-F-TianZhen', label: '天真萝莉', gender: 'F', icon: '🎀' },
+  { id: 'zh-CN-F-WenWan', label: '温婉闺蜜', gender: 'F', icon: '🍵' },
+  { id: 'zh-CN-F-LuoLi', label: '傲娇幼女', gender: 'F', icon: '🦋' },
+  { id: 'zh-CN-F-ZhiBo', label: '电台女播', gender: 'F', icon: '📻' },
+  { id: 'zh-CN-M-WenZhong', label: '稳重男声', gender: 'M', icon: '👨‍💼' },
+  { id: 'zh-CN-M-QingNian', label: '青年男声', gender: 'M', icon: '🎧' },
+  { id: 'zh-CN-M-YangGuang', label: '阳光少年', gender: 'M', icon: '🏀' },
+  { id: 'zh-CN-M-ZhiYu', label: '治愈暖男', gender: 'M', icon: '☕' },
+  { id: 'zh-CN-M-DaShu', label: '沧桑大叔', gender: 'M', icon: '🚬' },
+  { id: 'zh-CN-M-BaZong', label: '霸道总裁', gender: 'M', icon: '🥂' },
+  { id: 'zh-CN-M-ZhengTai', label: '清心正太', gender: 'M', icon: '👦' },
+  { id: 'zh-CN-M-DuoLuo', label: '慵懒男主', gender: 'M', icon: '🛋️' },
+  { id: 'zh-CN-M-DiYin', label: '深感低音', gender: 'M', icon: '🎵' },
+  { id: 'zh-CN-M-XinWen', label: '新闻男播', gender: 'M', icon: '🎙️' },
+];
+
+
+
 export const LeftPanel: React.FC = () => {
   const {
     resources, setResources: _setResources, getEffectiveSrc: _getEffectiveSrc, globalDefaultsRef: _globalDefaultsRef, commitSnapshotNow, setTimeline, setAudioItems, removeFromLibrary, handleLibToggle, handleLibSelectPreview, handleLibAdd: _handleLibAdd, handleConvertDNG, handleRevealInExplorer, previewCache, handleImport, setVoiceoverClips, addedResourceIds, playTimeRef
@@ -27,8 +52,10 @@ export const LeftPanel: React.FC = () => {
   // AI 配音与网络爬虫相关状态
   const [musicSubTab, setMusicSubTab] = useState<'audio' | 'tts' | 'web'>('audio');
   const [ttsText, setTtsText] = useState('');
-  const [ttsVoice, setTtsVoice] = useState('zh-CN-Aishell3-F0');
-  const [ttsRate, setTtsRate] = useState('+0%');
+  const [ttsVoice, setTtsVoice] = useState('zh-CN-F-QingCui');
+  const [isVoiceDropdownOpen, setIsVoiceDropdownOpen] = useState(false);
+  const selectedVoiceObj = TTS_VOICES.find(v => v.id === ttsVoice) || TTS_VOICES[0];
+  const [ttsRate, setTtsRate] = useState(1.0);
   const [ttsGenerating, setTtsGenerating] = useState(false);
   const [generatedVoiceovers, setGeneratedVoiceovers] = useState<{ id: string; name: string; path: string; duration: number; selected: boolean }[]>([]);
 
@@ -50,7 +77,7 @@ export const LeftPanel: React.FC = () => {
   const visibleResources = filteredResources.slice(libStartIndex, libEndIndex + 1);
 
   return (
-    <div className="glass-panel" style={{ width: 336, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+    <div className="glass-panel" style={{ flex: '0 0 24%', minWidth: 260, maxWidth: 360, display: 'flex', flexDirection: 'column' }}>
 
       {/* 三标签头部 */}
       <div style={{ padding: '8px 10px 6px', borderBottom: '1px solid var(--ios-hairline)' }}>
@@ -89,33 +116,64 @@ export const LeftPanel: React.FC = () => {
           {leftTab === 'music' && musicSubTab === 'tts' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', flex: 1 }}>
               <textarea value={ttsText} onChange={e => setTtsText(e.target.value)} placeholder="输入需要配音的文字内容..." style={{ width: '100%', height: 80, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#fff', fontSize: 12, padding: '8px 10px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5, boxSizing: 'border-box' }} />
-              <div style={{ display: 'flex', gap: 6 }}>
-                <select value={ttsVoice} onChange={e => setTtsVoice(e.target.value)} style={{ flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', fontSize: 10, padding: '4px 6px', outline: 'none', cursor: 'pointer' }}>
-                  <optgroup label="🎙️ 本地开源女声" style={{ background: '#1a1a2e', color: '#ccc' }}>
-                    <option value="zh-CN-Aishell3-F0" style={{ background: '#1a1a2e' }}>F0 · 清脆女声（推荐）</option>
-                    <option value="zh-CN-Aishell3-F1" style={{ background: '#1a1a2e' }}>F1 · 柔美女声</option>
-                    <option value="zh-CN-Aishell3-F33" style={{ background: '#1a1a2e' }}>F33 · 知性女声</option>
-                  </optgroup>
-                  <optgroup label="🎵 本地开源男声" style={{ background: '#1a1a2e', color: '#ccc' }}>
-                    <option value="zh-CN-Aishell3-M10" style={{ background: '#1a1a2e' }}>M10 · 稳重男声</option>
-                    <option value="zh-CN-Aishell3-M14" style={{ background: '#1a1a2e' }}>M14 · 青年男声</option>
-                  </optgroup>
-                </select>
-                <select value={ttsRate} onChange={e => setTtsRate(e.target.value)} style={{ width: 66, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: '#fff', fontSize: 10, padding: '4px 4px', outline: 'none', cursor: 'pointer' }}>
-                  <option value="-30%" style={{ background: '#1a1a2e' }}>0.7x</option>
-                  <option value="-20%" style={{ background: '#1a1a2e' }}>0.8x</option>
-                  <option value="-10%" style={{ background: '#1a1a2e' }}>0.9x</option>
-                  <option value="+0%" style={{ background: '#1a1a2e' }}>1.0x</option>
-                  <option value="+10%" style={{ background: '#1a1a2e' }}>1.1x</option>
-                  <option value="+20%" style={{ background: '#1a1a2e' }}>1.2x</option>
-                  <option value="+50%" style={{ background: '#1a1a2e' }}>1.5x</option>
-                  <option value="+100%" style={{ background: '#1a1a2e' }}>2.0x</option>
-                </select>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, position: 'relative' }}>
+                    <div 
+                      onClick={() => setIsVoiceDropdownOpen(!isVoiceDropdownOpen)}
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: '#fff', fontSize: 11 }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 14 }}>{selectedVoiceObj.icon}</span>
+                        <span style={{ fontWeight: 500 }}>{selectedVoiceObj.label}</span>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>({selectedVoiceObj.gender === 'F' ? '女声' : '男声'})</span>
+                      </span>
+                      <span style={{ transform: isVoiceDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', opacity: 0.5 }}>▼</span>
+                    </div>
+                    {isVoiceDropdownOpen && (
+                      <>
+                        <div onClick={() => setIsVoiceDropdownOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 90 }} />
+                        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: '#1c1c1e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: 4, zIndex: 100, maxHeight: 180, overflowY: 'auto', boxShadow: '0 10px 40px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {['F', 'M'].map(gender => (
+                            <React.Fragment key={gender}>
+                              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', padding: '6px 8px 2px 8px' }}>{gender === 'F' ? '🎙️ 女声系列' : '🎵 男声系列'}</div>
+                              {TTS_VOICES.filter(v => v.gender === gender).map(v => (
+                                <div 
+                                  key={v.id}
+                                  onClick={() => { setTtsVoice(v.id); setIsVoiceDropdownOpen(false); }}
+                                  style={{ padding: '6px 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', background: ttsVoice === v.id ? 'rgba(16,185,129,0.15)' : 'transparent', color: ttsVoice === v.id ? '#10B981' : '#fff', fontSize: 11, transition: 'background 0.15s' }}
+                                >
+                                  <span style={{ fontSize: 14 }}>{v.icon}</span>
+                                  <span>{v.label}</span>
+                                  {ttsVoice === v.id && <span style={{ marginLeft: 'auto', fontSize: 10 }}>✓</span>}
+                                </div>
+                              ))}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(0,0,0,0.2)', padding: '0 10px', borderRadius: 8, minWidth: 0 }}>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>速 {ttsRate.toFixed(2)}x</span>
+                    <input 
+                      type="range" 
+                      min="0.5" max="2.0" step="0.01" 
+                      value={ttsRate} 
+                      onChange={e => setTtsRate(parseFloat(e.target.value))} 
+                      onDoubleClick={() => setTtsRate(1.0)}
+                      title="双击恢复 1.0x 原速"
+                      style={{ flex: 1, accentColor: '#10B981', cursor: 'pointer', margin: 0, minWidth: 50 }}
+                    />
+                  </div>
+                </div>
               </div>
               <button disabled={ttsGenerating || !ttsText.trim()} onClick={async () => {
                 setTtsGenerating(true); setStatusMsg('🎙️ 正在生成配音...');
                 try {
-                  const filePath: string = await invoke('generate_tts', { req: { text: ttsText, voice: ttsVoice, rate: ttsRate } });
+                  const rateStr = `${ttsRate >= 1.0 ? '+' : ''}${Math.round((ttsRate - 1.0) * 100)}%`;
+                  const filePath: string = await invoke('generate_tts', { req: { text: ttsText, voice: ttsVoice, rate: rateStr } });
                   const dur = await getMediaDuration(filePath);
                   const name = `配音_${(generatedVoiceovers.length + 1).toString().padStart(3, '0')}`;
                   setGeneratedVoiceovers(prev => [...prev, { id: `vo_${Date.now()}`, name, path: filePath, duration: dur, selected: false }]);

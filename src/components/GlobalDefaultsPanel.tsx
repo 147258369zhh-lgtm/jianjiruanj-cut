@@ -3,7 +3,7 @@ import { useStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import ProSlider from './ProSlider';
 import IosSelect from './IosSelect';
-import { GLOBAL_DEFAULTS_INIT, GlobalDefaults } from '../types';
+import { GLOBAL_DEFAULTS_INIT } from '../types';
 import { WORKFLOW_PRESETS } from '../features/preset-manager/presetTemplates';
 import './GlobalDefaultsPanel.css';
 
@@ -148,6 +148,25 @@ export const GlobalDefaultsPanel: React.FC<GlobalDefaultsPanelProps> = ({
               favSet={favAnims}
               onToggleFav={toggleFavAnim}
             />
+          </div>
+        </div>
+      </div>
+      <div className="ios-prop-group">
+        <div className="ios-text" style={{ color: '#F59E0B', fontSize: 13, marginBottom: 8, display: 'block' }}>📐 几何变换默认值 (Keystone)</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>默认水平透视 (X): {globalDefaults.keystoneX}°</span>
+            <ProSlider min={-45} max={45} step={1} value={globalDefaults.keystoneX} onChange={v => {
+              setGlobalDefaults(p => ({ ...p, keystoneX: v }));
+              setTimeline(prev => prev.map(t => !(t.overrides?.includes('keystoneX')) ? { ...t, keystoneX: v } : t));
+            }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>默认垂直透视 (Y): {globalDefaults.keystoneY}°</span>
+            <ProSlider min={-45} max={45} step={1} value={globalDefaults.keystoneY} onChange={v => {
+              setGlobalDefaults(p => ({ ...p, keystoneY: v }));
+              setTimeline(prev => prev.map(t => !(t.overrides?.includes('keystoneY')) ? { ...t, keystoneY: v } : t));
+            }} />
           </div>
         </div>
       </div>

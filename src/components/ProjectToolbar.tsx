@@ -54,6 +54,8 @@ export const ProjectToolbar: React.FC = () => {
     sortDirection: state.sortDirection, setSortDirection: state.setSortDirection
   })));
 
+  const { isVip, expireDate } = useAuthStore(useShallow(state => ({ isVip: state.isVip, expireDate: state.expireDate })));
+
   return (
     <div className="glass-panel project-toolbar" style={{
       display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px',
@@ -180,7 +182,14 @@ export const ProjectToolbar: React.FC = () => {
           {showMoreMenu && (
             <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'rgba(28,28,42,0.97)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: 6, zIndex: 1000, minWidth: 180, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
               {[
-                { icon: '🔑', label: '软件授权与激活', action: () => { useAuthStore.setState({ isLocked: true }); setShowMoreMenu(false); } },
+                { 
+                  icon: isVip ? '💎' : '🔑', 
+                  label: isVip && expireDate ? `[V12]旗舰版授权 (剩余 ${Math.ceil((expireDate - Date.now()) / 86400000)} 天)` : '[V12]软件授权与激活', 
+                  action: () => { 
+                    useAuthStore.setState({ isLocked: true }); 
+                    setShowMoreMenu(false); 
+                  } 
+                },
                 { icon: '💾', label: '保存工程  Ctrl+S', action: () => { saveProject(); setShowMoreMenu(false); } },
                 { icon: '📂', label: '加载工程  Ctrl+O', action: () => { loadProject(); setShowMoreMenu(false); } },
               ].map(item => (

@@ -23,10 +23,13 @@ interface AuthStore {
     expireDate: number | null; // 授权到期时间
     isVip: boolean; // 是否拥有有效授权码
     errorMsg: string; // 错误信息，如"检测到时间篡改"
+    showGateway: boolean; // 主动打开看证书的弹窗
+    activationCode: string; // 存在的证书代码
     
     initAuth: () => Promise<void>;
     verifyCode: (code: string) => Promise<boolean>;
     clockTick: () => void;
+    setShowGateway: (show: boolean) => void;
 }
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
@@ -37,6 +40,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     expireDate: null,
     isVip: false,
     errorMsg: '',
+    showGateway: false,
+    activationCode: '',
+
+    setShowGateway: (show: boolean) => set({ showGateway: show }),
 
     initAuth: async () => {
         try {
@@ -86,7 +93,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
             // 如果解锁成功，就不需要查时间机制了
             if (isVipValid) {
-                set({ isInitializing: false, isLocked: false, isVip: true, expireDate: expireTs });
+                set({ isInitializing: false, isLocked: false, isVip: true, expireDate: expireTs, activationCode: state.activation_code });
                 
                 // 更新一下最后打开时间，防刷
                 state.last_launch_time = now;
@@ -164,7 +171,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
                 }
 
                 // 完全通关！
-                set({ isLocked: false, isVip: true, errorMsg: '', expireDate: payload.e });
+                set({ isLocked: false, isVip: true, errorMsg: '', expireDate: payload.e, showGateway: false, activationCode: code.trim() });
 
                 // 持久化授权码到磁盘深处
                 const storeStr = await invoke<string>('read_auth_store');

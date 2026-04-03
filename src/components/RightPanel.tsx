@@ -50,7 +50,7 @@ export function RightPanel() {
   } = useAppContext();
 
   return (
-    <div className="glass-panel" style={{ width: 350, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+    <div className="glass-panel" style={{ flex: '0 0 24%', minWidth: 260, maxWidth: 380, display: 'flex', flexDirection: 'column' }}>
       <div className="panel-header-ios" style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span className="header-title" style={{ fontSize: 12 }}>
           {showGlobalDefaults ? '⚙️ 全局默认设置' : showExportPanel ? '🚀 导出设置' : (

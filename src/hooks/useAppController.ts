@@ -8,12 +8,13 @@ import { useAudioSync } from './useAudioSync';
 import { useProjectIO } from './useProjectIO';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 import { useDragImport, IngestItem } from './useDragImport';
+import { useAudioOperations } from './useAudioOperations';
 import { useTimelineActions } from './useTimelineActions';
 import { useResourceManager } from './useResourceManager';
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { Resource, AudioTimelineItem, TimelineItem, GlobalDefaults, GLOBAL_DEFAULTS_INIT, TextOverlay } from '../types';
+import { Resource, TimelineItem, GlobalDefaults, GLOBAL_DEFAULTS_INIT, TextOverlay } from '../types';
 import { calculateTimelineLayout } from '../utils/timelineLayout';
 
 export function useAppController() {
@@ -435,6 +436,21 @@ export function useAppController() {
   // formatTime 已迁移到 utils/formatTime.ts
   // const formatTime = formatTimeMod;
 
+  // ─── 音频操作引擎 (已提取) ──────────────
+  const {
+    updateAudioItem,
+    stitchSelectedAudioGaps,
+    executeAudioCut,
+  } = useAudioOperations({
+    audioItems,
+    setAudioItems,
+    selectedAudioIds,
+    setSelectedAudioIds,
+    setSelectedVoiceoverIds,
+    setIsEditingAudio,
+    setStatusMsg,
+  });
+
   // playTimeRef 已在上方声明并持续同步
 
 
@@ -478,77 +494,7 @@ export function useAppController() {
   };
   const finalizeSliderUndo = () => { sliderUndoFlag.current = false; };
 
-  const updateAudioItem = (id: string, patch: Partial<AudioTimelineItem>, isDragging: boolean = false) => {
-    setAudioItems(prev => {
-      return prev.map(a => {
-        if (a.id === id) {
-          let newPatch = { ...patch };
 
-          // ─── 吸附碰撞算法 (Magnetic Snapping) ───
-          if (isDragging && newPatch.timelineStart !== undefined) {
-            const snapThreshold = 0.4; // 吸附触发距离 (0.4秒)
-            const myDur = a.duration;
-            let candidateT = newPatch.timelineStart;
-            let bestDiff = snapThreshold;
-
-            for (const other of prev) {
-              if (other.id === id) continue;
-              const otherStart = other.timelineStart;
-              const otherEnd = other.timelineStart + other.duration;
-
-              // 我的开始碰别人结束
-              if (Math.abs(candidateT - otherEnd) < bestDiff) { candidateT = otherEnd; bestDiff = Math.abs(newPatch.timelineStart - otherEnd); }
-              // 我的结束碰别人开始
-              if (Math.abs(candidateT + myDur - otherStart) < bestDiff) { candidateT = otherStart - myDur; bestDiff = Math.abs(newPatch.timelineStart + myDur - otherStart); }
-
-              // 并行对齐 (头对头，尾对尾)
-              if (Math.abs(candidateT - otherStart) < bestDiff) { candidateT = otherStart; bestDiff = Math.abs(newPatch.timelineStart - otherStart); }
-              if (Math.abs(candidateT + myDur - otherEnd) < bestDiff) { candidateT = otherEnd - myDur; bestDiff = Math.abs(newPatch.timelineStart + myDur - otherEnd); }
-            }
-
-            if (Math.abs(candidateT - 0) < bestDiff) { candidateT = 0; }
-
-            newPatch.timelineStart = Math.max(0, candidateT);
-          }
-          return { ...a, ...newPatch };
-        }
-        return a;
-      });
-    });
-  };
-
-  // 合并选区缝合间隙
-  const stitchSelectedAudioGaps = () => {
-    if (selectedAudioIds.size < 2) {
-      setStatusMsg("聚合失败：请按住 Ctrl 选定至少 2 段音频残片");
-      setTimeout(() => setStatusMsg(""), 3000);
-      return;
-    }
-    setAudioItems(prev => {
-      // 1. 过滤并按照时间轴顺序排序所有选中的碎片
-      const sortedSelected = prev.filter(a => selectedAudioIds.has(a.id)).sort((a, b) => a.timelineStart - b.timelineStart);
-
-      // 2. 以最开头的那个碎片为锚点
-      let anchorTime = sortedSelected[0].timelineStart;
-
-      // 3. 构建新的位移映射表
-      const shifts = new Map<string, number>();
-      for (const piece of sortedSelected) {
-        shifts.set(piece.id, anchorTime);
-        anchorTime += piece.duration; // 紧随其后排队
-      }
-
-      // 4. 应用修改
-      return prev.map(item => {
-        if (shifts.has(item.id)) {
-          return { ...item, timelineStart: shifts.get(item.id)! };
-        }
-        return item;
-      });
-    });
-    setStatusMsg("🧲 已成功跨越时空缝合选中的残片！");
-    setTimeout(() => setStatusMsg(""), 3000);
-  };
 
   const applyAllToTimeline = () => {
     if (!selectedItem) return;
@@ -573,58 +519,6 @@ export function useAppController() {
     setTimeout(() => setStatusMsg(''), 3000);
   };
 
-  // ─── 音频剪辑核心算法 ───
-  // 逻辑：将一个音轨项根据保留区域切分为多个独立音轨项，并自动计算起始位置留存空隙
-  const executeAudioCut = (itemId: string) => {
-    const item = audioItems.find(a => a.id === itemId);
-    if (!item) return;
-    const cuts = (item.cutPoints || []).slice().sort((a, b) => a - b);
-    const selected = new Set(item.selectedRegions || []);
-    const boundaries = [0, ...cuts, item.duration];
-
-    const newFragments: AudioTimelineItem[] = [];
-    let currentTimelinePos = item.timelineStart;
-
-    for (let i = 0; i < boundaries.length - 1; i++) {
-      const startClip = boundaries[i];
-      const endClip = boundaries[i + 1];
-      const dur = endClip - startClip;
-
-      if (!selected.has(i)) {
-        if (dur > 0.01) {
-          newFragments.push({
-            ...item,
-            id: `aud_${Date.now()}_${i}`,
-            timelineStart: currentTimelinePos,
-            startOffset: item.startOffset + startClip,
-            duration: dur,
-            cutPoints: [],
-            selectedRegions: []
-          });
-        }
-      }
-      // 取消波纹删除：无论分段是否被保留，始终将其持续时间计入偏移累加中，制造真实的“缝隙”
-      currentTimelinePos += dur;
-    }
-
-    if (newFragments.length === 0) {
-      setAudioItems(prev => prev.filter(a => a.id !== itemId));
-      setSelectedAudioIds(new Set()); setSelectedVoiceoverIds(new Set());
-    } else {
-      setAudioItems(prev => {
-        const idx = prev.findIndex(a => a.id === itemId);
-        const next = [...prev];
-        next.splice(idx, 1, ...newFragments);
-        return next;
-      });
-      // 将剪除后存活下来的片段维持为选中状态，以免右侧面板丢失上下文
-      setSelectedAudioIds(new Set(newFragments.map(f => f.id)));
-    }
-
-    setIsEditingAudio(false);
-    setStatusMsg("✂️ 残片已切除。此时已留出空隙，如需拼合缝合可点击上方 '缝合选区'");
-    setTimeout(() => setStatusMsg(""), 4000);
-  };
 
   // 播放指针操作、拖拽动作均已提取至 hooks/useTimelineActions.ts
 

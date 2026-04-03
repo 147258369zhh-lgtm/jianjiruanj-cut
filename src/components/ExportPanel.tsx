@@ -1,6 +1,7 @@
 import React from 'react';
 import { useStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
+import { useAppContext } from '../hooks/useAppContext';
 
 interface ExportPanelProps {
   handleGenerate: () => void;
@@ -53,10 +54,21 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ handleGenerate }) => {
     exportBitrateMode: state.exportBitrateMode, setExportBitrateMode: state.setExportBitrateMode,
     exportTargetBitrate: state.exportTargetBitrate, setExportTargetBitrate: state.setExportTargetBitrate,
     exportDeband: state.exportDeband, setExportDeband: state.setExportDeband,
-    exportForceCpu: state.exportForceCpu, setExportForceCpu: state.setExportForceCpu,
-    exportMasterAudio: state.exportMasterAudio, setExportMasterAudio: state.setExportMasterAudio,
     isGenerating: state.isGenerating, setStatusMsg: state.setStatusMsg
   })));
+
+  const { timeline, audioItems } = useAppContext();
+  const totalVisualDuration = timeline.reduce((acc, t) => acc + t.duration, 0);
+  const totalAudioDuration = Math.max(0, ...audioItems.map(a => a.timelineStart + a.duration));
+  const totalDuration = Math.max(totalVisualDuration, totalAudioDuration, 1);
+  
+  // 简化的 CRF 大小估算 (按 1080p 基准)
+  const getCrfEstimate = () => {
+    let multiplier = exportQuality === 'lossless' ? 0.35 : exportQuality === 'high' ? 0.15 : 0.08;
+    if (exportResolution === '4k') multiplier *= 2.5;
+    const estMb = totalDuration * multiplier;
+    return `预计 ${estMb.toFixed(1)} MB (浮动)`;
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 10 }}>
@@ -139,7 +151,10 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ handleGenerate }) => {
 
           {exportBitrateMode === 'crf' ? (
              <div style={{ padding: '10px 0 4px', borderTop: '1px dashed rgba(255,255,255,0.1)' }}>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 8 }}>画质浮动档位</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                <span>画质浮动档位</span>
+                <span style={{ fontSize: 11, color: '#F59E0B' }}>{getCrfEstimate()}</span>
+              </div>
               <SegmentedControl 
                 value={exportQuality} onChange={setExportQuality} 
                 options={[

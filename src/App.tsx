@@ -79,6 +79,31 @@ function App() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    // 🖥️ 全局同比例缩放适配 (防遮挡)
+    const handleResize = () => {
+      // 设定最佳设计体验的基准分辨率（当窗口小于此时，界面将整体等比缩小）
+      const BASE_WIDTH = 1366; 
+      const BASE_HEIGHT = 768; 
+      
+      const scaleW = window.innerWidth / BASE_WIDTH;
+      const scaleH = window.innerHeight / BASE_HEIGHT;
+      
+      // 取最小比例，且上限为 1.0 (大屏保持原大小不粗糙化)
+      const scale = Math.min(1.0, scaleW, scaleH);
+      
+      // 取消使用原生 zoom 避免因为 vw/vh 引起的计算挤压问题
+      document.body.style.removeProperty('zoom');
+      // 改用 CSS var 透传给 app-root-container 进行 transform: scale
+      document.documentElement.style.setProperty('--app-scale', scale.toString());
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize(); // 挂载时立即执行一次以匹配初始状态
+
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <AppContext.Provider value={controller as any}>
     <div className="app-root-container">

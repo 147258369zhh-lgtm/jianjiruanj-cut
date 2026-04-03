@@ -108,9 +108,5 @@ export interface TimelineItem {
   animation?: string;
   fillMode?: 'contain' | 'cover';
   overrides?: string[];
-  maskShape?: string;
-  maskFeather?: number;
-  maskInvert?: boolean;
-  keystoneX?: number;
-  keystoneY?: number;
+
 }

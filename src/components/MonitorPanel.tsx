@@ -6,6 +6,7 @@ import { useHoveredPreviewPreset } from '../store';
 
 import { formatTime } from '../utils/formatTime';
 import { computeFilter as computeFilterMod, computeTextStyles as computeTextStylesMod, computeLevelsTable } from '../features/filter-engine/useFilter';
+import { MonitorView } from './MonitorView';
 import ReactCrop from 'react-image-crop';
 import './MonitorPanel.css';
 
@@ -15,11 +16,13 @@ export const MonitorPanel: React.FC = () => {
     selectedIds, selectedTextIds, setSelectedTextIds, setTimeline, playbackSpeed,
     setPlaybackSpeed, timeTextRef, monitorVideoRef
   } = useAppContext();
-  const { isCropping, crop, setCrop, theme } = useStore(useShallow(state => ({
+  const { isCropping, crop, setCrop, theme, showGrid, setShowGrid } = useStore(useShallow(state => ({
     isCropping: state.isCropping,
     crop: state.crop,
     setCrop: state.setCrop,
-    theme: state.theme
+    theme: state.theme,
+    showGrid: state.showGrid,
+    setShowGrid: state.setShowGrid
   })));
 
   const hoveredPreviewPreset = useHoveredPreviewPreset();
@@ -158,20 +161,6 @@ export const MonitorPanel: React.FC = () => {
   const applyingCurve = activeCurveMaster || activeCurveRed || activeCurveGreen || activeCurveBlue || activeLevelsTable;
 
 
-  const getClipPath = (item: any) => {
-    if (item?.maskShape && item.maskShape !== 'none') {
-      switch (item.maskShape) {
-        case 'circle': return 'circle(50% at 50% 50%)';
-        case 'ellipse': return 'ellipse(45% 35% at 50% 50%)';
-        case 'heart': return 'polygon(50% 15%, 61% 0%, 85% 0%, 100% 15%, 100% 38%, 50% 100%, 0% 38%, 0% 15%, 15% 0%, 39% 0%)';
-        case 'star': return 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)';
-        case 'triangle': return 'polygon(50% 0%, 0% 100%, 100% 100%)';
-        case 'rhombus': return 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)';
-        case 'hexagon': return 'polygon(50% 0%, 95% 25%, 95% 75%, 50% 100%, 5% 75%, 5% 25%)';
-      }
-    }
-    return item?.cropPos ? `inset(${item.cropPos.y}% ${100 - item.cropPos.x - item.cropPos.width}% ${100 - item.cropPos.y - item.cropPos.height}% ${item.cropPos.x}%)` : 'none';
-  };
 
   const buildMediaAnimation = (item: any) => {
     const anims = [];
@@ -243,7 +232,7 @@ export const MonitorPanel: React.FC = () => {
   return (
     <div
       className="glass-panel monitor-container"
-      style={{ flex: 2, display: 'flex', flexDirection: 'column', padding: 8, gap: 8, overflow: 'hidden', alignItems: 'stretch' }}
+      style={{ flex: '1 1 auto', minWidth: 300, display: 'flex', flexDirection: 'column', padding: 8, gap: 8, overflow: 'hidden', alignItems: 'stretch' }}
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).tagName === 'SELECT' || (e.target as HTMLElement).tagName === 'INPUT') return;
         const el = e.currentTarget;
@@ -285,9 +274,21 @@ export const MonitorPanel: React.FC = () => {
         
         {/* 照片合成视频王 预览 (去掉底色和细线，直接融入红框大黑底里！) */}
         <div className="panel-header-ios" style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', padding: '12px 16px 0', alignItems: 'flex-start', background: 'transparent', borderBottom: 'none', zIndex: 10 }}>
-          <span className="header-title" style={{ opacity: 0.8 }}>照片合成视频王 - 预览</span>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <span ref={timeTextRef} style={{ fontSize: 24, fontWeight: 900, fontFamily: 'monospace', letterSpacing: -1, lineHeight: 1 }}>{formatTime(playTime)}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button 
+                onClick={() => setShowGrid(!showGrid)}
+                style={{ 
+                  background: showGrid ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.05)', 
+                  border: `1px solid ${showGrid ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.1)'}`,
+                  color: showGrid ? '#818CF8' : 'rgba(255,255,255,0.5)',
+                  fontSize: 10, padding: '2px 8px', borderRadius: 6, cursor: 'pointer', fontWeight: 600
+                }}
+              >
+                {showGrid ? '网格: 开' : '网格: 关'}
+              </button>
+              <span ref={timeTextRef} style={{ fontSize: 24, fontWeight: 900, fontFamily: 'monospace', letterSpacing: -1, lineHeight: 1 }}>{formatTime(playTime)}</span>
+            </div>
             <span style={{ fontSize: 9, opacity: 0.4, fontWeight: 600, letterSpacing: 1, marginTop: 2 }}>ENGINE ACTIVE</span>
           </div>
         </div>
@@ -301,249 +302,25 @@ export const MonitorPanel: React.FC = () => {
                 <img src={monitorSrc.src} style={{ maxWidth: '100%', maxHeight: '100%' }} alt="" />
               </ReactCrop>
             ) : (
-              <div style={{ position: 'relative', width: '100%', height: '100%', padding: '20px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {monitorSrc.type === 'video' ? (
-                  <div key={`video-anim-wrap-${monitorSrc.currentItem?.id}-${animResetKey}`} style={{ 
-                    position: 'absolute', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center',
-                    animation: buildMediaAnimation(monitorSrc.currentItem)
-                  }}>
-                    <div style={{
-                      position: 'relative', display: 'flex', width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center',
-                      transform: `perspective(1000px) translate(${monitorSrc.currentItem?.posX || 0}%, ${monitorSrc.currentItem?.posY || 0}%) rotate(${monitorSrc.currentItem?.rotation || 0}deg) rotateY(${monitorSrc.currentItem?.keystoneX || 0}deg) rotateX(${monitorSrc.currentItem?.keystoneY || 0}deg) scale(${(monitorSrc.currentItem?.zoom || 1) * (monitorSrc.currentItem?.flipX ? -1 : 1)}, ${(monitorSrc.currentItem?.zoom || 1) * (monitorSrc.currentItem?.flipY ? -1 : 1)})`,
-                      opacity: monitorSrc.currentItem?.opacity ?? 1,
-                      mixBlendMode: (monitorSrc.currentItem?.blendMode as any) || 'normal',
-                      transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)',
-                      clipPath: getClipPath(monitorSrc.currentItem),
-                    }}>
-                    <video ref={handleVideoRef} src={monitorSrc.src} style={{
-                      display: 'block', maxWidth: '100%', maxHeight: '100%',
-                      width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto',
-                      height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto',
-                      objectFit: monitorSrc.currentItem?.fillMode === 'cover' ? 'cover' : 'contain', borderRadius: '12px',
-                      filter: applyingCurve ? `url(#rgb-curves-filter) ${computeFilter(renderItem)}` : computeFilter(renderItem),
-                      transition: 'filter 0.4s'
-                    }} />
-                    {renderItem?.vignette && mediaDims.w > 0 ? (
-                      <div style={{
-                        position: 'absolute', pointerEvents: 'none', zIndex: 5, borderRadius: 12, overflow: 'hidden',
-                        width: mediaDims.w, height: mediaDims.h,
-                        top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-                        mixBlendMode: renderItem.vignette > 0 ? 'multiply' : 'screen',
-                        background: `radial-gradient(ellipse at center, 
-                          transparent 0%, 
-                          transparent ${Math.max(0, 40 - Math.abs(renderItem.vignette)*30)}%, 
-                          rgba(${renderItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(renderItem.vignette) * 0.15}) ${Math.max(30, 65 - Math.abs(renderItem.vignette)*20)}%, 
-                          rgba(${renderItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(renderItem.vignette) * 0.5}) ${Math.max(50, 85 - Math.abs(renderItem.vignette)*10)}%, 
-                          rgba(${renderItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(renderItem.vignette)}) 110%)`
-                      }} />
-                    ) : null}
-                    {renderItem?.grain && mediaDims.w > 0 ? (
-                      <div style={{
-                        position: 'absolute', pointerEvents: 'none', zIndex: 6, borderRadius: 12, overflow: 'hidden',
-                        width: mediaDims.w, height: mediaDims.h,
-                        top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-                        opacity: renderItem.grain, mixBlendMode: 'overlay',
-                        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`
-                      }} />
-                    ) : null}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={`img-anim-wrap-${monitorSrc.currentItem?.id}-${animResetKey}`} style={{ 
-                    position: 'absolute', width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center',
-                    animation: buildMediaAnimation(monitorSrc.currentItem)
-                  }}>
-                    <div style={{
-                      position: 'relative', display: 'flex', width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center',
-                      transform: `perspective(1000px) translate(${monitorSrc.currentItem?.posX || 0}%, ${monitorSrc.currentItem?.posY || 0}%) rotate(${monitorSrc.currentItem?.rotation || 0}deg) rotateY(${monitorSrc.currentItem?.keystoneX || 0}deg) rotateX(${monitorSrc.currentItem?.keystoneY || 0}deg) scale(${(monitorSrc.currentItem?.zoom || 1) * (monitorSrc.currentItem?.flipX ? -1 : 1)}, ${(monitorSrc.currentItem?.zoom || 1) * (monitorSrc.currentItem?.flipY ? -1 : 1)})`,
-                      opacity: monitorSrc.currentItem?.opacity ?? 1,
-                      mixBlendMode: (monitorSrc.currentItem?.blendMode as any) || 'normal',
-                      transition: 'transform 0.4s cubic-bezier(0.23, 1, 0.32, 1)',
-                      clipPath: getClipPath(monitorSrc.currentItem),
-                    }}>
-                    <img ref={handleImgRef} src={monitorSrc.src} alt="" style={{
-                      display: 'block', maxWidth: '100%', maxHeight: '100%',
-                      width: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto',
-                      height: monitorSrc.currentItem?.fillMode === 'cover' ? '100%' : 'auto',
-                      objectFit: monitorSrc.currentItem?.fillMode === 'cover' ? 'cover' : 'contain', borderRadius: '12px',
-                      filter: applyingCurve ? `url(#rgb-curves-filter) ${computeFilter(renderItem)}` : computeFilter(renderItem),
-                      transition: 'filter 0.4s'
-                    }} draggable={false} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }} />
-                    {renderItem?.vignette && mediaDims.w > 0 ? (
-                      <div style={{
-                        position: 'absolute', pointerEvents: 'none', zIndex: 5, borderRadius: 12, overflow: 'hidden',
-                        width: mediaDims.w, height: mediaDims.h,
-                        top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-                        mixBlendMode: renderItem.vignette > 0 ? 'multiply' : 'screen',
-                        background: `radial-gradient(ellipse at center, 
-                          transparent 0%, 
-                          transparent ${Math.max(0, 40 - Math.abs(renderItem.vignette)*30)}%, 
-                          rgba(${renderItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(renderItem.vignette) * 0.15}) ${Math.max(30, 65 - Math.abs(renderItem.vignette)*20)}%, 
-                          rgba(${renderItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(renderItem.vignette) * 0.5}) ${Math.max(50, 85 - Math.abs(renderItem.vignette)*10)}%, 
-                          rgba(${renderItem.vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(renderItem.vignette)}) 110%)`
-                      }} />
-                    ) : null}
-                    {renderItem?.grain && mediaDims.w > 0 ? (
-                      <div style={{
-                        position: 'absolute', pointerEvents: 'none', zIndex: 6, borderRadius: 12, overflow: 'hidden',
-                        width: mediaDims.w, height: mediaDims.h,
-                        top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-                        opacity: renderItem.grain, mixBlendMode: 'overlay',
-                        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`
-                      }} />
-                    ) : null}
-                    </div>
-                  </div>
-                )}
-                {(() => {
-                  const activeTexts: any[] = [];
-                  if (monitorSrc.currentItem) {
-                    // overlayText 不再直接渲染到画面上,只有通过"插入独立文本图层"创建的overlay才显示
-                    if (monitorSrc.currentItem.textOverlays?.length) {
-                      activeTexts.push(...monitorSrc.currentItem.textOverlays);
-                    }
-                  }
-                  
-                  return activeTexts.map((txt, layerIdx) => {
-                    const isSelected = !isPlaying && (selectedTextIds.has(txt.id) || (txt.isRoot && selectedIds.has(monitorSrc.currentItem!.id) && selectedTextIds.size === 0));
-                    const textWidthPx = txt.textWidth ? `${txt.textWidth}px` : 'auto';
-                    return (
-                      <div
-                        key={`tlayer-${txt.id}-${animResetKey}`}
-                        style={{
-                          position: 'absolute',
-                          top: `${txt.textY ?? 50}%`,
-                          left: `${txt.textX ?? 50}%`,
-                          transform: `perspective(1000px) translate(${monitorSrc.currentItem?.posX || 0}%, ${monitorSrc.currentItem?.posY || 0}%) rotate(${monitorSrc.currentItem?.rotation || 0}deg) rotateY(${monitorSrc.currentItem?.keystoneX || 0}deg) rotateX(${monitorSrc.currentItem?.keystoneY || 0}deg) scale(${(monitorSrc.currentItem?.zoom || 1) * (monitorSrc.currentItem?.flipX ? -1 : 1)}, ${(monitorSrc.currentItem?.zoom || 1) * (monitorSrc.currentItem?.flipY ? -1 : 1)})`,
-                          animation: buildTextAnimation(txt, monitorSrc.currentItem?.duration || 3),
-                          cursor: 'move',
-                          width: textWidthPx,
-                          whiteSpace: txt.textWidth ? 'normal' : 'nowrap',
-                          userSelect: 'none',
-                          zIndex: 10 + layerIdx,
-                          outline: isSelected ? '2px dashed rgba(99,102,241,0.8)' : 'none',
-                          outlineOffset: '4px',
-                          padding: '4px 8px',
-                          ...computeTextStyles(txt as any)
-                        } as React.CSSProperties}
-                        onMouseDown={(e) => {
-                          // 如果点击的是拉环，不触发拖动
-                          if ((e.target as HTMLElement).dataset?.resizeHandle) return;
-                          e.preventDefault(); e.stopPropagation();
-                          
-                          // 处理 Alt 多选逻辑
-                          let newSelectedSet = new Set(selectedTextIds);
-                          if (e.altKey) {
-                            if (newSelectedSet.has(txt.id)) {
-                              newSelectedSet.delete(txt.id);
-                            } else {
-                              newSelectedSet.add(txt.id);
-                            }
-                          } else {
-                            if (!newSelectedSet.has(txt.id)) {
-                              newSelectedSet = new Set([txt.id]);
-                            }
-                          }
-                          setSelectedTextIds(newSelectedSet);
-                          
-                          const container = e.currentTarget.parentElement;
-                          if (!container) return;
-                          const rect = container.getBoundingClientRect();
-                          const startX = e.clientX, startY = e.clientY;
-                          
-                          // 提取所有被选中图层的初始坐标，用于群体位移
-                          const startCoords: Record<string, {x: number, y: number}> = {};
-                          if (txt.isRoot) {
-                            startCoords[txt.id] = { x: txt.textX ?? 50, y: txt.textY ?? 50 };
-                          } else {
-                            const textItemContext = monitorSrc.currentItem?.textOverlays || [];
-                            textItemContext.forEach((layer: any) => {
-                              if (newSelectedSet.has(layer.id) || layer.id === txt.id) {
-                                startCoords[layer.id] = { x: layer.textX ?? 50, y: layer.textY ?? 50 };
-                              }
-                            });
-                          }
-
-                          const onMove = (me: MouseEvent) => {
-                            const dx = ((me.clientX - startX) / rect.width) * 100;
-                            const dy = ((me.clientY - startY) / rect.height) * 100;
-                            
-                            if (txt.isRoot) {
-                              setTimeline(p => p.map(t => t.id === monitorSrc.currentItem?.id
-                                ? { ...t, textX: Math.max(0, Math.min(100, startCoords[txt.id].x + dx)), textY: Math.max(0, Math.min(100, startCoords[txt.id].y + dy)) }
-                                : t));
-                            } else {
-                              setTimeline(p => p.map(t => {
-                                if (t.id !== monitorSrc.currentItem?.id) return t;
-                                return {
-                                  ...t,
-                                  textOverlays: (t.textOverlays || []).map(layer => {
-                                    if (startCoords[layer.id]) {
-                                      return { 
-                                        ...layer, 
-                                        textX: Math.max(0, Math.min(100, startCoords[layer.id].x + dx)), 
-                                        textY: Math.max(0, Math.min(100, startCoords[layer.id].y + dy)) 
-                                      };
-                                    }
-                                    return layer;
-                                  })
-                                };
-                              }));
-                            }
-                          };
-                          const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-                          window.addEventListener('mousemove', onMove);
-                          window.addEventListener('mouseup', onUp);
-                        }}
-                      >
-                        {txt.text}
-                        {/* 右下角拉环 - 调整文字框宽度 */}
-                        {isSelected && (
-                          <div
-                            data-resize-handle="true"
-                            style={{
-                              position: 'absolute', right: -8, bottom: -8, width: 14, height: 14,
-                              background: 'rgba(99,102,241,0.9)', border: '2px solid #fff',
-                              borderRadius: 3, cursor: 'nwse-resize', zIndex: 100,
-                              boxShadow: '0 1px 4px rgba(0,0,0,0.5)'
-                            }}
-                            onMouseDown={(e) => {
-                              e.preventDefault(); e.stopPropagation();
-                              const startX = e.clientX;
-                              const el = e.currentTarget.parentElement;
-                              if (!el) return;
-                              const startWidth = el.offsetWidth;
-                              
-                              const onMove = (me: MouseEvent) => {
-                                const newWidth = Math.max(40, startWidth + (me.clientX - startX));
-                                // 更新 overlay 的 textWidth
-                                if (!txt.isRoot) {
-                                  setTimeline(p => p.map(t => {
-                                    if (t.id !== monitorSrc.currentItem?.id) return t;
-                                    return {
-                                      ...t,
-                                      textOverlays: (t.textOverlays || []).map((layer: any) =>
-                                        layer.id === txt.id ? { ...layer, textWidth: newWidth } : layer
-                                      )
-                                    };
-                                  }));
-                                } else {
-                                  setTimeline(p => p.map(t =>
-                                    t.id === monitorSrc.currentItem?.id ? { ...t, textWidth: newWidth } : t
-                                  ));
-                                }
-                              };
-                              const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-                              window.addEventListener('mousemove', onMove);
-                              window.addEventListener('mouseup', onUp);
-                            }}
-                          />
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
+              <MonitorView
+                monitorSrc={monitorSrc}
+                renderItem={renderItem}
+                applyingCurve={!!applyingCurve}
+                computeFilter={computeFilter}
+                computeTextStyles={computeTextStyles}
+                handleVideoRef={handleVideoRef}
+                handleImgRef={handleImgRef}
+                mediaDims={mediaDims}
+                animResetKey={animResetKey}
+                buildMediaAnimation={buildMediaAnimation}
+                buildTextAnimation={buildTextAnimation}
+                isPlaying={isPlaying}
+                selectedIds={selectedIds}
+                selectedTextIds={selectedTextIds}
+                setSelectedTextIds={setSelectedTextIds}
+                setTimeline={setTimeline}
+                showGrid={showGrid}
+              />
             )
           ) : (
             /* 纯文字项预览（无图片背景） */
@@ -557,7 +334,12 @@ export const MonitorPanel: React.FC = () => {
             </div>
           )
         ) : (
-          <div style={{ opacity: 0.03, color: '#fff', fontSize: 100, fontWeight: 900, transform: 'rotate(-10deg)', userSelect: 'none', letterSpacing: '4px' }}>{theme === 'harmony' ? 'HarmonyOS 4' : theme === 'win11' ? 'Windows 11' : 'iOS 26'}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.7, userSelect: 'none' }}>
+            <div style={{ fontSize: 72, marginBottom: 16, filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.5))' }}>🎬</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#fff', letterSpacing: 1, marginBottom: 6 }}>监视器无信号输入</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>请在下方时间轴编排媒体，或选中素材进行编辑</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 30, letterSpacing: 1 }}>{theme === 'harmony' ? 'Powered by HarmonyOS Architecture' : theme === 'win11' ? 'Rendered via Windows 11 Core' : 'Built for iOS 26 Pro Engine'}</div>
+          </div>
         )}
         </div>
       </div>
@@ -570,7 +352,7 @@ export const MonitorPanel: React.FC = () => {
         borderRadius: 12, padding: '0 16px',
         border: '1px solid rgba(255,255,255,0.06)'
       }}>
-        {/* 新版加长播放按钮：带有“播放”文字，更好按，胶囊形状 */}
+        {/* 播放控制按钮 */}
         <button
           className="ios-hover-scale"
           onClick={togglePlay}

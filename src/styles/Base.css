@@ -35,28 +35,28 @@
   }
 }
 
-html {
+html, body, #root {
   overflow: hidden;
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 body {
-  margin: 0;
-  padding: 0;
   background: var(--ios-bg);
   color: var(--ios-text);
   font-family: 'Inter', -apple-system, system-ui, sans-serif;
-  overflow: hidden;
-  height: 100vh;
-  width: 100vw;
   position: relative;
 }
 
-#root {
-  overflow: hidden;
-  height: 100vh;
-  width: 100vw;
+.app-root-container {
+  width: calc(100% / var(--app-scale, 1));
+  height: calc(100% / var(--app-scale, 1));
+  transform: scale(var(--app-scale, 1));
+  transform-origin: top left;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 弥散粒子底层 */
@@ -74,7 +74,7 @@ body::before {
 }
 
 .ios-layout {
-  height: 100vh;
+  height: 100%;
   padding: 24px 24px 4px 24px;
   /* 严格执行 4px 底部安全间距规范 */
   display: flex;

@@ -1,5 +1,7 @@
 import React, { SetStateAction } from 'react';
 import { useStore } from '../store/index';
+import { useAppContext } from '../hooks/useAppContext';
+import { convertFileSrc } from '@tauri-apps/api/core';
 // { SetStateAction } from 'react';
 import { TimelineItem, AudioTimelineItem, GlobalDefaults, Resource } from '../types';
 import ProSlider from './ProSlider';
@@ -66,10 +68,10 @@ export const ImagePropertyPanel: React.FC<Props> = ({
   audioItems,
   selectedTextIds,
   setSelectedTextIds,
-  isCropping,
-  setIsCropping,
-  crop,
-  setCrop,
+  isCropping: _isCropping,
+  setIsCropping: _setIsCropping,
+  crop: _crop,
+  setCrop: _setCrop,
   favTrans,
   toggleFavTrans
 }) => {
@@ -81,6 +83,223 @@ export const ImagePropertyPanel: React.FC<Props> = ({
   }, [selectedItem?.id]);
 
   const { panelOrderImage, setPanelOrderImage, panelOrderText, setPanelOrderText, panelCollapsed, togglePanelCollapsed } = useStore();
+  
+  const appContext = useAppContext();
+  const previewCache = appContext?.previewCache || {};
+
+  const [isEnhancing, setIsEnhancing] = React.useState(false);
+
+  const handleAutoEnhance = () => {
+    const dlog = (msg: string) => { fetch('http://127.0.0.1:11111/', { method: 'POST', body: msg }).catch(_=>{}); };
+    dlog(`1. Clicked Auto Enhance. selectedItem=${!!selectedItem}, id=${selectedItem?.resourceId}`);
+
+    const res = resourceMap.get(selectedItem?.resourceId || '');
+    if (!selectedItem || !res || (res.type !== 'image' && res.type !== 'video')) {
+      dlog(`2. Early return. type=${res?.type}`);
+      return;
+    }
+    
+    let imgUrl = previewCache[res.path];
+    if (!imgUrl && res.type === 'image') {
+       imgUrl = convertFileSrc(res.path);
+       dlog(`3. Rebuilt imgUrl via convertFileSrc: ${imgUrl.substring(0, 15)}`);
+    }
+
+    if (!imgUrl) {
+      dlog('3. imgUrl is MISSING and no fallback possible');
+      setStatusMsg('⚠️ 等待缩略图加载完成...'); setTimeout(() => setStatusMsg(''), 2000);
+      return;
+    }
+    
+    dlog('4. Starting fetch...');
+    setIsEnhancing(true);
+    fetch(imgUrl)
+      .then(res => res.blob())
+      .then(blob => {
+        dlog(`5. blob retrieved size=${blob.size}`);
+        const objUrl = URL.createObjectURL(blob);
+        const img = new Image();
+        
+        img.onerror = () => {
+          dlog('6. img.onerror fired');
+          setIsEnhancing(false);
+          setStatusMsg('⚠️ 图像跨域或读取失败，无法智能分析');
+          setTimeout(() => setStatusMsg(''), 3000);
+          URL.revokeObjectURL(objUrl);
+        };
+
+        img.onload = () => {
+          dlog('7. img.onload fired');
+          const canvas = document.createElement('canvas');
+          canvas.width = 128; // Small size for extreme speed
+          canvas.height = 128;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { setIsEnhancing(false); return; }
+          ctx.drawImage(img, 0, 0, 128, 128);
+          
+          let data;
+          try {
+            data = ctx.getImageData(0, 0, 128, 128).data;
+            dlog(`8. getImageData retrieved. len=${data.length}`);
+          } catch (e: any) {
+            dlog(`8. canvas tainted error! ${e}`);
+            setIsEnhancing(false);
+            setStatusMsg('⚠️ 画布读取被拦截 (Canvas Tainted)');
+            setTimeout(() => setStatusMsg(''), 3000);
+            return;
+          }
+      
+      let sumLuma = 0, sumR = 0, sumG = 0, sumB = 0;
+      let lumas = [];
+      let sumSat = 0;
+      let skinPixelCount = 0;
+      
+      for (let i = 0; i < data.length; i += 4) {
+         const r = data[i], g = data[i+1], b = data[i+2];
+         sumR += r; sumG += g; sumB += b;
+         
+         // 1. Rec. 709 Luminance
+         const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+         sumLuma += luma;
+         lumas.push(luma);
+         
+         // 2. Saturation
+         const cmax = Math.max(r, g, b), cmin = Math.min(r, g, b);
+         sumSat += cmax === 0 ? 0 : (cmax - cmin) / cmax;
+         
+         // 3. YCbCr Conversion for Skin Tone Detection
+         // using standard BT.601 constants to derive chrominance
+         const cb = -0.1687 * r - 0.3313 * g + 0.5 * b + 128;
+         const cr = 0.5 * r - 0.4187 * g - 0.0813 * b + 128;
+         
+         // Mathematical skin bounds commonly used by camera ISPs
+         if (cb >= 77 && cb <= 127 && cr >= 133 && cr <= 173) {
+            skinPixelCount++;
+         }
+      }
+      const pixelCount = data.length / 4;
+      const avgLuma = sumLuma / pixelCount;
+      const avgR = sumR / pixelCount;
+      const avgB = sumB / pixelCount;
+      const avgSat = sumSat / pixelCount;
+      
+      // Standard deviation of Luma
+      let varianceSum = 0;
+      for (let l of lumas) { varianceSum += (l - avgLuma) ** 2; }
+      const stdDev = Math.sqrt(varianceSum / pixelCount);
+      
+      const skinRatio = skinPixelCount / pixelCount;
+      // Extrema analysis for Histogram Stretching (White/Black points)
+      lumas.sort((a,b)=>a-b);
+      const p1 = lumas[Math.floor(lumas.length * 0.01)]; // True black point
+      const p5 = lumas[Math.floor(lumas.length * 0.05)];
+      const p50 = lumas[Math.floor(lumas.length * 0.50)]; // Median luma
+      const p95 = lumas[Math.floor(lumas.length * 0.95)];
+      const p99 = lumas[Math.floor(lumas.length * 0.99)]; // True white point
+
+      // --- ADVANCED COMPUTATIONAL HEURISTICS (Fuzzy Logic Weighted Blends) ---
+      // Helper function for continuous linear interpolation (lerp)
+      const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, val));
+      const mapRange = (val: number, inMin: number, inMax: number, outMin: number, outMax: number) => {
+         return clamp(outMin + (val - inMin) * (outMax - outMin) / (inMax - inMin), Math.min(outMin, outMax), Math.max(outMin, outMax));
+      };
+
+      // 1. Semantic Weights (Continuous Factors 0.0 ~ 1.0 instead of strict boolean triggers)
+      const portraitWeight = mapRange(skinRatio, 0.02, 0.15, 0, 1);    // 0=Landscape, 1=Heavy Portrait
+      const moodWeight = mapRange(stdDev, 15, 40, 1, 0);               // 1=Atmospheric/Fog/Low-key, 0=Hard light
+      const backlightWeight = mapRange(p95 - p5, 180, 230, 0, 1) * mapRange(p50, 40, 90, 1, 0); // High spread but dark median = Backlit
+      const fadeWeight = mapRange(avgSat, 0.05, 0.25, 1, 0);           // 1=Washed out/Dull, 0=Healthy color
+      const neonWeight = mapRange(avgSat, 0.45, 0.70, 0, 1);           // 1=Over-saturated/Neon, 0=Normal
+      const optimalLightWeight = mapRange(Math.abs(avgLuma - 115), 0, 40, 1, 0); // 1=Already beautifully exposed
+
+      // 2. Exposure & Tone Mapping
+      const targetLuma = 110 + (portraitWeight * 15) - (moodWeight * 20); // Portraits want 125, Mood wants 90
+      let rawExposure = 1.0 + (targetLuma - avgLuma) / 255;
+      
+      // Zero-Touch Policy: heavily dampen adjustment if it's already well-exposed
+      let newExposure = rawExposure * (1 - optimalLightWeight * 0.6) + 1.0 * (optimalLightWeight * 0.6);
+      newExposure = clamp(newExposure, 0.6, 1.5); 
+      
+      // 3. Contrast 
+      let newContrast = 1.0 + (60 - stdDev) / 100;
+      // Mood preservation: strictly suppress contrast boosting in moody/foggy photos
+      newContrast = newContrast * (1 - moodWeight * 0.8) + 1.0 * (moodWeight * 0.8);
+      newContrast = clamp(newContrast, 0.8, 1.3);
+
+      // 4. Smart HDR (Continuous Highlights/Shadows)
+      let newHighlights = 1.0;
+      let newShadows = 1.0;
+      let newWhites = 1.0;
+      let newBlacks = 1.0;
+      
+      // Shadow Recovery
+      newShadows += mapRange(p5, 0, 30, 0.35, 0);         // General shadow lift
+      newShadows += backlightWeight * 0.2;                // Extra lift if backlit
+      newShadows = clamp(newShadows, 0.8, 1.4);
+
+      // Highlight Suppression
+      newHighlights -= mapRange(p95, 220, 255, 0, 0.25);  // General highlight recovery
+      newHighlights -= backlightWeight * 0.15;            // Extra suppress if bright sky behind subject
+      newHighlights = clamp(newHighlights, 0.65, 1.1);
+      
+      // Histogram Edge Stretching (The "Pop" factor)
+      // Only stretch if it's NOT intentionally moody
+      const stretchFactor = 1.0 - moodWeight;
+      newBlacks -= mapRange(p1, 5, 40, 0, 0.2) * stretchFactor;
+      newWhites += mapRange(p99, 210, 245, 0.2, 0) * stretchFactor;
+
+      // 5. Intelligent White Balance (Portrait Protection)
+      let tempDiff = (avgB - avgR); 
+      let rawTemp = tempDiff * 0.15; 
+      
+      // Smoothly blend from landscape logic (allow mild cooling) to portrait logic (force warmth)
+      let landscapeTemp = clamp(rawTemp, -10, 10);
+      let portraitTemp = Math.max(2, rawTemp + 5); // Minimum +2 warmth for faces, adds a bit more if naturally warm
+      let finalTemp = landscapeTemp * (1 - portraitWeight) + portraitTemp * portraitWeight;
+      
+      // 6. Color Analytics (Vibrance & Saturation)
+      let newSat = 1.0;
+      let newVib = 1.0;
+      
+      // Add punch to dull photos, pull back neon, protect skin tones preferably via vibrance
+      newSat += fadeWeight * 0.15 - neonWeight * 0.08;
+      newVib += fadeWeight * 0.25 + portraitWeight * 0.15 - neonWeight * 0.1;
+      
+      newSat = clamp(newSat, 0.9, 1.25);
+      newVib = clamp(newVib, 0.9, 1.3);
+
+      setTimeout(() => { // slight delay for visual effect
+        commitSnapshotNow(); // Start undo block
+
+        dlog(`9. Applying continuous fuzzy updates. Expo:${newExposure.toFixed(2)}, BW:[${newBlacks.toFixed(2)},${newWhites.toFixed(2)}], PortW:${portraitWeight.toFixed(2)}`);
+        // Use the native property updater which safely handles `overrides` arrays and React functional batching!
+        updateSelectedProperty('exposure', parseFloat(newExposure.toFixed(2)));
+        updateSelectedProperty('contrast', parseFloat(newContrast.toFixed(2)));
+        updateSelectedProperty('highlights', parseFloat(newHighlights.toFixed(2)));
+        updateSelectedProperty('shadows', parseFloat(newShadows.toFixed(2)));
+        updateSelectedProperty('whites', parseFloat(newWhites.toFixed(2)));
+        updateSelectedProperty('blacks', parseFloat(newBlacks.toFixed(2)));
+        updateSelectedProperty('temp', Math.round(finalTemp));
+        updateSelectedProperty('saturation', parseFloat(newSat.toFixed(2)));
+        updateSelectedProperty('vibrance', parseFloat(newVib.toFixed(2)));
+        
+        setIsEnhancing(false);
+        setStatusMsg('✨ 图像色彩与光影已智能优化');
+        dlog('10. Success!');
+        setTimeout(() => setStatusMsg(''), 2000);
+        
+        URL.revokeObjectURL(objUrl);
+      }, 100);
+    };
+    img.src = objUrl;
+  })
+  .catch(err => {
+    dlog(`fetch fail! ${err.message || err}`);
+    setIsEnhancing(false);
+    setStatusMsg(`⚠️ 分析被拦截: ${err.message || err}`);
+    setTimeout(() => setStatusMsg(''), 3000);
+  });
+  };
   
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
     e.dataTransfer.setData('sourceId', id);
@@ -168,6 +387,50 @@ export const ImagePropertyPanel: React.FC<Props> = ({
       
       {propertyTab === 'color' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+          
+          {/* 一键修图独立模块 */}
+          <div style={{
+            background: 'var(--ios-card)', borderRadius: 16, padding: 12, marginBottom: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.06)'
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.95)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 16 }}>✨</span> 智能一键修图
+                </span>
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>AI COLOR</span>
+              </div>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', margin: 0, lineHeight: 1.4 }}>
+                智能分析画面光影色彩标准差，瞬间推算最佳亮度、对比、白平衡等全套参数。
+              </p>
+              <button 
+                className="ios-button"
+                disabled={isEnhancing}
+                style={{
+                  background: isEnhancing ? 'var(--ios-card)' : 'linear-gradient(135deg, #10B981, #059669)',
+                  color: isEnhancing ? 'rgba(255,255,255,0.5)' : '#fff',
+                  border: isEnhancing ? '1px dashed rgba(16,185,129,0.4)' : 'none',
+                  boxShadow: isEnhancing ? 'none' : '0 4px 12px rgba(16,185,129,0.3)',
+                  height: 36, marginTop: 4, borderRadius: 10, fontSize: 13, fontWeight: 600,
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  position: 'relative', overflow: 'hidden'
+                }}
+                onClick={handleAutoEnhance}
+              >
+                {isEnhancing ? '正在极速分析像素...' : '一键自动优化'}
+                {!isEnhancing && <div style={{
+                  position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)',
+                  transform: 'skewX(-20deg)',
+                  animation: 'shimmer 3s infinite'
+                }} />}
+              </button>
+            </div>
+          </div>
+
+
+
           {(() => {
             const renderOrder = [...panelOrderImage];
             if (!renderOrder.includes('levels')) {

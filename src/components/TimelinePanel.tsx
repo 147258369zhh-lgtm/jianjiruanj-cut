@@ -29,8 +29,39 @@ export const TimelinePanel: React.FC = () => {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
+  const autoFitAudio = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const visualEnd = timeline.reduce((acc, t) => acc + t.duration, 0);
+    
+    let changed = false;
+    setAudioItems(prev => {
+      const next = prev.map(a => {
+        const audioEnd = a.timelineStart + a.duration;
+        if (audioEnd > visualEnd + 0.1) {
+          changed = true;
+          const newDuration = Math.max(0.5, visualEnd - a.timelineStart);
+          return {
+            ...a,
+            duration: newDuration,
+            fadeOut: Math.min(newDuration, 2.0)
+          };
+        }
+        return a;
+      });
+      return changed ? next : prev;
+    });
+    
+    if (changed) {
+      commitSnapshotNow();
+      setStatusMsg("🎶 音乐已智能对齐画面总帧率，并增加尾部淡出");
+    } else {
+      setStatusMsg("🎶 音乐与画面已匹配，无需截断");
+    }
+    setTimeout(() => setStatusMsg(""), 2500);
+  };
+
   return (
-    <div className="glass-panel ios-timeline">
+    <div className="glass-panel ios-timeline" style={{ flex: '0 0 400px', height: 400, display: 'flex', flexDirection: 'column' }}>
       <div
         className="panel-header-ios"
         style={{ height: 30, padding: '0 12px', background: 'rgba(0,0,0,0.1)', cursor: 'pointer' }}
@@ -42,26 +73,29 @@ export const TimelinePanel: React.FC = () => {
           {playTime.toFixed(2)}s / {maxPlayTime.toFixed(2)}s
         </span>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); setPlayTime(0); setIsPlaying(false); setIsJumping(true); setTimeout(() => setIsJumping(false), 350); setStatusMsg('⏮ 已回到起点'); setTimeout(() => setStatusMsg(''), 1200); }} title="回到起点">⏮</button>
+          <button className="timeline-tool-btn timeline-tool-btn-primary" onClick={autoFitAudio} title="智能切断超出画面的音乐残端并添加淡出">适配长度</button>
           <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
-          <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); splitAtPlayhead(); }} title="Ctrl+B 分割">✂️</button>
+          <button className="timeline-tool-btn" onClick={(e) => { e.stopPropagation(); setPlayTime(0); setIsPlaying(false); setIsJumping(true); setTimeout(() => setIsJumping(false), 350); setStatusMsg('⏮ 已回到起点'); setTimeout(() => setStatusMsg(''), 1200); }} title="回到起点">⏮ 跳至起点</button>
+          <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
+          <button className="timeline-tool-btn" onClick={(e) => { e.stopPropagation(); splitAtPlayhead(); }} title="Ctrl+B 分割">✂️ 分割</button>
           <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
           <div className="zoom-control" onClick={e => e.stopPropagation()}>
             <span>🔍</span>
-            <input type="range" min={8} max={120} value={pps} onChange={e => setPps(Number(e.target.value))} />
+            <input type="range" title="Zoom" min={8} max={120} value={pps} onChange={e => setPps(Number(e.target.value))} />
             <span>{Math.round(pps / 24 * 100)}%</span>
           </div>
           <span style={{ color: 'rgba(255,255,255,0.08)' }}>|</span>
-          <button className="ios-button-small ios-button ios-button-subtle" style={{ fontSize: 10, padding: '0 4px', height: 24 }} onClick={(e) => { e.stopPropagation(); commitSnapshotNow(); setTimeline([]); setAudioItems([]); }}>清空</button>
+          <button className="timeline-tool-btn" onClick={(e) => { e.stopPropagation(); commitSnapshotNow(); setTimeline([]); setAudioItems([]); }}>🗑️ 清空</button>
         </div>
       </div>
 
       <div
         ref={timelineScrollRef}
+        className="ios-timeline-scroll"
         style={{
           flex: 1,
           overflowX: 'auto',
-          overflowY: 'hidden',
+          overflowY: 'auto',
           position: 'relative',
           cursor: 'default',
           background: 'rgba(0,0,0,0.2)'
@@ -441,7 +475,49 @@ export const TimelinePanel: React.FC = () => {
                       <div style={{ fontSize: 10, fontWeight: 500, color: '#10B981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clip.name || '配音'}</div>
                       <div style={{ fontSize: 8, color: 'rgba(16,185,129,0.6)' }}>{clip.duration.toFixed(1)}s</div>
                     </div>
-                    <div onClick={(e) => { e.stopPropagation(); setVoiceoverClips((prev: any[]) => prev.filter((v: any) => v.id !== clip.id)); }} style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕</div>
+                    <div onClick={(e) => { e.stopPropagation(); setVoiceoverClips((prev: any[]) => prev.filter((v: any) => v.id !== clip.id)); }} style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', cursor: 'pointer', zIndex: 50 }}>✕</div>
+                    
+                    {/* 配音轨左侧缩放手柄 */}
+                    <div
+                      className="trim-handle trim-handle-left"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        const startX = e.clientX;
+                        const startDur = clip.duration;
+                        const startStart = clip.timelineStart;
+                        const onMove = (me: MouseEvent) => {
+                          const deltaPx = me.clientX - startX;
+                          const deltaDur = deltaPx / pps;
+                          const newDur = Math.max(0.3, startDur - deltaDur);
+                          const actualDelta = startDur - newDur;
+                          setVoiceoverClips((prev: any[]) => prev.map((v: any) => v.id === clip.id ? { ...v, duration: newDur, timelineStart: startStart + actualDelta } : v));
+                        };
+                        const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+                        window.addEventListener('mousemove', onMove);
+                        window.addEventListener('mouseup', onUp);
+                      }}
+                    />
+                    
+                    {/* 配音轨右侧缩放手柄 */}
+                    <div
+                      className="trim-handle trim-handle-right"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        const startX = e.clientX;
+                        const startDur = clip.duration;
+                        const onMove = (me: MouseEvent) => {
+                          const deltaPx = me.clientX - startX;
+                          const deltaDur = deltaPx / pps;
+                          const newDur = Math.max(0.3, startDur + deltaDur);
+                          setVoiceoverClips((prev: any[]) => prev.map((v: any) => v.id === clip.id ? { ...v, duration: newDur } : v));
+                        };
+                        const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+                        window.addEventListener('mousemove', onMove);
+                        window.addEventListener('mouseup', onUp);
+                      }}
+                    />
                   </div>
                 );
               })}
